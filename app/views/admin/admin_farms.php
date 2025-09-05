@@ -3,7 +3,7 @@ session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
 if (!isset($_SESSION['usuario_id']) || $_SESSION['usuario_tipo'] !== 'admin') {
-    header("Location: /login");
+    header("Location: /");
     exit();
 }
 

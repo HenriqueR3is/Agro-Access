@@ -847,7 +847,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
             </div>
             <div class="user-info">
                 <span>Olá, <strong><?php echo htmlspecialchars($username); ?></strong>! (<?php echo htmlspecialchars($user_role); ?>)</span>
-                <a href="/app/views/login.php" class="logout-btn">Sair</a>
+                <a href="/" class="logout-btn">Sair</a>
             </div>
         </div>
     </header>

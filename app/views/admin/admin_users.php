@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db/conexao.php';
 
 // Verificação de administrador
 if (!isset($_SESSION['usuario_id']) || strtolower($_SESSION['usuario_tipo']) !== 'admin') {
-    header("Location: /login.php");
+    header("Location: /");
     exit();
 }
 
@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $pdo->commit();
 
         if ($isAjax) {
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['success' => true, 'message' => 'Usuário excluído com sucesso.']);
             exit();
         }
@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($pdo->inTransaction()) $pdo->rollBack();
 
         if ($isAjax) {
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             http_response_code(500);
             echo json_encode(['success' => false, 'error' => $e->getMessage()]);
             exit();
