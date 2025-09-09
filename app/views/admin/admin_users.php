@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db/conexao.php';
 
 // Verificação de administrador
 if (!isset($_SESSION['usuario_id']) || strtolower($_SESSION['usuario_tipo']) !== 'admin') {
-    header("Location: /");
+    header("Location: /login.php");
     exit();
 }
 
@@ -56,23 +56,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $pdo->prepare("DELETE FROM usuario_operacao WHERE usuario_id = :id")->execute([':id' => $user_id]);
             }
 
-            // Inserir novas permissões
-            $stmt_unidade = $pdo->prepare("INSERT INTO usuario_unidade (usuario_id, unidade_id) VALUES (:usuario_id, :unidade_id)");
-            $stmt_operacao = $pdo->prepare("INSERT INTO usuario_operacao (usuario_id, operacao_id) VALUES (:usuario_id, :operacao_id)");
-            
-            foreach ($unidades as $unidade_id) {
-                $stmt_unidade->execute([
-                    ':usuario_id' => $user_id,
-                    ':unidade_id' => $unidade_id
-                ]);
-            }
-            
-            foreach ($operacoes as $operacao_id) {
-                $stmt_operacao->execute([
-                    ':usuario_id' => $user_id,
-                    ':operacao_id' => $operacao_id
-                ]);
-            }
+// Inserir novas permissões
+$stmt_unidade = $pdo->prepare("INSERT INTO usuario_unidade (usuario_id, unidade_id) VALUES (:usuario_id, :unidade_id)");
+$stmt_operacao = $pdo->prepare("INSERT INTO usuario_operacao (usuario_id, operacao_id) VALUES (:usuario_id, :operacao_id)");
+
+foreach ($unidades as $unidade_id) {
+    $stmt_unidade->execute([
+        ':usuario_id' => $user_id,
+        ':unidade_id' => $unidade_id
+    ]);
+}
+
+foreach ($operacoes as $operacao_id) {
+    $stmt_operacao->execute([
+        ':usuario_id' => $user_id,
+        ':operacao_id' => $operacao_id
+    ]);
+}
             
             $_SESSION['success_message'] = "Usuário " . ($action == 'add_user' ? 'adicionado' : 'atualizado') . " com sucesso!";
             
@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $pdo->commit();
 
         if ($isAjax) {
-            header('Content-Type: application/json; charset=utf-8');
+            header('Content-Type: application/json');
             echo json_encode(['success' => true, 'message' => 'Usuário excluído com sucesso.']);
             exit();
         }
@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($pdo->inTransaction()) $pdo->rollBack();
 
         if ($isAjax) {
-            header('Content-Type: application/json; charset=utf-8');
+            header('Content-Type: application/json');
             http_response_code(500);
             echo json_encode(['success' => false, 'error' => $e->getMessage()]);
             exit();
@@ -561,7 +561,42 @@ font-family: 'Poppins', sans-serif;
             }
         }
 
+.permissions-container {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-top: 0.5rem;
+}
 
+.permissions-container .form-check {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    margin-bottom: 0.25rem;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.permissions-container .form-check:hover {
+    background: rgba(46, 125, 50, 0.05);
+}
+
+.permissions-container .form-check input[type="checkbox"]:checked + label {
+    font-weight: 600;
+    color: var(--primary-dark);
+}
+
+.permissions-container .form-check input[type="checkbox"]:checked {
+    accent-color: var(--primary);
+}
+
+.permissions-container label {
+    cursor: pointer;
+    margin-left: 5px;
+    flex-grow: 1;
+}
 
         
         
@@ -781,14 +816,19 @@ document.querySelectorAll('.edit-user').forEach(btn => {
         const userId = this.getAttribute('data-id');
 
         fetch(`/app/views/admin/get_user.php?id=${userId}`)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error('Erro ao buscar dados do usuário');
+                }
+                return res.json();
+            })
             .then(data => {
                 if (data.error) {
                     alert(data.error);
                     return;
                 }
 
-                // Preencher campos
+                // Preencher campos básicos
                 document.getElementById('modalTitle').textContent = 'Editar Usuário';
                 document.getElementById('formAction').value = 'edit_user';
                 document.getElementById('userId').value = data.user.id;
@@ -797,18 +837,25 @@ document.querySelectorAll('.edit-user').forEach(btn => {
                 document.getElementById('tipo').value = data.user.tipo;
                 document.getElementById('ativo').checked = data.user.ativo == 1;
 
-                // Resetar checkboxes
+                // Limpar campo de senha
+                document.getElementById('senha').value = '';
+
+                // Selecionar unidades - converter IDs para número para comparação
+                const unidadesIds = data.unidades.map(id => parseInt(id));
                 document.querySelectorAll('input[name="unidades[]"]').forEach(cb => {
-                    cb.checked = data.unidades.includes(cb.value);
+                    cb.checked = unidadesIds.includes(parseInt(cb.value));
                 });
+
+                // Selecionar operações - converter IDs para número para comparação
+                const operacoesIds = data.operacoes.map(id => parseInt(id));
                 document.querySelectorAll('input[name="operacoes[]"]').forEach(cb => {
-                    cb.checked = data.operacoes.includes(cb.value);
+                    cb.checked = operacoesIds.includes(parseInt(cb.value));
                 });
 
                 openModal(userModal);
             })
             .catch(err => {
-                alert("Erro ao buscar dados do usuário");
+                alert("Erro ao buscar dados do usuário: " + err.message);
                 console.error(err);
             });
     });

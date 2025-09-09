@@ -1,4 +1,7 @@
 <?php
+// Configurar o fuso horário para Brasília
+date_default_timezone_set('America/Sao_Paulo');
+
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
@@ -37,30 +40,57 @@ try {
         $unidade_do_usuario = $user_data['unidade_id'];
     }
 
-    // Busca dados de progresso diário
+    // Buscar operações baseadas nas permissões do usuário
+    $tipos_operacao = [];
+    $stmt_operacoes = $pdo->prepare("
+        SELECT t.id, t.nome 
+        FROM tipos_operacao t
+        INNER JOIN usuario_operacao uo ON t.id = uo.operacao_id
+        WHERE uo.usuario_id = ?
+        ORDER BY t.nome
+    ");
+    $stmt_operacoes->execute([$usuario_id]);
+    $tipos_operacao = $stmt_operacoes->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Se não tiver operações específicas, buscar todas
+    if (empty($tipos_operacao)) {
+        $tipos_operacao = $pdo->query("SELECT id, nome FROM tipos_operacao ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // Buscar todas as operações para o dropdown
+    $todas_operacoes = $tipos_operacao;
+
+    // Buscar todos os equipamentos da unidade do usuário inicialmente (vazio até selecionar operação)
+    $todos_equipamentos = [];
+
+    // Obter a data atual no fuso horário de Brasília
+    $data_hoje_brasilia = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
+    $data_hoje = $data_hoje_brasilia->format('Y-m-d');
+    $mes_atual = $data_hoje_brasilia->format('m');
+    $ano_atual = $data_hoje_brasilia->format('Y');
+
+    // Busca dados de progresso diário (usando data de Brasília)
     $stmt_daily = $pdo->prepare("
         SELECT SUM(hectares) as total_ha, COUNT(*) as total_entries
         FROM apontamentos
-        WHERE usuario_id = ? AND DATE(data_hora) = CURDATE()
+        WHERE usuario_id = ? AND DATE(CONVERT_TZ(data_hora, '+00:00', '-03:00')) = ?
     ");
-    $stmt_daily->execute([$usuario_id]);
+    $stmt_daily->execute([$usuario_id, $data_hoje]);
     $daily_data = $stmt_daily->fetch(PDO::FETCH_ASSOC);
     $daily_hectares = $daily_data['total_ha'] ?? 0;
     $daily_entries = $daily_data['total_entries'] ?? 0;
 
-    // Busca dados de progresso mensal
+    // Busca dados de progresso mensal (usando data de Brasília)
     $stmt_monthly = $pdo->prepare("
         SELECT SUM(hectares) as total_ha, COUNT(*) as total_entries
         FROM apontamentos
-        WHERE usuario_id = ? AND MONTH(data_hora) = MONTH(CURDATE()) AND YEAR(data_hora) = YEAR(CURDATE())
+        WHERE usuario_id = ? AND MONTH(CONVERT_TZ(data_hora, '+00:00', '-03:00')) = ? 
+        AND YEAR(CONVERT_TZ(data_hora, '+00:00', '-03:00')) = ?
     ");
-    $stmt_monthly->execute([$usuario_id]);
+    $stmt_monthly->execute([$usuario_id, $mes_atual, $ano_atual]);
     $monthly_data = $stmt_monthly->fetch(PDO::FETCH_ASSOC);
     $monthly_hectares = $monthly_data['total_ha'] ?? 0;
     $monthly_entries = $monthly_data['total_entries'] ?? 0;
-
-    // Coleta dados para o formulário
-    $equipamentos = $pdo->query("SELECT id, nome FROM equipamentos")->fetchAll(PDO::FETCH_ASSOC);
 
     // Buscar unidades
     $unidades = $pdo->query("SELECT id, nome, cluster FROM unidades ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
@@ -71,13 +101,14 @@ try {
         $stmt_fazendas = $pdo->prepare("SELECT id, nome, codigo_fazenda FROM fazendas WHERE unidade_id = ? ORDER BY nome");
         $stmt_fazendas->execute([$unidade_do_usuario]);
         $fazendas = $stmt_fazendas->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        // Se o usuário não tem unidade definida, buscar todas as fazendas
+        $fazendas = $pdo->query("SELECT id, nome, codigo_fazenda FROM fazendas ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
     }
-
-    $tipos_operacao = $pdo->query("SELECT id, nome FROM tipos_operacao")->fetchAll(PDO::FETCH_ASSOC);
 
     // Dados de exemplo para a aba de gráficos comparativos
     $comparison_data = [];
-    $current_date = new DateTime();
+    $current_date = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
 
     // Gerar dados de exemplo para os últimos 7 dias
     for ($i = 6; $i >= 0; $i--) {
@@ -128,9 +159,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
         $fazenda_data = $stmt_unidade->fetch(PDO::FETCH_ASSOC);
         $unidade_id = $fazenda_data['unidade_id'] ?? $unidade_do_usuario;
 
-        // Combinar data atual com o horário selecionado
+        // Combinar data atual com o horário selecionado (usando fuso de Brasília)
         $data_atual = date('Y-m-d');
         $data_hora = $data_atual . ' ' . $report_time . ':00';
+        
+        // Converter para UTC antes de salvar no banco
+        $datetime_brasilia = new DateTime($data_hora, new DateTimeZone('America/Sao_Paulo'));
+        $datetime_utc = $datetime_brasilia->setTimezone(new DateTimeZone('UTC'));
+        $data_hora_utc = $datetime_utc->format('Y-m-d H:i:s');
 
         // Inserir o apontamento no banco de dados
         $stmt = $pdo->prepare("
@@ -145,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
             $equipamento_id,
             $operacao_id,
             $hectares,
-            $data_hora,
+            $data_hora_utc, // Usando data/hora em UTC
             $observacoes,
             $fazenda_id // Adicionado o ID da fazenda
         ]);
@@ -172,670 +208,648 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <style>
-/* Base Styles */
-:root {
-  --primary-color: #00796b;
-  --primary-dark: #004d40;
-  --primary-light: #80cbc4;
-  --secondary-color: #ff9800;
-  --error-color: #d32f2f;
-  --success-color: #388e3c;
-  --text-color: #333;
-  --text-light: #666;
-  --bg-color: #f4f7f6;
-  --card-bg: #fff;
-  --border-color: #e0e0e0;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
-  --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
-  --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --transition: all 0.3s ease;
-}
+        /* Estilos existentes mantidos */
+        :root {
+          --primary-color: #00796b;
+          --primary-dark: #004d40;
+          --primary-light: #80cbc4;
+          --secondary-color: #ff9800;
+          --error-color: #d32f2f;
+          --success-color: #388e3c;
+          --text-color: #333;
+          --text-light: #666;
+          --bg-color: #f4f7f6;
+          --card-bg: #fff;
+          --border-color: #e0e0e0;
+          --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
+          --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+          --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+          --radius-sm: 8px;
+          --radius-md: 12px;
+          --radius-lg: 16px;
+          --transition: all 0.3s ease;
+        }
 
-.dashboard-body {
-  font-family: 'Poppins', sans-serif;
-  background-color: var(--bg-color);
-  margin: 0;
-  color: var(--text-color);
-  line-height: 1.6;
-  min-height: 100vh;
-}
+        .dashboard-body {
+          font-family: 'Poppins', sans-serif;
+          background-color: var(--bg-color);
+          margin: 0;
+          color: var(--text-color);
+          line-height: 1.6;
+          min-height: 100vh;
+        }
 
-/* Header Styles */
-.main-header {
-  background-color: var(--primary-dark);
-  color: #fff;
-  padding: 1rem 2rem;
-  box-shadow: var(--shadow-md);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
+        .main-header {
+  background: linear-gradient(135deg, #0d8d52, #0ebc73);
+          color: #fff;
+          padding: 1rem 2rem;
+          box-shadow: var(--shadow-md);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+        }
 
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  max-width: 1200px;
-  margin: 0 auto;
-}
+        .header-content {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          max-width: 1200px;
+          margin: 0 auto;
+        }
 
-.logo {
-  display: flex;
-  align-items: center;
-  font-weight: 600;
-  font-size: 1.5rem;
-  color: #fff;
-}
+        .logo {
+          display: flex;
+          align-items: center;
+          font-weight: 600;
+          font-size: 1.5rem;
+          color: #fff;
+        }
 
-.logo svg {
-  margin-right: 10px;
-  width: 24px;
-  height: 24px;
-}
+        .logo svg {
+          margin-right: 10px;
+          width: 24px;
+          height: 24px;
+        }
 
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
+        .user-info {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
 
-.user-info span {
-  font-size: 0.95rem;
-}
+        .user-info span {
+          font-size: 0.95rem;
+        }
 
-.logout-btn {
-  background-color: var(--error-color);
-  color: #fff;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  text-decoration: none;
-  font-weight: 500;
-  transition: var(--transition);
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
+        .logout-btn {
+          background-color: var(--error-color);
+          color: #fff;
+          padding: 8px 16px;
+          border-radius: var(--radius-sm);
+          text-decoration: none;
+          font-weight: 500;
+          transition: var(--transition);
+          font-size: 0.9rem;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
 
-.logout-btn:hover {
-  background-color: #b71c1c;
-  transform: translateY(-2px);
-}
+        .logout-btn:hover {
+          background-color: #b71c1c;
+          transform: translateY(-2px);
+        }
 
-/* Main Content */
-.container {
-  max-width: 1200px;
-  margin: 2rem auto;
-  padding: 0 2rem;
-}
+        .container {
+          max-width: 1200px;
+          margin: 2rem auto;
+          padding: 0 2rem;
+        }
 
-.grid-container {
-  display: grid;
-  gap: 2rem;
-  margin-bottom: 2rem;
-}
+        .grid-container {
+          display: grid;
+          gap: 2rem;
+          margin-bottom: 2rem;
+        }
 
-/* Card Styles */
-.card {
-  background-color: var(--card-bg);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  padding: 1.5rem;
-  transition: var(--transition);
-  border: 1px solid rgba(0,0,0,0.05);
-}
+        .card {
+          background-color: var(--card-bg);
+          border-radius: var(--radius-md);
+          box-shadow: var(--shadow-sm);
+          padding: 1.5rem;
+          transition: var(--transition);
+          border: 1px solid rgba(0,0,0,0.05);
+        }
 
-.card:hover {
-  transform: translateY(-5px);
-  box-shadow: var(--shadow-lg);
-}
+        .card:hover {
+          transform: translateY(-5px);
+          box-shadow: var(--shadow-lg);
+        }
 
-.card h3 {
-  color: var(--primary-dark);
-  margin-top: 0;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--border-color);
-  font-size: 1.25rem;
-  font-weight: 600;
-}
+        .card h3 {
+          color: var(--primary-dark);
+          margin-top: 0;
+          margin-bottom: 1.5rem;
+          padding-bottom: 0.75rem;
+          border-bottom: 2px solid var(--border-color);
+          font-size: 1.25rem;
+          font-weight: 600;
+        }
 
-/* Metric Cards */
-.metric-card {
+        .metric-card {
+          text-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+
+        .progress-chart {
+          position: relative;
+          width: 150px;
+          height: 150px;
+          margin: 0 auto 1.5rem;
+        }
+
+        .progress-text {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-size: 1.75rem;
+          font-weight: 700;
+          color: var(--primary-color);
+        }
+
+        .progress-bar-container {
+          background-color: #e0e0e0;
+          border-radius: 50px;
+          height: 12px;
+          margin: 1.5rem 0;
+          overflow: hidden;
+          width: 100%;
+        }
+
+        .progress-bar {
+          height: 100%;
+          width: 0%;
+          background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+          border-radius: 50px;
+          transition: width 0.5s ease;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .form-row {
+          display: flex;
+          gap: 1rem;
+          margin-bottom: 1rem;
+          flex-wrap: wrap;
+        }
+
+        .input-group {
+          flex: 1;
+          min-width: 200px;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .input-group label {
+          font-weight: 600;
+          margin-bottom: 8px;
+          color: var(--text-light);
+          font-size: 0.9rem;
+        }
+
+        .input-group select,
+        .input-group input,
+        .input-group textarea {
+          padding: 12px;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-sm);
+          font-family: 'Poppins', sans-serif;
+          font-size: 0.95rem;
+          transition: var(--transition);
+          background-color: #f9f9f9;
+        }
+
+        .input-group select:focus,
+        .input-group input:focus,
+        .input-group textarea:focus {
+          outline: none;
+          border-color: var(--primary-color);
+          box-shadow: 0 0 0 2px rgba(0,121,107,0.2);
+        }
+
+        .input-group textarea {
+          resize: vertical;
+          min-height: 80px;
+        }
+
+        .btn-submit {
+          background-color: var(--primary-color);
+          color: #fff;
+          border: none;
+          padding: 14px 24px;
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          font-weight: 600;
+          font-size: 1rem;
+          transition: var(--transition);
+          width: 100%;
+          margin-top: 1rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .btn-submit:hover {
+          background-color: var(--primary-dark);
+          transform: translateY(-2px);
+        }
+
+        .alert-message {
+          padding: 1rem;
+          background-color: #e8f5e9;
+          color: var(--success-color);
+          border-radius: var(--radius-sm);
+          margin-bottom: 1.5rem;
+          border: 1px solid #c8e6c9;
+          font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .alert-message.error {
+          background-color: #ffebee;
+          color: var(--error-color);
+          border-color: #ffcdd2;
+        }
+
+        .list-card {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .list-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 1rem;
+        }
+
+        #filter-date {
+          padding: 8px 12px;
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--border-color);
+          font-family: 'Poppins', sans-serif;
+        }
+
+        #recent-entries-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          max-height: 800px;
+          overflow-y: auto;
+        }
+
+        .entry-item {
+          background-color: #f9f9f9;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-sm);
+          padding: 1rem;
+          margin-bottom: 10px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          cursor: pointer;
+          transition: var(--transition);
+        }
+
+        .entry-item:hover {
+          background-color: #f0f0f0;
+          border-color: var(--primary-light);
+        }
+
+        .entry-details strong {
+          display: block;
+          color: var(--primary-dark);
+          margin-bottom: 4px;
+        }
+
+        .entry-details p {
+          margin: 4px 0;
+          color: var(--text-light);
+          font-size: 0.9rem;
+        }
+
+        .entry-details small {
+          color: var(--text-light);
+          font-size: 0.85rem;
+          opacity: 0.8;
+        }
+
+        .entry-action button {
+          background-color: var(--primary-color);
+          color: #fff;
+          border: none;
+          padding: 8px 16px;
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          font-weight: 500;
+          font-size: 0.9rem;
+          transition: var(--transition);
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .entry-action button:hover {
+          background-color: var(--primary-dark);
+        }
+
+        .entry-details{
+            padding-left: 10px;
+        }
+
+        .modal {
+          display: none;
+          position: fixed;
+          z-index: 1000;
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 100%;
+          overflow: auto;
+          background-color: rgba(0,0,0,0.5);
+          backdrop-filter: blur(3px);
+          padding: 2rem;
+          box-sizing: border-box;
+        }
+
+        .modal-content {
+          background-color: var(--card-bg);
+          margin: 0 auto;
+          padding: 2rem;
+          border-radius: var(--radius-md);
+          width: 100%;
+          max-width: 600px;
+          box-shadow: var(--shadow-lg);
+          position: relative;
+        }
+
+        .close-btn {
+          color: #aaa;
+          position: absolute;
+          top: 1rem;
+          right: 1.5rem;
+          font-size: 1.75rem;
+          font-weight: bold;
+          cursor: pointer;
+          transition: var(--transition);
+        }
+
+        .close-btn:hover,
+        .close-btn:focus {
+          color: var(--text-color);
+          transform: rotate(90deg);
+        }
+
+        .tab-navigation {
+          display: flex;
+          margin-bottom: 1.5rem;
+          border-bottom: 2px solid var(--border-color);
+        }
+
+        .tab-button {
+          padding: 12px 24px;
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-weight: 600;
+          color: var(--text-light);
+          position: relative;
+          transition: var(--transition);
+          font-size: 1rem;
+        }
+
+        .tab-button::after {
+          content: '';
+          position: absolute;
+          bottom: -2px;
+          left: 0;
+          width: 0;
+          height: 2px;
+          background-color: var(--primary-color);
+          transition: width 0.3s ease;
+        }
+
+        .tab-button.active {
+          color: var(--primary-color);
+        }
+
+        .tab-button.active::after {
+          width: 100%;
+        }
+
+        .tab-button:hover {
+          color: var(--primary-color);
+        }
+
+        .tab-content {
+          display: none;
+        }
+
+        .tab-content.active {
+          display: block;
+        }
+
+        .chart-container {
+          background-color: var(--card-bg);
+          border-radius: var(--radius-md);
+          box-shadow: var(--shadow-sm);
+          padding: 1.5rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .chart-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1.5rem;
+        }
+
+        .chart-title {
+          color: var(--primary-dark);
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 600;
+        }
+
+        .chart-filter {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+        }
+
+        .chart-filter select {
+          padding: 8px 12px;
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--border-color);
+          font-family: 'Poppins', sans-serif;
+        }
+
+        .chart-canvas-container {
+          position: relative;
+          height: 300px;
+          width: 100%;
+        }
+
+        .comparison-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 1.5rem;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+          padding: 12px;
+          text-align: left;
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .comparison-table th {
+          background-color: #f5f5f5;
+          font-weight: 600;
+          color: var(--primary-dark);
+        }
+
+        .comparison-table tr:hover {
+          background-color: #f9f9f9;
+        }
+
+        .difference-positive {
+          color: var(--success-color);
+          font-weight: 600;
+        }
+
+        .difference-negative {
+          color: var(--error-color);
+          font-weight: 600;
+        }
+
+        @media (min-width: 768px) {
+          .grid-container {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .header-content {
+            padding: 0 1rem;
+          }
+
+          .logo {
+            font-size: 1.4rem;
+          }
+        }
+
+        @media (min-width: 1024px) {
+          .grid-container {
+            grid-template-columns: 1fr 2fr;
+          }
+
+          .metric-card {
+            grid-column: span 1;
+            grid-row: span 1;
+          }
+
+          .modal-content {
+            margin: 2rem auto;
+          }
+        }
+
+        .no-entries {
+          text-align: center;
+          color: var(--text-light);
+          padding: 2rem;
+          font-size: 0.95rem;
+        }
+
+        .select2-container--default .select2-selection--single {
+          height: 44px;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-sm);
+          padding: 8px 12px;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+          height: 42px;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+          line-height: 42px;
+          padding-left: 0;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+          background-color: var(--primary-color);
+        }
+
+        .select2-container--default .select2-results__option[aria-selected=true] {
+          background-color: #e0f2f1;
+          color: var(--primary-dark);
+        }
+
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-sm);
+          padding: 6px 12px;
+        }
+
+        .timezone-info {
+            background-color: #e3f2fd;
+            padding: 10px;
+            border-radius: var(--radius-sm);
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+            font-size: 0.9rem;
+        }
+
+        .timezone-info strong {
+            color: #1976d2;
+        }
+
+
+/* Créditos estilos */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+
+.signature-credit {
+  width: 100%;
   text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.progress-chart {
-  position: relative;
-  width: 150px;
-  height: 150px;
-  margin: 0 auto 1.5rem;
-}
-
-.progress-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--primary-color);
-}
-
-.progress-bar-container {
-  background-color: #e0e0e0;
-  border-radius: 50px;
-  height: 12px;
-  margin: 1.5rem 0;
-  overflow: hidden;
-  width: 100%;
-}
-
-.progress-bar {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
-  border-radius: 50px;
-  transition: width 0.5s ease;
+  padding: 18px 10px;
+  font-family: 'Poppins', sans-serif;
   position: relative;
   overflow: hidden;
 }
 
-.progress-bar::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg,
-    rgba(255,255,255,0.1) 0%,
-    rgba(255,255,255,0.3) 50%,
-    rgba(255,255,255,0.1) 100%);
-  animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.progress-bar-label {
-  font-weight: 600;
-  color: var(--text-light);
-  font-size: 0.95rem;
-}
-
-/* Form Styles */
-.form-row {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-}
-
-.input-group {
-  flex: 1;
-  min-width: 200px;
-  display: flex;
-  flex-direction: column;
-}
-
-.input-group label {
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: var(--text-light);
-  font-size: 0.9rem;
-}
-
-.input-group select,
-.input-group input,
-.input-group textarea {
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  font-family: 'Poppins', sans-serif;
-  font-size: 0.95rem;
-  transition: var(--transition);
-  background-color: #f9f9f9;
-}
-
-.input-group select:focus,
-.input-group input:focus,
-.input-group textarea:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(0,121,107,0.2);
-}
-
-.input-group textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.btn-submit {
-  background-color: var(--primary-color);
-  color: #fff;
-  border: none;
-  padding: 14px 24px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 1rem;
-  transition: var(--transition);
-  width: 100%;
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.btn-submit:hover {
-  background-color: var(--primary-dark);
-  transform: translateY(-2px);
-}
-
-/* Alert Messages */
-.alert-message {
-  padding: 1rem;
-  background-color: #e8f5e9;
-  color: var(--success-color);
-  border-radius: var(--radius-sm);
-  margin-bottom: 1.5rem;
-  border: 1px solid #c8e6c9;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.alert-message.error {
-  background-color: #ffebee;
-  color: var(--error-color);
-  border-color: #ffcdd2;
-}
-
-/* List Styles */
-.list-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-#filter-date {
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-  font-family: 'Poppins', sans-serif;
-}
-
-#recent-entries-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  max-height: 800px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--primary-light) #f1f1f1;
-}
-
-#recent-entries-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-#recent-entries-list::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
-
-#recent-entries-list::-webkit-scrollbar-thumb {
-  background-color: var(--primary-light);
-  border-radius: 3px;
-}
-
-.entry-item {
-  background-color: #f9f9f9;
-  border: 1px solid var(--border-color);
-  край: var(--radius-sm);
-  padding: 1rem;
-  margin-bottom: 10px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.entry-item:hover {
-  background-color: #f0f0f0;
-  border-color: var(--primary-light);
-}
-
-.entry-details strong {
-  display: block;
-  color: var(--primary-dark);
-  margin-bottom: 4px;
-}
-
-.entry-details p {
-  margin: 4px 0;
-  color: var(--text-light);
-  font-size: 0.9rem;
-}
-
-.entry-details small {
-  color: var(--text-light);
-  font-size: 0.85rem;
-  opacity: 0.8;
-}
-
-.entry-action button {
-  background-color: var(--primary-color);
-  color: #fff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 0.9rem;
-  transition: var(--transition);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.entry-action button:hover {
-  background-color: var(--primary-dark);
-}
-
-.entry-details{
-    padding-left: 10px;
-}
-
-/* Modal Styles */
-.modal {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  background-color: rgba(0,0,0,0.5);
-  backdrop-filter: blur(3px);
-  padding: 2rem;
-  box-sizing: border-box;
-}
-
-.modal-content {
-  background-color: var(--card-bg);
-  margin: 0 auto;
-  padding: 2rem;
-  border-radius: var(--radius-md);
-  width: 100%;
-  max-width: 600px;
-  box-shadow: var(--shadow-lg);
-  position: relative;
-  animation: modalFadeIn 0.3s ease-out;
-}
-
-@keyframes modalFadeIn {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.close-btn {
-  color: #aaa;
-  position: absolute;
-  top: 1rem;
-  right: 1.5rem;
-  font-size: 1.75rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.close-btn:hover,
-.close-btn:focus {
-  color: var(--text-color);
-  transform: rotate(90deg);
-}
-
-#editForm input[readonly],
-#editForm textarea[readonly] {
-  background-color: #f5f5f5;
-  cursor: not-allowed;
-}
-
-/* Tab Navigation */
-.tab-navigation {
-  display: flex;
-  margin-bottom: 1.5rem;
-  border-bottom: 2px solid var(--border-color);
-}
-
-.tab-button {
-  padding: 12px 24px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--text-light);
-  position: relative;
-  transition: var(--transition);
-  font-size: 1rem;
-}
-
-.tab-button::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  width: 0;
-  height: 2px;
-  background-color: var(--primary-color);
-  transition: width 0.3s ease;
-}
-
-.tab-button.active {
-  color: var(--primary-color);
-}
-
-.tab-button.active::after {
-  width: 100%;
-}
-
-.tab-button:hover {
-  color: var(--primary-color);
-}
-
-.tab-content {
-  display: none;
-}
-
-.tab-content.active {
-  display: block;
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* Comparison Charts */
-.chart-container {
-  background-color: var(--card-bg);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.chart-title {
-  color: var(--primary-dark);
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-
-.chart-filter {
-  display: flex;
-  край: 10px;
-  align-items: center;
-}
-
-.chart-filter select {
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-  font-family: 'Poppins', sans-serif;
-}
-
-.chart-canvas-container {
-  position: relative;
-  height: 300px;
-  width: 100%;
-}
-
-.comparison-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1.5rem;
-}
-
-.comparison-table th,
-.comparison-table td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.comparison-table th {
-  background-color: #f5f5f5;
-  font-weight: 600;
-  color: var(--primary-dark);
-}
-
-.comparison-table tr:hover {
-  background-color: #f9f9f9;
-}
-
-.difference-positive {
-  color: var(--success-color);
-  font-weight: 600;
-}
-
-.difference-negative {
-  color: var(--error-color);
-  font-weight: 600;
-}
-
-/* Responsive Design */
-@media (min-width: 768px) {
-  .grid-container {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .header-content {
-    padding: 0 1rem;
-  }
-
-  .logo {
-    font-size: 1.4rem;
-  }
-}
-
-@media (min-width: 1024px) {
-  .grid-container {
-    grid-template-columns: 1fr 2fr;
-  }
-
-  .metric-card {
-    grid-column: span 1;
-  }
-
-  .modal-content {
-    margin: 2rem auto;
-  }
-}
-
-/* Utility Classes */
-.no-entries {
-  text-align: center;
-  color: var(--text-light);
-  padding: 2rem;
-  font-size: 0.95rem;
-}
-
-.loading {
+.sig-text {
+  font-size: 15px;
+  color: #2c3e50;
+  font-weight: 400;
   display: inline-block;
-  width: 20px;
-  height: 20px;
-  border: 3px solid rgba(0,121,107,0.3);
-  border-radius: 50%;
-  border-top-color: var(--primary-color);
-  animation: spin 1s ease-in-out infinite;
-  margin-right: 8px;
+  position: relative;
+  padding-bottom: 6px;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.sig-text::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0%;
+  height: 2px;
+  background: linear-gradient(90deg, #0ebc73, #0d8d52);
+  transform: translateX(-50%);
+  transition: width 0.5s ease;
+  border-radius: 2px;
 }
 
-/* Select2 Customization */
-.select2-container--default .select2-selection--single {
-  height: 44px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
+.signature-credit:hover .sig-text::after {
+  width: 100%;
 }
 
-.select2-container--default .select2-selection--single .select2-selection__arrow {
-  height: 42px;
+.sig-name {
+  font-weight: 600;
+  color: #0ebc73;
+  transition: color .3s ease;
 }
 
-.select2-container--default .select2-selection--single .select2-selection__rendered {
-  line-height: 42px;
-  padding-left: 0;
+.signature-credit:hover .sig-name {
+  color: #0d8d52;
 }
 
-.select2-container--default .select2-results__option--highlighted[aria-selected] {
-  background-color: var(--primary-color);
-}
 
-.select2-container--default .select2-results__option[aria-selected=true] {
-  background-color: #e0f2f1;
-  color: var(--primary-dark);
-}
-
-.select2-container--default .select2-search--dropdown .select2-search__field {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
-}
     </style>
 </head>
 <body class="dashboard-body">
@@ -853,6 +867,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
     </header>
 
     <main class="container">
+        <div class="timezone-info">
+            <strong>Atenção</strong> Sistema em desenvolvimento pode haver problemas.
+
+        </div>
+
         <?php if ($feedback_message): ?>
             <div class="alert-message <?php echo strpos($feedback_message, 'Erro') !== false ? 'error' : ''; ?>">
                 <?php echo htmlspecialchars($feedback_message); ?>
@@ -923,15 +942,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
                                     <option value="parado">Parado</option>
                                 </select>
                             </div>
-                            <div class="input-group">
-                                <label for="equipment">Equipamento</label>
-                                <select id="equipment" name="equipamento_id" class="select-search" required>
-                                    <option value="">Selecione um equipamento...</option>
-                                    <?php foreach ($equipamentos as $eq) {
-                                        echo "<option value='{$eq['id']}'>{$eq['nome']}</option>";
-                                    } ?>
-                                </select>
-                            </div>
                         </div>
 
                         <div class="form-row">
@@ -939,9 +949,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
                                 <label for="operation">Operação</label>
                                 <select id="operation" name="operacao_id" class="select-search" required>
                                     <option value="">Selecione a operação...</option>
-                                    <?php foreach ($tipos_operacao as $op) {
-                                        echo "<option value='{$op['id']}'>{$op['nome']}</option>";
+                                    <?php foreach ($todas_operacoes as $op) {
+                                        echo "<option value='{$op['id']}' data-nome='{$op['nome']}'>{$op['nome']}</option>";
                                     } ?>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="equipment">Equipamento</label>
+                                <select id="equipment" name="equipamento_id" class="select-search" required disabled>
+                                    <option value="">Primeiro selecione uma operação</option>
                                 </select>
                             </div>
                         </div>
@@ -1054,7 +1073,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
                 </div>
                 <div class="form-row">
                     <div class="input-group">
-                        <label>Data/Hora</label>
+                        <label>Data/Hora (Brasília)</label>
                         <input type="text" id="modal-datetime" readonly>
                     </div>
                 </div>
@@ -1090,250 +1109,372 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
     </div>
 
     <script>
-        $(document).ready(function() {
-            // Inicializa o Select2 nos dropdowns
-            $('.select-search').select2({
-                placeholder: "Clique ou digite para pesquisar...",
-                allowClear: true,
-                width: '100%'
-            });
-
-            // Lógica para mostrar/esconder o campo de motivo de parada
-            $('#status').on('change', function() {
-                const status = $(this).val();
-                const hectaresGroup = $('#hectares-group');
-                const reasonGroup = $('#reason-group');
-
-                if (status === 'parado') {
-                    hectaresGroup.hide();
-                    hectaresGroup.find('input').prop('required', false).val(0);
-                    reasonGroup.show();
-                    reasonGroup.find('textarea').prop('required', true);
-                } else {
-                    hectaresGroup.show();
-                    hectaresGroup.find('input').prop('required', true).val('');
-                    reasonGroup.hide();
-                    reasonGroup.find('textarea').prop('required', false).val('');
-                }
-            }).trigger('change'); // Dispara o evento no carregamento da página
-
-            // Gráfico de Progresso Diário (Chart.js)
-            const dailyProgressCtx = document.getElementById('dailyProgressChart').getContext('2d');
-            const dailyGoal = <?php echo $daily_goal; ?>;
-            const dailyHectares = <?php echo $daily_hectares; ?>;
-            let dailyPercentage = Math.min(100, (dailyHectares / dailyGoal) * 100);
-
-            const dailyProgressChart = new Chart(dailyProgressCtx, {
-                type: 'doughnut',
+    $(document).ready(function() {
+        // Atualizar relógio com fuso horário de Brasília
+        function updateBrasiliaTime() {
+            const now = new Date();
+            // Ajustar para o fuso horário de Brasília (UTC-3)
+            const brasiliaOffset = -3 * 60; // UTC-3 em minutos
+            const localOffset = now.getTimezoneOffset();
+            const brasiliaTime = new Date(now.getTime() + (localOffset - brasiliaOffset) * 60000);
+            
+            const options = { 
+                timeZone: 'America/Sao_Paulo',
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            };
+            
+            const formatter = new Intl.DateTimeFormat('pt-BR', options);
+            const parts = formatter.formatToParts(brasiliaTime);
+            
+            let day, month, year, hour, minute, second;
+            for (const part of parts) {
+                if (part.type === 'day') day = part.value;
+                if (part.type === 'month') month = part.value;
+                if (part.type === 'year') year = part.value;
+                if (part.type === 'hour') hour = part.value;
+                if (part.type === 'minute') minute = part.value;
+                if (part.type === 'second') second = part.value;
+            }
+            
+            $('#current-time').text(`Horário atual: ${day}/${month}/${year} ${hour}:${minute}:${second} (Brasília)`);
+        }
+        
+        // Atualizar a cada segundo
+        setInterval(updateBrasiliaTime, 1000);
+        updateBrasiliaTime();
+        
+        // Variável para armazenar a unidade do usuário
+        const userUnidadeId = <?php echo $unidade_do_usuario ? $unidade_do_usuario : 'null'; ?>;
+        
+        // Função para carregar equipamentos baseado na operação selecionada
+        function carregarEquipamentosPorOperacao(operacaoId, operacaoNome) {
+            if (!operacaoId || !operacaoNome) {
+                // Se nenhuma operação selecionada, desabilitar equipamentos
+                $('#equipment').html('<option value="">Primeiro selecione uma operação</option>');
+                $('#equipment').prop('disabled', true).trigger('change');
+                return;
+            }
+            
+            // Habilitar dropdown de equipamentos
+            $('#equipment').prop('disabled', false);
+            
+            // Mostrar loading
+            $('#equipment').html('<option value="">Carregando equipamentos...</option>').trigger('change');
+            
+            // Fazer requisição AJAX
+            $.ajax({
+                url: '/equipamentos',
+                type: 'GET',
                 data: {
-                    datasets: [{
-                        data: [dailyHectares, Math.max(0, dailyGoal - dailyHectares)],
-                        backgroundColor: ['#00796b', '#e0e0e0'],
-                        borderWidth: 0
-                    }]
+                    operacao_nome: operacaoNome,
+                    unidade_id: userUnidadeId
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '80%',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { enabled: false }
-                    }
-                }
-            });
-            $('#dailyProgressText').text(`${Math.round(dailyPercentage)}%`);
-
-            // Função para buscar e exibir os apontamentos
-            function fetchApontamentos(date) {
-                const userId = <?php echo json_encode($_SESSION['usuario_id']); ?>;
-                $('#recent-entries-list').html('<div style="text-align: center;">Carregando...</div>');
-                $('#no-entries-message').hide();
-
-                $.ajax({
-                    url: '/apontamentos',
-                    type: 'GET',
-                    data: { date: date, usuario_id: userId },
-                    dataType: 'json',
-                    success: function(response) {
-                        const list = $('#recent-entries-list');
-                        list.empty();
-                        if (response.length > 0) {
-                            response.forEach(function(entry) {
-                                // Serializa o objeto PHP para um JSON e o armazena no atributo data-entry
-                                const entryJson = JSON.stringify(entry);
-                                const listItem = `
-                                    <li class="entry-item" data-entry-id="${entry.id}" data-entry='${entryJson}'>
-                                        <div class="entry-details">
-                                            <strong>${entry.equipamento_nome}</strong>
-                                            <p>${entry.unidade_nome} - ${entry.operacao_nome}</p>
-                                            <small>Hectares: ${entry.hectares} | Hora: ${entry.data_hora.split(' ')[1].substring(0, 5)}</small>
-                                        </div>
-                                        <div class="entry-action">
-                                            <button class="open-modal-btn">Detalhes</button>
-                                        </div>
-                                    </li>
-                                `;
-                                list.append(listItem);
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        $('#equipment').html('<option value="">Selecione um equipamento...</option>');
+                        if (response.equipamentos.length > 0) {
+                            response.equipamentos.forEach(function(equipamento) {
+                                $('#equipment').append('<option value="' + equipamento.id + '">' + equipamento.nome + '</option>');
                             });
                         } else {
-                            $('#no-entries-message').show();
+                            $('#equipment').html('<option value="">Nenhum equipamento encontrado para ' + response.operacao_nome + '</option>');
                         }
-                    },
-                    error: function() {
-                        list.html('<div style="text-align: center; color: red;">Erro ao carregar os apontamentos.</div>');
+                        $('#equipment').trigger('change');
+                    } else {
+                        alert('Erro ao carregar equipamentos: ' + response.error);
+                        $('#equipment').html('<option value="">Erro ao carregar equipamentos</option>');
                     }
-                });
-            }
-
-            // Ação ao mudar a data no filtro
-            $('#filter-date').on('change', function() {
-                fetchApontamentos($(this).val());
-            });
-
-            // Carrega os apontamentos da data atual ao carregar a página
-            fetchApontamentos($('#filter-date').val());
-
-            // Lógica do Modal
-            const modal = $('#editModal');
-            const closeBtn = $('.close-btn');
-
-            // Função para abrir o modal
-            window.openModal = function(entry) {
-                $('#modal-id').val(entry.id);
-                $('#modal-datetime').val(entry.data_hora);
-                $('#modal-farm').val(entry.unidade_nome);
-                $('#modal-equipment').val(entry.equipamento_nome);
-                $('#modal-operation').val(entry.operacao_nome);
-                $('#modal-hectares').val(entry.hectares);
-                $('#modal-reason').val(entry.observacoes);
-                modal.show();
-            };
-
-            // Event listener para abrir o modal quando o botão é clicado
-            $('#recent-entries-list').on('click', '.open-modal-btn', function() {
-                // Pega o elemento <li> pai do botão clicado
-                const listItem = $(this).closest('.entry-item');
-                // Pega a string JSON do atributo data-entry
-                const entryJson = listItem.data('entry');
-                // Analisa a string JSON para obter o objeto e abre o modal
-                openModal(entryJson);
-            });
-
-            closeBtn.on('click', function() {
-                modal.hide();
-            });
-
-            $(window).on('click', function(event) {
-                if ($(event.target).is(modal)) {
-                    modal.hide();
+                },
+                error: function() {
+                    alert('Erro na requisição. Tente novamente.');
+                    $('#equipment').html('<option value="">Erro ao carregar equipamentos</option>');
                 }
             });
-
-            // Controle das abas
-            $('.tab-button').on('click', function() {
-                // Remover classe active de todas as abas
-                $('.tab-button').removeClass('active');
-                $('.tab-content').removeClass('active');
-
-                // Adicionar classe active à aba clicada
-                $(this).addClass('active');
-                const tabId = $(this).data('tab');
-                $(`#${tabId}-tab`).addClass('active');
-
-                // Se for a aba de comparativos, atualizar o gráfico
-                if (tabId === 'comparison') {
-                    updateComparisonChart();
-                }
-            });
-
-            // Inicializar o gráfico de comparação
-            updateComparisonChart();
+        }
+        
+        // Event listener para mudança de operação
+        $('#operation').on('change', function() {
+            const operacaoId = $(this).val();
+            const operacaoNome = $(this).find('option:selected').data('nome');
+            carregarEquipamentosPorOperacao(operacaoId, operacaoNome);
+        });
+        
+        // Inicializar Select2
+        $('.select-search').select2({
+            placeholder: "Clique ou digite para pesquisar...",
+            allowClear: true,
+            width: '100%'
         });
 
-        // Dados de exemplo para os gráficos comparativos
-        const comparisonData = <?php echo json_encode($comparison_data); ?>;
+        // Lógica para mostrar/esconder o campo de motivo de parada
+        $('#status').on('change', function() {
+            const status = $(this).val();
+            const hectaresGroup = $('#hectares-group');
+            const reasonGroup = $('#reason-group');
 
-        // Função para atualizar o gráfico de comparação
-        function updateComparisonChart() {
-            const period = $('#comparison-period').val();
-
-            // Em produção, isso buscaria dados do servidor
-            // Por enquanto, usamos os dados de exemplo gerados no PHP
-            renderComparisonChart(comparisonData);
-        }
-
-        // Renderizar gráfico de comparação
-        function renderComparisonChart(data) {
-            const ctx = document.getElementById('comparisonChart').getContext('2d');
-
-            // Destruir gráfico anterior se existir
-            if (window.comparisonChartInstance) {
-                window.comparisonChartInstance.destroy();
+            if (status === 'parado') {
+                hectaresGroup.hide();
+                hectaresGroup.find('input').prop('required', false).val(0);
+                reasonGroup.show();
+                reasonGroup.find('textarea').prop('required', true);
+            } else {
+                hectaresGroup.show();
+                hectaresGroup.find('input').prop('required', true).val('');
+                reasonGroup.hide();
+                reasonGroup.find('textarea').prop('required', false).val('');
             }
+        }).trigger('change');
 
-            const labels = data.map(item => {
-                const date = new Date(item.data);
-                return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-            });
+        // Gráfico de Progresso Diário (Chart.js)
+        const dailyProgressCtx = document.getElementById('dailyProgressChart').getContext('2d');
+        const dailyGoal = <?php echo $daily_goal; ?>;
+        const dailyHectares = <?php echo $daily_hectares; ?>;
+        let dailyPercentage = Math.min(100, (dailyHectares / dailyGoal) * 100);
 
-            const manualData = data.map(item => parseFloat(item.ha_manual) || 0);
-            const solinftecData = data.map(item => parseFloat(item.ha_solinftec) || 0);
+        const dailyProgressChart = new Chart(dailyProgressCtx, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [dailyHectares, Math.max(0, dailyGoal - dailyHectares)],
+                    backgroundColor: ['#00796b', '#e0e0e0'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '80%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                }
+            }
+        });
+        $('#dailyProgressText').text(`${Math.round(dailyPercentage)}%`);
 
-            window.comparisonChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Hectares Solinftec',
-                            data: solinftecData,
-                            backgroundColor: 'rgba(0, 121, 107, 0.7)',
-                            borderColor: 'rgba(0, 121, 107, 1)',
-                            borderWidth: 1
-                        },
-                        {
-                            label: 'Hectares Manual',
-                            data: manualData,
-                            backgroundColor: 'rgba(255, 152, 0, 0.7)',
-                            borderColor: 'rgba(255, 152, 0, 1)',
-                            borderWidth: 1
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Hectares'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Data'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                        },
-                        title: {
-                            display: true,
-                            text: 'Comparativo de Hectares - Solinftec vs Manual'
-                        }
+        // Função para buscar e exibir os apontamentos
+        function fetchApontamentos(date) {
+            const userId = <?php echo json_encode($_SESSION['usuario_id']); ?>;
+            $('#recent-entries-list').html('<div style="text-align: center;">Carregando...</div>');
+            $('#no-entries-message').hide();
+
+            $.ajax({
+                url: '/apontamentos',
+                type: 'GET',
+                data: { date: date, usuario_id: userId },
+                dataType: 'json',
+                success: function(response) {
+                    const list = $('#recent-entries-list');
+                    list.empty();
+                    if (response.length > 0) {
+                        response.forEach(function(entry) {
+                            const entryJson = JSON.stringify(entry);
+                            
+                            // Converter data/hora UTC para fuso de Brasília
+                            const dataHoraUTC = new Date(entry.data_hora + 'Z');
+                            const options = { 
+                                timeZone: 'America/Sao_Paulo',
+                                hour: '2-digit', 
+                                minute: '2-digit'
+                            };
+                            const formatter = new Intl.DateTimeFormat('pt-BR', options);
+                            const horaBrasilia = formatter.format(dataHoraUTC);
+                            
+                            const listItem = `
+                                <li class="entry-item" data-entry-id="${entry.id}" data-entry='${entryJson}'>
+                                    <div class="entry-details">
+                                        <strong>${entry.equipamento_nome}</strong>
+                                        <p>${entry.unidade_nome} - ${entry.operacao_nome}</p>
+                                        <small>Hectares: ${entry.hectares} | Hora: ${horaBrasilia}</small>
+                                    </div>
+                                    <div class="entry-action">
+                                        <button class="open-modal-btn">Detalhes</button>
+                                    </div>
+                                </li>
+                            `;
+                            list.append(listItem);
+                        });
+                    } else {
+                        $('#no-entries-message').show();
                     }
+                },
+                error: function() {
+                    list.html('<div style="text-align: center; color: red;">Erro ao carregar os apontamentos.</div>');
                 }
             });
         }
 
-        // Event listener para o filtro de período
-        $('#comparison-period').on('change', updateComparisonChart);
+        // Ação ao mudar a data no filtro
+        $('#filter-date').on('change', function() {
+            fetchApontamentos($(this).val());
+        });
+
+        // Carrega os apontamentos da data atual ao carregar a página
+        fetchApontamentos($('#filter-date').val());
+
+        // Lógica do Modal
+        const modal = $('#editModal');
+        const closeBtn = $('.close-btn');
+
+        // Função para abrir o modal
+        window.openModal = function(entry) {
+            $('#modal-id').val(entry.id);
+            
+            // Converter data/hora UTC para fuso de Brasília
+            const dataHoraUTC = new Date(entry.data_hora + 'Z');
+            const options = { 
+                timeZone: 'America/Sao_Paulo',
+                day: '2-digit', 
+                month: '2-digit', 
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            };
+            const formatter = new Intl.DateTimeFormat('pt-BR', options);
+            const dataHoraBrasilia = formatter.format(dataHoraUTC);
+            
+            $('#modal-datetime').val(dataHoraBrasilia);
+            $('#modal-farm').val(entry.unidade_nome);
+            $('#modal-equipment').val(entry.equipamento_nome);
+            $('#modal-operation').val(entry.operacao_nome);
+            $('#modal-hectares').val(entry.hectares);
+            $('#modal-reason').val(entry.observacoes);
+            modal.show();
+        };
+
+        // Event listener para abrir o modal quando o botão é clicado
+        $('#recent-entries-list').on('click', '.open-modal-btn', function() {
+            const listItem = $(this).closest('.entry-item');
+            const entryJson = listItem.data('entry');
+            openModal(entryJson);
+        });
+
+        closeBtn.on('click', function() {
+            modal.hide();
+        });
+
+        $(window).on('click', function(event) {
+            if ($(event.target).is(modal)) {
+                modal.hide();
+            }
+        });
+
+        // Controle das abas
+        $('.tab-button').on('click', function() {
+            $('.tab-button').removeClass('active');
+            $('.tab-content').removeClass('active');
+
+            $(this).addClass('active');
+            const tabId = $(this).data('tab');
+            $(`#${tabId}-tab`).addClass('active');
+
+            if (tabId === 'comparison') {
+                updateComparisonChart();
+            }
+        });
+
+        // Inicializar o gráfico de comparação
+        updateComparisonChart();
+    });
+
+    // Dados de exemplo para os gráficos comparativos
+    const comparisonData = <?php echo json_encode($comparison_data); ?>;
+
+    // Função para atualizar o gráfico de comparação
+    function updateComparisonChart() {
+        const period = $('#comparison-period').val();
+        renderComparisonChart(comparisonData);
+    }
+
+    // Renderizar gráfico de comparação
+    function renderComparisonChart(data) {
+        const ctx = document.getElementById('comparisonChart').getContext('2d');
+
+        if (window.comparisonChartInstance) {
+            window.comparisonChartInstance.destroy();
+        }
+
+        const labels = data.map(item => {
+            const date = new Date(item.data);
+            return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        });
+
+        const manualData = data.map(item => parseFloat(item.ha_manual) || 0);
+        const solinftecData = data.map(item => parseFloat(item.ha_solinftec) || 0);
+
+        window.comparisonChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Hectares Solinftec',
+                        data: solinftecData,
+                        backgroundColor: 'rgba(0, 121, 107, 0.7)',
+                        borderColor: 'rgba(0, 121, 107, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Hectares Manual',
+                        data: manualData,
+                        backgroundColor: 'rgba(255, 152, 0, 0.7)',
+                        borderColor: 'rgba(255, 152, 0, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Hectares'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Data'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Comparativo de Hectares - Solinftec vs Manual'
+                    }
+                }
+            }
+        });
+    }
+
+    // Event listener para o filtro de período
+    $('#comparison-period').on('change', updateComparisonChart);
     </script>
 </body>
+
+
+<!-- Créditos -->
+<div class="signature-credit">
+  <p class="sig-text">
+    Desenvolvido por 
+    <span class="sig-name">Bruno Carmo</span> & 
+    <span class="sig-name">Henrique Reis</span>
+  </p>
+</div>
+
+
+
 </html>
