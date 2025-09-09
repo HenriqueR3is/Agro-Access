@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db/conexao.php';
 
 // Verificar se o usuário está autenticado como admin
 if (!isset($_SESSION['usuario_id']) || $_SESSION['usuario_tipo'] !== 'admin') {
-    header("Location: /app/views/login.php");
+    header("Location: /");
     exit();
 }
 

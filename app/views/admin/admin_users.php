@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db/conexao.php';
 
 // Verificação de administrador
 if (!isset($_SESSION['usuario_id']) || strtolower($_SESSION['usuario_tipo']) !== 'admin') {
-    header("Location: /login.php");
+    header("Location: /");
     exit();
 }
 
