@@ -36,3 +36,48 @@
     align-items: center;
     justify-content: center;
 }
+
+.signature-credit {
+  width: 100%;
+  text-align: center;
+  padding: 18px 10px;
+  font-family: 'Poppins', sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+.sig-text {
+  font-size: 15px;
+  color: #2c3e50;
+  font-weight: 400;
+  display: inline-block;
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.sig-text::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0%;
+  height: 2px;
+  background: linear-gradient(90deg, #0ebc73, #0d8d52);
+  transform: translateX(-50%);
+  transition: width 0.5s ease;
+  border-radius: 2px;
+}
+
+.signature-credit:hover .sig-text::after {
+  width: 100%;
+}
+
+.sig-name {
+  font-weight: 600;
+  color: #0ebc73;
+  transition: color .3s ease;
+}
+
+.signature-credit:hover .sig-name {
+  color: #0d8d52;
+}

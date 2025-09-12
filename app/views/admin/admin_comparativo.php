@@ -370,6 +370,7 @@ try {
 <div class="container">
     <div class="page-header"><h2>Conciliação de Produção</h2></div>
 
+    <!-- Mensagens -->
     <?php if (isset($_SESSION['success_message'])): ?>
         <div class="alert alert-success"><?= $_SESSION['success_message']; unset($_SESSION['success_message']); ?></div>
     <?php endif; ?>
@@ -379,6 +380,8 @@ try {
     <?php if (isset($_SESSION['info_message'])): ?>
         <div class="alert alert-info"><?= $_SESSION['info_message']; unset($_SESSION['info_message']); ?></div>
     <?php endif; ?>
+
+    <button class="btn btn-success" id="btnImportarCsvProducao">📂 Importar CSV</button>
 
     <!-- Filtro de período -->
     <div class="card">
@@ -394,80 +397,213 @@ try {
         </div>
     </div>
 
-    <!-- Gráfico comparativo -->
-    <div class="card">
-        <div class="card-body">
-            <canvas id="comparativoChart" height="150"></canvas>
+        <!-- Modal de Importação CSV Produção -->
+<div class="modal" id="modalImportarProducao">
+    <div class="modal-content">
+        <div class="modal-header">Importar Produção via CSV</div>
+        <form action="/comparativo" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="import_csv_producao">
+            <label>Selecione o arquivo (.csv):</label>
+            <input type="file" name="arquivo_csv" accept=".csv" required class="form-input">
+            <p class="info-text">
+                O arquivo deve conter as colunas: DATA, EQUIPAMENTO, IMPLEMENTO, UNIDADE, PRODUÇÃO...
+            </p>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-cancelar">Cancelar</button>
+                <button type="submit" class="btn btn-success">Importar</button>
+            </div>
+        </form>
+    </div>
+</div>
+    
+    <!-- Abas -->
+    <div class="tabs">
+        <button class="tab-link active" onclick="openTab(event, 'porEquipamento')">Por Equipamento</button>
+        <button class="tab-link" onclick="openTab(event, 'porPeriodo')">Por Período</button>
+    </div>
+
+    <!-- Aba 1: Por equipamento -->
+    <div id="porEquipamento" class="tabcontent" style="display:block;">
+        <div class="card">
+            <div class="card-body">
+                <canvas id="comparativoChart" height="150"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body table-container">
+                <?php if (empty($resultados)): ?>
+                    <p class="text-center">Nenhum dado encontrado para o período selecionado.</p>
+                <?php else: ?>
+                    <table class="table-comparativo">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Equipamento</th>
+                                <?php if ($producao_tem_fazenda): ?><th>Fazenda</th><?php endif; ?>
+                                <th>Produção Apontada (Agro-Access)</th>
+                                <th>Produção Oficial (SGPA)</th>
+                                <th>Diferença</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($resultados as $row):
+                                $ha_sgpa = (float) ($row['ha_sgpa'] ?? 0);
+                                $ha_agro = (float) ($row['ha_agro_access'] ?? 0);
+                                $dif = $ha_agro - $ha_sgpa;
+                                $cor = $dif > 0 ? 'var(--accent)' : ($dif < 0 ? 'var(--danger)' : '');
+                                $data_display = isset($row['data']) ? (new DateTime($row['data']))->format('d/m/Y') : 'N/A';
+                            ?>
+                            <tr>
+                                <td><?= htmlspecialchars($data_display) ?></td>
+                                <td><?= htmlspecialchars($row['equipamento_nome'] ?? 'N/A') ?></td>
+                                <?php if ($producao_tem_fazenda): ?>
+                                    <td><?= htmlspecialchars($row['fazenda_nome'] ?? 'N/A') ?></td>
+                                <?php endif; ?>
+                                <td><?= number_format($ha_agro, 2, ',', '.') ?> ha</td>
+                                <td><?= number_format($ha_sgpa, 2, ',', '.') ?> ha</td>
+                                <td style="color: <?= $cor ?>; font-weight: bold;">
+                                    <?= ($dif > 0 ? '+' : '') . number_format($dif, 2, ',', '.') ?> ha
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 
-    <!-- Tabela comparativa -->
+<!-- Aba 2: Por período -->
+<div id="porPeriodo" class="tabcontent" style="display:none;">
     <div class="card">
-        <div class="card-body table-container">
-            <?php if (empty($resultados)): ?>
-                <p class="text-center">Nenhum dado encontrado para o período selecionado.</p>
-            <?php else: ?>
-                <table class="table-comparativo">
-                    <thead>
-                        <tr>
-                            <th>Data</th>
-                            <th>Equipamento</th>
-                            <?php if ($producao_tem_fazenda): ?><th>Fazenda</th><?php endif; ?>
-                            <th>Produção Apontada (Agro-Access)</th>
-                            <th>Produção Oficial (SGPA)</th>
-                            <th>Diferença</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($resultados as $row):
-                            $ha_sgpa = (float) ($row['ha_sgpa'] ?? 0);
-                            $ha_agro = (float) ($row['ha_agro_access'] ?? 0);
-                            $dif = $ha_agro - $ha_sgpa;
-                            $cor = $dif > 0 ? 'var(--accent)' : ($dif < 0 ? 'var(--danger)' : '');
-                            $data_display = isset($row['data']) ? (new DateTime($row['data']))->format('d/m/Y') : 'N/A';
-                        ?>
-                        <tr>
-                            <td><?= htmlspecialchars($data_display) ?></td>
-                            <td><?= htmlspecialchars($row['equipamento_nome'] ?? 'N/A') ?></td>
-                            <?php if ($producao_tem_fazenda): ?>
-                                <td><?= htmlspecialchars($row['fazenda_nome'] ?? 'N/A') ?></td>
-                            <?php endif; ?>
-                            <td><?= number_format($ha_agro, 2, ',', '.') ?> ha</td>
-                            <td><?= number_format($ha_sgpa, 2, ',', '.') ?> ha</td>
-                            <td style="color: <?= $cor ?>; font-weight: bold;">
-                                <?= ($dif > 0 ? '+' : '') . number_format($dif, 2, ',', '.') ?> ha
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php endif; ?>
+        <div class="card-body" style="height:300px;">
+            <canvas id="graficoPeriodo"></canvas>
         </div>
     </div>
 </div>
 
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-const ctx = document.getElementById('comparativoChart').getContext('2d');
-const labels = <?= json_encode(array_map(fn($r)=>$r['equipamento_nome'], $resultados)) ?>;
-const dataAgro = <?= json_encode(array_map(fn($r)=>(float)$r['ha_agro_access'], $resultados)) ?>;
-const dataSGPA = <?= json_encode(array_map(fn($r)=>(float)$r['ha_sgpa'], $resultados)) ?>;
+<!-- Créditos -->
+<div class="signature-credit">
+  <p class="sig-text">
+    Desenvolvido por 
+    <span class="sig-name">Bruno Carmo</span> & 
+    <span class="sig-name">Henrique Reis</span>
+  </p>
+</div>
 
-new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: labels,
-        datasets: [
+<script>
+let chartPorEquipamento = null;
+let chartPorPeriodo = null;
+
+function criarChartPorEquipamento() {
+    if (chartPorEquipamento) return; // evita recriar
+    const ctx = document.getElementById('comparativoChart').getContext('2d');
+    const labels = <?= json_encode(array_map(fn($r)=>$r['equipamento_nome'], $resultados)) ?>;
+    const dataAgro = <?= json_encode(array_map(fn($r)=>(float)$r['ha_agro_access'], $resultados)) ?>;
+    const dataSGPA = <?= json_encode(array_map(fn($r)=>(float)$r['ha_sgpa'], $resultados)) ?>;
+
+    chartPorEquipamento = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [
             { label: 'SGPA', data: dataSGPA, backgroundColor: '#4d9990' },
             { label: 'Campo', data: dataAgro, backgroundColor: '#eead4d' }
-        ]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { position: 'top' } },
-        scales: { y: { beginAtZero: true, title: { display: true, text: 'Hectares' } } }
+        ] },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'top' } },
+            scales: { y: { beginAtZero: true, title: { display: true, text: 'Hectares' } } }
+        }
+    });
+}
+
+function criarChartPorPeriodo() {
+    if (chartPorPeriodo) return; // evita recriar
+    const ctx = document.getElementById('graficoPeriodo').getContext('2d');
+
+    <?php
+    // Prepara dados agregados por data
+    $periodoDados = [];
+foreach ($resultados as $r) {
+    $d = $r['data'] ?? null;
+    if (!$d) continue;
+    // usa a data no formato ISO (Y-m-d) como chave — ordenação funciona lexicograficamente
+    if (!isset($periodoDados[$d])) $periodoDados[$d] = ['ha_sgpa'=>0, 'ha_agro'=>0];
+    $periodoDados[$d]['ha_sgpa'] += (float)($r['ha_sgpa'] ?? 0);
+    $periodoDados[$d]['ha_agro'] += (float)($r['ha_agro_access'] ?? 0);
+}
+
+ksort($periodoDados);
+
+$periodo_labels_raw = array_keys($periodoDados);
+$periodo_labels = array_map(function($raw) {
+
+    $dt = DateTime::createFromFormat('Y-m-d', $raw);
+    if ($dt && $dt->format('Y-m-d') === $raw) {
+        return $dt->format('d/m');
     }
+    try {
+        $dt2 = new DateTime($raw);
+        return $dt2->format('d/m');
+    } catch (Exception $e) {
+        return $raw; // fallback: usa string original
+    }
+}, $periodo_labels_raw);
+
+// series de valores (mantém a mesma ordem dos labels)
+$periodo_sgpa = array_map(fn($v) => $v['ha_sgpa'], $periodoDados);
+$periodo_agro = array_map(fn($v) => $v['ha_agro'], $periodoDados);
+    ?>
+
+    chartPorPeriodo = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: <?= json_encode($periodo_labels) ?>,
+            datasets: [
+                { label: 'SGPA', data: <?= json_encode($periodo_sgpa) ?>, backgroundColor: '#4d9990' },
+                { label: 'Campo', data: <?= json_encode($periodo_agro) ?>, backgroundColor: '#eead4d' }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            aspectRatio: 2,
+            plugins: { legend: { position: 'top' } },
+            scales: { y: { beginAtZero: true, title: { display: true, text: 'Hectares' } } }
+        }
+    });
+}
+
+function openTab(evt, tabName) {
+    // Oculta todas as abas
+    const tabs = document.getElementsByClassName("tabcontent");
+    for (let i=0; i<tabs.length; i++) tabs[i].style.display = "none";
+
+    // Remove classe active de todos os botões
+    const links = document.getElementsByClassName("tab-link");
+    for (let i=0; i<links.length; i++) links[i].classList.remove("active");
+
+    // Exibe a aba selecionada
+    document.getElementById(tabName).style.display = "block";
+    evt.currentTarget.classList.add("active");
+
+    // Cria gráfico correspondente
+    if(tabName === 'porEquipamento') criarChartPorEquipamento();
+    if(tabName === 'porPeriodo') criarChartPorPeriodo();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializa modal
+    const importarModalProducao = document.getElementById('modalImportarProducao');
+    const btnImportarProducao = document.getElementById('btnImportarCsvProducao');
+    btnImportarProducao.addEventListener('click', () => importarModalProducao.classList.add('active'));
+    importarModalProducao.querySelectorAll('.btn-cancelar').forEach(btn => btn.addEventListener('click', () => importarModalProducao.classList.remove('active')));
+
+    // Aba padrão: Por Equipamento
+    document.getElementById('porEquipamento').style.display = 'block';
+    <?php if (!empty($resultados)): ?>
+    criarChartPorEquipamento();
+    <?php endif; ?>
 });
 </script>
 

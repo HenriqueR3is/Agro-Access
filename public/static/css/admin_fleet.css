@@ -1,0 +1,354 @@
+/* ==============================
+   ESTILOS GERAIS
+   ============================== */
+body {
+    background: linear-gradient(135deg, #eef2f3, #d9e4ec);
+    font-family: 'Poppins', sans-serif;
+    color: #2c3e50;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+}
+
+/* Títulos principais */
+h2 {
+    font-weight: 700;
+    color: #2c3e50;
+    text-shadow: 1px 2px 4px rgba(0,0,0,0.1);
+    letter-spacing: 1px;
+    margin-bottom: 30px;
+    animation: fadeInDown 1s ease-in-out;
+}
+
+/* ==============================
+   FILTROS
+   ============================== */
+form select, form button {
+    border-radius: 14px;
+    font-size: 15px;
+    transition: all 0.3s ease;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.05);
+}
+
+form select {
+    padding: 10px;
+}
+
+form select:focus {
+    border-color: #2ecc71;
+    box-shadow: 0 0 12px rgba(46, 204, 113, 0.4);
+    transform: scale(1.02);
+}
+
+form button {
+    background: linear-gradient(135deg, #27ae60, #2ecc71);
+    border: none;
+    font-weight: 600;
+    padding: 12px;
+    color: white;
+    box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
+}
+
+form button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 16px rgba(39, 174, 96, 0.4);
+}
+
+/* ==============================
+   BOTÃO ADICIONAR
+   ============================== */
+.btn-primary {
+    background: linear-gradient(135deg, #2980b9, #3498db);
+    border: none;
+    border-radius: 14px;
+    font-weight: 600;
+    padding: 12px 24px;
+    box-shadow: 0 5px 10px rgba(52, 152, 219, 0.3);
+    transition: all 0.3s ease-in-out;
+}
+
+.btn-primary:hover {
+    transform: translateY(-3px) scale(1.05);
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    box-shadow: 0 8px 18px rgba(52, 152, 219, 0.4);
+}
+
+.btn-info {
+    background: linear-gradient(135deg, #17a2b8, #2ecc71);
+    border: none;
+    border-radius: 14px;
+    font-weight: 600;
+    padding: 12px 24px;
+    box-shadow: 0 5px 10px rgba(23, 162, 184, 0.3);
+    transition: all 0.3s ease-in-out;
+}
+
+.btn-info:hover {
+    transform: translateY(-3px) scale(1.05);
+    background: linear-gradient(135deg, #2ecc71, #17a2b8);
+    box-shadow: 0 8px 18px rgba(23, 162, 184, 0.4);
+}
+
+/* ==============================
+   CARDS DE FROTA
+   ============================== */
+.card {
+    border-radius: 18px;
+    transition: all 0.4s ease;
+    background: #fff;
+    overflow: hidden;
+    position: relative;
+    animation: fadeInUp 0.8s ease forwards;
+}
+
+.card:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 14px 28px rgba(0,0,0,0.15);
+}
+
+.card-body {
+    padding: 25px 20px;
+}
+
+/* Efeito de linha colorida no topo */
+.card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 6px;
+    background: linear-gradient(90deg, #2ecc71, #27ae60);
+    opacity: 0.8;
+    transition: height 0.3s ease;
+}
+
+.card:hover::before {
+    height: 10px;
+}
+
+/* Ícones */
+.card-body i {
+    transition: transform 0.3s ease, color 0.3s ease;
+    animation: popIn 0.6s ease;
+}
+
+.card-body i:hover {
+    transform: rotate(-8deg) scale(1.25);
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,0.2));
+}
+
+/* Título */
+.card-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #34495e;
+}
+
+/* Texto */
+.card-text {
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+}
+
+/* Implemento badge */
+.implemento-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    margin-top: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* ==============================
+   ÍCONES PERSONALIZADOS
+   ============================== */
+.fa-tractor.text-success { color: #27ae60 !important; }
+.fa-wine-bottle.text-danger { color: #e74c3c !important; }
+.fa-seedling.text-primary { color: #2980b9 !important; }
+.fa-tractor.text-secondary { color: #7f8c8d !important; }
+
+/* ==============================
+   BOTÕES NOS CARDS
+   ============================== */
+.card .btn {
+    border-radius: 10px;
+    font-size: 14px;
+    padding: 8px 14px;
+    transition: all 0.25s ease-in-out;
+}
+
+.card .btn-warning {
+    background: #f39c12;
+    border: none;
+    color: #fff;
+    box-shadow: 0 3px 6px rgba(243, 156, 18, 0.3);
+}
+
+.card .btn-warning:hover {
+    background: #e67e22;
+    transform: scale(1.08);
+    box-shadow: 0 6px 12px rgba(243, 156, 18, 0.4);
+}
+
+.card .btn-danger {
+    background: #e74c3c;
+    border: none;
+    color: #fff;
+    box-shadow: 0 3px 6px rgba(231, 76, 60, 0.3);
+}
+
+.card .btn-danger:hover {
+    background: #c0392b;
+    transform: scale(1.08);
+    box-shadow: 0 6px 12px rgba(231, 76, 60, 0.4);
+}
+
+/* ==============================
+   MODAIS
+   ============================== */
+.modal-content {
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    border: none;
+    animation: zoomIn 0.4s ease;
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #2c3e50, #34495e);
+    color: #fff;
+    border-radius: 16px 16px 0 0;
+}
+
+.modal-header h5 {
+    font-weight: 600;
+}
+
+.modal-footer button {
+    border-radius: 10px;
+    padding: 8px 16px;
+    transition: transform 0.2s ease;
+}
+
+.modal-footer button:hover {
+    transform: translateY(-2px);
+}
+
+/* ==============================
+   ANIMAÇÕES
+   ============================== */
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes zoomIn {
+    from { transform: scale(0.8); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+}
+
+@keyframes popIn {
+    0% { transform: scale(0.5); opacity: 0; }
+    80% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); }
+}
+
+/* ==============================
+   RESPONSIVIDADE
+   ============================== */
+@media (max-width: 992px) {
+    .card-title { font-size: 1.1rem; }
+    .card-text { font-size: 0.9rem; }
+}
+
+@media (max-width: 768px) {
+    .card {
+        margin-bottom: 20px;
+    }
+    .btn-primary, .btn-info {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}
+
+@media (max-width: 576px) {
+    h2 {
+        font-size: 1.5rem;
+    }
+    .card-body {
+        padding: 18px;
+    }
+    .card-body i {
+        font-size: 2.2rem;
+    }
+}
+
+/* Alertas */
+.alert {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.alert-success {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    color: white;
+}
+
+.alert-danger {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+    color: white;
+}
+
+.signature-credit {
+  width: 100%;
+  text-align: center;
+  padding: 18px 10px;
+  font-family: 'Poppins', sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+.sig-text {
+  font-size: 15px;
+  color: #2c3e50;
+  font-weight: 400;
+  display: inline-block;
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.sig-text::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0%;
+  height: 2px;
+  background: linear-gradient(90deg, #0ebc73, #0d8d52);
+  transform: translateX(-50%);
+  transition: width 0.5s ease;
+  border-radius: 2px;
+}
+
+.signature-credit:hover .sig-text::after {
+  width: 100%;
+}
+
+.sig-name {
+  font-weight: 600;
+  color: #0ebc73;
+  transition: color .3s ease;
+}
+
+.signature-credit:hover .sig-name {
+  color: #0d8d52;
+}
+

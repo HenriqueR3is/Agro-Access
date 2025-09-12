@@ -150,6 +150,7 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Administrativo</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/public/static/css/admin.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
     <style>
@@ -490,6 +491,15 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
     <div id="relatorios" class="tab-content">
         <p>Funcionalidade de Relatórios em Desenvolvimento...</p>
     </div>
+</div>
+
+<!-- Créditos -->
+<div class="signature-credit">
+  <p class="sig-text">
+    Desenvolvido por 
+    <span class="sig-name">Bruno Carmo</span> & 
+    <span class="sig-name">Henrique Reis</span>
+  </p>
 </div>
 
 <script>

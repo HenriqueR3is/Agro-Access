@@ -35,3 +35,83 @@
 .form-input { padding: 6px 10px; margin-right: 5px; border: 1px solid #ccc; border-radius: 4px; }
 .flex { display: flex; align-items: center; }
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+.tab-link {
+  padding: 12px 24px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-light);
+  position: relative;
+  transition: var(--transition);
+  font-size: 1rem;
+}
+
+.tab-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background-color: var(--primary-color);
+  transition: width 0.3s ease;
+}
+
+.tab-link.active {
+  color: var(--primary-color);
+}
+
+.tab-link.active::after {
+  width: 100%;
+}
+
+.tab-link:hover {
+  color: var(--primary-color);
+}
+
+.signature-credit {
+  width: 100%;
+  text-align: center;
+  padding: 18px 10px;
+  font-family: 'Poppins', sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+.sig-text {
+  font-size: 15px;
+  color: #2c3e50;
+  font-weight: 400;
+  display: inline-block;
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.sig-text::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0%;
+  height: 2px;
+  background: linear-gradient(90deg, #0ebc73, #0d8d52);
+  transform: translateX(-50%);
+  transition: width 0.5s ease;
+  border-radius: 2px;
+}
+
+.signature-credit:hover .sig-text::after {
+  width: 100%;
+}
+
+.sig-name {
+  font-weight: 600;
+  color: #0ebc73;
+  transition: color .3s ease;
+}
+
+.signature-credit:hover .sig-name {
+  color: #0d8d52;
+}

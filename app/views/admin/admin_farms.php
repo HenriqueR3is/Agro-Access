@@ -121,26 +121,7 @@ try {
 ?>
 
 <link rel="stylesheet" href="/public/static/css/admin.css">
-<style>
-    /* Esconde os modais por padrão */
-    .modal {
-        display: none;
-        position: fixed;
-        z-index: 1001;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        overflow: auto;
-        background-color: rgba(0,0,0,0.6);
-    }
-    /* Mostra o modal quando a classe 'active' é adicionada */
-    .modal.active {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-</style>
+<link rel="stylesheet" href="/public/static/css/admin_farms.css">
 
 <div class="container">
     <div class="flex-between">
@@ -243,6 +224,15 @@ try {
             </div>
         </form>
     </div>
+</div>
+
+<!-- Créditos -->
+<div class="signature-credit">
+  <p class="sig-text">
+    Desenvolvido por 
+    <span class="sig-name">Bruno Carmo</span> & 
+    <span class="sig-name">Henrique Reis</span>
+  </p>
 </div>
 
 <script>
