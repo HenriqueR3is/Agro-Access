@@ -275,12 +275,12 @@ require_once __DIR__ . '/../../../app/includes/header.php';
 <link rel="stylesheet" href="/public/static/css/admin.css">
 
 <?php
-// ----------------- Monta o comparativo -----------------
-$data_filtro = $_GET['data'] ?? date('Y-m-d');
-$resultados = [];
+// ================= FILTRO DE DATAS =================
+$data_inicio = $_GET['data_inicio'] ?? date('Y-m-d');
+$data_fim = $_GET['data_fim'] ?? $data_inicio;
 
 try {
-    // ver se producao_sgpa tem fazenda_id (de novo)
+    // ver se producao_sgpa tem fazenda_id
     $stmtCol = $pdo->prepare("
         SELECT COUNT(*) 
         FROM INFORMATION_SCHEMA.COLUMNS 
@@ -291,70 +291,81 @@ try {
 
     if ($producao_tem_fazenda) {
         $sql = "
-            SELECT
-                e.nome AS equipamento_nome,
-                f.nome AS fazenda_nome,
-                COALESCE(agro.total_ha, 0) AS ha_agro_access,
-                COALESCE(sgpa.total_ha, 0) AS ha_sgpa
-            FROM (
-                SELECT equipamento_id, fazenda_id FROM apontamentos WHERE DATE(data_hora) = ?
-                UNION
-                SELECT equipamento_id, fazenda_id FROM producao_sgpa WHERE data = ?
-            ) AS pairs
-            JOIN equipamentos e ON pairs.equipamento_id = e.id
-            LEFT JOIN (
-                SELECT equipamento_id, fazenda_id, SUM(hectares) AS total_ha
-                FROM apontamentos
-                WHERE DATE(data_hora) = ?
-                GROUP BY equipamento_id, fazenda_id
-            ) AS agro ON agro.equipamento_id = pairs.equipamento_id AND agro.fazenda_id = pairs.fazenda_id
-            LEFT JOIN (
-                SELECT equipamento_id, fazenda_id, SUM(hectares_sgpa) AS total_ha
-                FROM producao_sgpa
-                WHERE data = ?
-                GROUP BY equipamento_id, fazenda_id
-            ) AS sgpa ON sgpa.equipamento_id = pairs.equipamento_id AND sgpa.fazenda_id = pairs.fazenda_id
-            LEFT JOIN fazendas f ON f.id = pairs.fazenda_id
-            ORDER BY e.nome, f.nome
+        SELECT
+            e.nome AS equipamento_nome,
+            f.nome AS fazenda_nome,
+            COALESCE(agro.total_ha, 0) AS ha_agro_access,
+            COALESCE(sgpa.total_ha, 0) AS ha_sgpa,
+            p.data
+        FROM (
+            SELECT DISTINCT equipamento_id, fazenda_id, DATE(data) AS data
+            FROM producao_sgpa
+            WHERE DATE(data) BETWEEN ? AND ?
+        ) p
+        JOIN equipamentos e ON p.equipamento_id = e.id
+        LEFT JOIN (
+            SELECT equipamento_id, fazenda_id, SUM(hectares) AS total_ha, DATE(data_hora) as data
+            FROM apontamentos
+            WHERE DATE(data_hora) BETWEEN ? AND ?
+            GROUP BY equipamento_id, fazenda_id, DATE(data_hora)
+        ) AS agro 
+            ON agro.equipamento_id = p.equipamento_id 
+           AND agro.fazenda_id = p.fazenda_id 
+           AND agro.data = p.data
+        LEFT JOIN (
+            SELECT equipamento_id, fazenda_id, SUM(hectares_sgpa) AS total_ha, DATE(data) as data
+            FROM producao_sgpa
+            WHERE DATE(data) BETWEEN ? AND ?
+            GROUP BY equipamento_id, fazenda_id, DATE(data)
+        ) AS sgpa
+            ON sgpa.equipamento_id = p.equipamento_id 
+           AND sgpa.fazenda_id = p.fazenda_id 
+           AND sgpa.data = p.data
+        LEFT JOIN fazendas f ON f.id = p.fazenda_id
+        ORDER BY p.data, e.nome, f.nome
         ";
+
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$data_filtro, $data_filtro, $data_filtro, $data_filtro]);
+        $stmt->execute([$data_inicio, $data_fim, $data_inicio, $data_fim, $data_inicio, $data_fim]);
+        $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
     } else {
         $sql = "
-            SELECT 
-                e.nome AS equipamento_nome,
-                COALESCE(agro.total_ha, 0) AS ha_agro_access,
-                COALESCE(sgpa.total_ha, 0) AS ha_sgpa
-            FROM (
-                SELECT equipamento_id FROM apontamentos WHERE DATE(data_hora) = ?
-                UNION
-                SELECT equipamento_id FROM producao_sgpa WHERE data = ?
-            ) AS pairs
-            JOIN equipamentos e ON pairs.equipamento_id = e.id
-            LEFT JOIN (
-                SELECT equipamento_id, SUM(hectares) AS total_ha
-                FROM apontamentos
-                WHERE DATE(data_hora) = ?
-                GROUP BY equipamento_id
-            ) AS agro ON agro.equipamento_id = pairs.equipamento_id
-            LEFT JOIN (
-                SELECT equipamento_id, SUM(hectares_sgpa) AS total_ha
-                FROM producao_sgpa
-                WHERE data = ?
-                GROUP BY equipamento_id
-            ) AS sgpa ON sgpa.equipamento_id = pairs.equipamento_id
-            WHERE agro.total_ha IS NOT NULL OR sgpa.total_ha IS NOT NULL
-            ORDER BY e.nome
+        SELECT
+            e.nome AS equipamento_nome,
+            COALESCE(agro.total_ha, 0) AS ha_agro_access,
+            COALESCE(sgpa.total_ha, 0) AS ha_sgpa,
+            DATE(p.data) as data
+        FROM producao_sgpa p
+        JOIN equipamentos e ON p.equipamento_id = e.id
+        LEFT JOIN (
+            SELECT equipamento_id, SUM(hectares) AS total_ha, DATE(data_hora) as data
+            FROM apontamentos
+            WHERE DATE(data_hora) BETWEEN ? AND ?
+            GROUP BY equipamento_id, DATE(data_hora)
+        ) AS agro 
+        ON agro.equipamento_id = p.equipamento_id AND agro.data = DATE(p.data)
+        LEFT JOIN (
+            SELECT equipamento_id, SUM(hectares_sgpa) AS total_ha, DATE(data) as data
+            FROM producao_sgpa
+            WHERE DATE(data) BETWEEN ? AND ?
+            GROUP BY equipamento_id, DATE(data)
+        ) AS sgpa
+        ON sgpa.equipamento_id = p.equipamento_id AND sgpa.data = DATE(p.data)
+        WHERE DATE(p.data) BETWEEN ? AND ?
+        ORDER BY e.nome, DATE(p.data)
         ";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$data_filtro, $data_filtro, $data_filtro, $data_filtro]);
+        $stmt->execute([$data_inicio, $data_fim, $data_inicio, $data_fim, $data_inicio, $data_fim]);
+        $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $_SESSION['error_message'] = "Erro ao buscar dados: " . $e->getMessage();
 }
 ?>
+
+<link rel="stylesheet" href="/public/static/css/admin_comparativo.css">
 
 <div class="container">
     <div class="page-header"><h2>Conciliação de Produção</h2></div>
@@ -369,40 +380,36 @@ try {
         <div class="alert alert-info"><?= $_SESSION['info_message']; unset($_SESSION['info_message']); ?></div>
     <?php endif; ?>
 
-    <div class="card">
-        <div class="card-header"><h3>Importar Dados do SGPA</h3></div>
-        <div class="card-body">
-            <form action="/comparativo" method="POST" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label>Selecione o arquivo CSV exportado do SGPA:</label>
-                    <input type="file" name="arquivo_csv" accept=".csv" required class="form-input">
-                </div>
-                <p class="info-text">
-                    O arquivo CSV pode ser separado por TAB, ponto-e-vírgula ou vírgula. O importador detecta automaticamente o delimitador e a linha de cabeçalho.
-                    Serão lidas as colunas: Unidade (A), Equipamento (E), Fazenda (G) [se disponível], Data (H) e Área (I).
-                </p>
-                <button type="submit" class="btn btn-primary">Importar e Processar</button>
-            </form>
-        </div>
-    </div>        
-
+    <!-- Filtro de período -->
     <div class="card">
         <div class="card-header flex-between">
-            <h3>Comparativo Diário</h3>
+            <h3>Comparativo de Produção</h3>
             <form method="GET" action="/comparativo" class="flex">
-                <label for="data-filtro" style="margin-right: 8px;">Filtrar por data:</label>
-                <input type="date" id="data-filtro" name="data" value="<?= htmlspecialchars($data_filtro) ?>" class="form-input" style="margin-right: 10px;">
+                <label for="data_inicio">De:</label>
+                <input type="date" id="data_inicio" name="data_inicio" value="<?= htmlspecialchars($data_inicio) ?>" class="form-input">
+                <label for="data_fim">Até:</label>
+                <input type="date" id="data_fim" name="data_fim" value="<?= htmlspecialchars($data_fim) ?>" class="form-input">
                 <button type="submit" class="btn btn-secondary">Filtrar</button>
             </form>
         </div>
+    </div>
+
+    <!-- Gráfico comparativo -->
+    <div class="card">
+        <div class="card-body">
+            <canvas id="comparativoChart" height="150"></canvas>
+        </div>
+    </div>
+
+    <!-- Tabela comparativa -->
+    <div class="card">
         <div class="card-body table-container">
             <?php if (empty($resultados)): ?>
-                <p class="text-center">Nenhum dado encontrado para <?= htmlspecialchars($data_filtro) ?>.</p>
+                <p class="text-center">Nenhum dado encontrado para o período selecionado.</p>
             <?php else: ?>
                 <table class="table-comparativo">
                     <thead>
                         <tr>
-                            <th>Unidade</th>
                             <th>Data</th>
                             <th>Equipamento</th>
                             <?php if ($producao_tem_fazenda): ?><th>Fazenda</th><?php endif; ?>
@@ -417,22 +424,20 @@ try {
                             $ha_agro = (float) ($row['ha_agro_access'] ?? 0);
                             $dif = $ha_agro - $ha_sgpa;
                             $cor = $dif > 0 ? 'var(--accent)' : ($dif < 0 ? 'var(--danger)' : '');
-                            $data_display = isset($row['data_producao']) ? (new DateTime($row['data_producao']))->format('d/m/Y') : 'N/A';
-                            $unidade_nome = $row['unidade_nome'] ?? 'N/A';
+                            $data_display = isset($row['data']) ? (new DateTime($row['data']))->format('d/m/Y') : 'N/A';
                         ?>
-                            <tr>
-                                <td><?= htmlspecialchars($unidade_nome) ?></td>
-                                <td><?= htmlspecialchars($data_display) ?></td>
-                                <td><?= htmlspecialchars($row['equipamento_nome'] ?? 'N/A') ?></td>
-                                <?php if ($producao_tem_fazenda): ?>
-                                    <td><?= htmlspecialchars($row['fazenda_nome'] ?? 'N/A') ?></td>
-                                <?php endif; ?>
-                                <td><?= number_format($ha_agro, 2, ',', '.') ?> ha</td>
-                                <td><?= number_format($ha_sgpa, 2, ',', '.') ?> ha</td>
-                                <td style="color: <?= $cor ?>; font-weight: bold;">
-                                    <?= ($dif > 0 ? '+' : '') . number_format($dif, 2, ',', '.') ?> ha
-                                </td>
-                            </tr>
+                        <tr>
+                            <td><?= htmlspecialchars($data_display) ?></td>
+                            <td><?= htmlspecialchars($row['equipamento_nome'] ?? 'N/A') ?></td>
+                            <?php if ($producao_tem_fazenda): ?>
+                                <td><?= htmlspecialchars($row['fazenda_nome'] ?? 'N/A') ?></td>
+                            <?php endif; ?>
+                            <td><?= number_format($ha_agro, 2, ',', '.') ?> ha</td>
+                            <td><?= number_format($ha_sgpa, 2, ',', '.') ?> ha</td>
+                            <td style="color: <?= $cor ?>; font-weight: bold;">
+                                <?= ($dif > 0 ? '+' : '') . number_format($dif, 2, ',', '.') ?> ha
+                            </td>
+                        </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
@@ -441,29 +446,29 @@ try {
     </div>
 </div>
 
-<style>
-.table-comparativo {
-    width: 100%;
-    border-collapse: collapse;
-}
-.table-comparativo th, .table-comparativo td {
-    padding: 8px 12px;
-    border: 1px solid #ddd;
-    text-align: center;
-}
-.table-comparativo th {
-    background-color: #263638;
-}
-.table-comparativo tr:nth-child(even) {
-    background-color: #fafafa;
-}
-.table-comparativo tr:hover {
-    background-color: #f1f7ff;
-}
-.table-container {
-    overflow-x: auto;
-}
-</style>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const ctx = document.getElementById('comparativoChart').getContext('2d');
+const labels = <?= json_encode(array_map(fn($r)=>$r['equipamento_nome'], $resultados)) ?>;
+const dataAgro = <?= json_encode(array_map(fn($r)=>(float)$r['ha_agro_access'], $resultados)) ?>;
+const dataSGPA = <?= json_encode(array_map(fn($r)=>(float)$r['ha_sgpa'], $resultados)) ?>;
 
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: labels,
+        datasets: [
+            { label: 'SGPA', data: dataSGPA, backgroundColor: '#4d9990' },
+            { label: 'Campo', data: dataAgro, backgroundColor: '#eead4d' }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { position: 'top' } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'Hectares' } } }
+    }
+});
+</script>
 
 <?php require_once __DIR__ . '/../../../app/includes/footer.php'; ?>
