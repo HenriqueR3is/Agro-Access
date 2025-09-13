@@ -189,7 +189,7 @@ $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <select name="operacao" class="form-select">
                 <option value="">Todas as Operações</option>
                 <?php 
-                $operacoes_fixas = ["ACOP", "SUBSOLAGEM", "PLANTIO", "VINHAÇA"];
+                $operacoes_fixas = ["ACOP", "SUBSOLAGEM", "PLANTIO", "VINHAÇA LOCALIZADA"];
                 foreach ($operacoes_fixas as $op): ?>
                     <option value="<?= $op ?>" <?= $filtro_operacao == $op ? 'selected' : '' ?>>
                         <?= $op ?>
@@ -277,7 +277,7 @@ $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         </select>
                         <select name="operacao" class="form-select mb-3">
                             <option value="">Selecione a Operação</option>
-                            <?php foreach (["ACOP", "SUBSOLAGEM", "PLANTIO", "VINHAÇA"] as $op): ?>
+                            <?php foreach (["ACOP", "SUBSOLAGEM", "PLANTIO", "VINHAÇA LOCALIZADA"] as $op): ?>
                                 <option value="<?= $op ?>" <?= $eq['operacao'] == $op ? 'selected' : '' ?>>
                                     <?= $op ?>
                                 </option>
@@ -340,7 +340,7 @@ $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 </select>
                 <select name="operacao" class="form-select mb-3">
                     <option value="">Selecione a Operação</option>
-                    <?php foreach (["ACOP", "SUBSOLAGEM", "PLANTIO", "VINHAÇA"] as $op): ?>
+                    <?php foreach (["ACOP", "SUBSOLAGEM", "PLANTIO", "VINHAÇA LOCALIZADA"] as $op): ?>
                         <option value="<?= $op ?>"><?= $op ?></option>
                     <?php endforeach; ?>
                 </select>

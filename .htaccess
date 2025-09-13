@@ -3,9 +3,12 @@ RewriteBase /
 
 # Permite acesso normal aos arquivos existentes
 RewriteCond %{REQUEST_URI} ^/$
-RewriteCond %{REQUEST_FILENAME} -f [OR]
-RewriteCond %{REQUEST_FILENAME} -d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ - [L]
+
+# Redireciona raiz para login
+RewriteRule ^$ index.php [L]
 
 # URL amigável para dashboard
 RewriteRule ^dashboard$ app/views/user/dashboard.php [L]
@@ -23,7 +26,6 @@ RewriteRule ^admin_fleet$ app/views/admin/admin_fleet.php [L]
 RewriteRule ^fazendas$ app/views/admin/admin_farms.php [L]
 
 # URL amigável para gestão usuarios
-RewriteRule ^login$ app/views/ [L]
 RewriteRule ^submit$ app/views/user/submit_apontamento.php [L]
 RewriteRule ^apontamentos$ app/views/user/fetch_apontamentos.php [L]
 RewriteRule ^salvafda$ app/views/admin/salvar_fazenda.php [L]
@@ -31,5 +33,9 @@ RewriteRule ^get_fazenda$ app/views/admin/get_fazenda.php [L]
 RewriteRule ^importar_fazendas$ app/views/admin/importar_fazendas_csv.php [L]
 RewriteRule ^comparativo$ app/views/admin/admin_comparativo.php [L]
 
-# Redireciona raiz para login
-RewriteRule ^$ index.php [L]
+RewriteRule ^equipamentos$ app/views/user/get_equipamentos.php [L]
+
+RewriteRule ^fleet_actions$ app/views/admin/fleet_actions.php [L]
+
+RewriteRule ^login$ /index.php [L]
+

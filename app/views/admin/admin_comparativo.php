@@ -451,8 +451,8 @@ try {
                             <th>Data</th>
                             <th>Equipamento</th>
                             <?php if ($producao_tem_fazenda): ?><th>Fazenda</th><?php endif; ?>
-                            <th>Produção Apontada (Agro-Access)</th>
                             <th>Produção Oficial (SGPA)</th>
+                            <th>Produção Apontada (Campo)</th>                            
                             <th>Diferença</th>
                         </tr>
                     </thead>
@@ -460,7 +460,7 @@ try {
                         <?php foreach ($resultados as $row):
                             $ha_sgpa = (float) ($row['ha_sgpa'] ?? 0);
                             $ha_agro = (float) ($row['ha_agro_access'] ?? 0);
-                            $dif = $ha_agro - $ha_sgpa;
+                            $dif = $ha_sgpa - $ha_agro;
                             $cor = $dif > 0 ? 'var(--accent)' : ($dif < 0 ? 'var(--danger)' : '');
                             $data_display = isset($row['data']) ? (new DateTime($row['data']))->format('d/m/Y') : 'N/A';
                         ?>
@@ -470,8 +470,8 @@ try {
                             <?php if ($producao_tem_fazenda): ?>
                                 <td><?= htmlspecialchars($row['fazenda_nome'] ?? 'N/A') ?></td>
                             <?php endif; ?>
-                            <td><?= number_format($ha_agro, 2, ',', '.') ?> ha</td>
                             <td><?= number_format($ha_sgpa, 2, ',', '.') ?> ha</td>
+                            <td><?= number_format($ha_agro, 2, ',', '.') ?> ha</td>                            
                             <td style="color: <?= $cor ?>; font-weight: bold;">
                                 <?= ($dif > 0 ? '+' : '') . number_format($dif, 2, ',', '.') ?> ha
                             </td>
@@ -494,6 +494,7 @@ try {
     </div>
 
 <script>
+    
 let chartPorEquipamento = null;
 let chartPorPeriodo = null;
 
@@ -519,58 +520,80 @@ function criarChartPorEquipamento() {
     });
 }
 
-function criarChartPorPeriodo() {
-    if (chartPorPeriodo) return; // evita recriar
+function criarChartPorPeriodo() {    
+    if (chartPorPeriodo) return;
+
     const ctx = document.getElementById('graficoPeriodo').getContext('2d');
 
     <?php
-    // Prepara dados agregados por data
     $periodoDados = [];
-foreach ($resultados as $r) {
-    $d = $r['data'] ?? null;
-    if (!$d) continue;
-    // usa a data no formato ISO (Y-m-d) como chave — ordenação funciona lexicograficamente
-    if (!isset($periodoDados[$d])) $periodoDados[$d] = ['ha_sgpa'=>0, 'ha_agro'=>0];
-    $periodoDados[$d]['ha_sgpa'] += (float)($r['ha_sgpa'] ?? 0);
-    $periodoDados[$d]['ha_agro'] += (float)($r['ha_agro_access'] ?? 0);
-}
+    foreach ($resultados as $r) {
+        $raw = $r['data'] ?? null;
+        if (!$raw) continue;
 
-ksort($periodoDados);
+        try {
+            $dt = new DateTime($raw);
+            $d = $dt->format('Y-m-d');
+        } catch (Exception $e) {
+            $d = $raw;
+        }
 
-$periodo_labels_raw = array_keys($periodoDados);
-$periodo_labels = array_map(function($raw) {
-
-    $dt = DateTime::createFromFormat('Y-m-d', $raw);
-    if ($dt && $dt->format('Y-m-d') === $raw) {
-        return $dt->format('d/m');
+        if (!isset($periodoDados[$d])) $periodoDados[$d] = ['ha_sgpa' => 0, 'ha_agro' => 0];
+        $periodoDados[$d]['ha_sgpa'] += (float)($r['ha_sgpa'] ?? 0);
+        $periodoDados[$d]['ha_agro'] += (float)($r['ha_agro_access'] ?? 0);
     }
-    try {
-        $dt2 = new DateTime($raw);
-        return $dt2->format('d/m');
-    } catch (Exception $e) {
-        return $raw; // fallback: usa string original
-    }
-}, $periodo_labels_raw);
 
-// series de valores (mantém a mesma ordem dos labels)
-$periodo_sgpa = array_map(fn($v) => $v['ha_sgpa'], $periodoDados);
-$periodo_agro = array_map(fn($v) => $v['ha_agro'], $periodoDados);
+    ksort($periodoDados);
+
+    $periodo_labels_raw = array_keys($periodoDados);
+    $periodo_sgpa = array_map(fn($v) => $v['ha_sgpa'], $periodoDados);
+    $periodo_agro = array_map(fn($v) => $v['ha_agro'], $periodoDados);
     ?>
+
+    const periodoLabelsRaw = <?= json_encode($periodo_labels_raw) ?>;
+    const periodoSGPA = <?= json_encode($periodo_sgpa) ?>;
+    const periodoAgro = <?= json_encode($periodo_agro) ?>;
 
     chartPorPeriodo = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: <?= json_encode($periodo_labels) ?>,
+            labels: periodoLabelsRaw,
             datasets: [
-                { label: 'SGPA', data: <?= json_encode($periodo_sgpa) ?>, backgroundColor: '#4d9990' },
-                { label: 'Campo', data: <?= json_encode($periodo_agro) ?>, backgroundColor: '#eead4d' }
+                { label: 'SGPA', data: periodoSGPA, backgroundColor: '#4d9990' },
+                { label: 'Campo', data: periodoAgro, backgroundColor: '#eead4d' }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { position: 'top' } },
-            scales: { y: { beginAtZero: true, title: { display: true, text: 'Hectares' } } }
+            scales: {
+                x: {
+                    ticks: {
+                        callback: function(value, index) {
+                            const raw = periodoLabelsRaw[index] ?? value;
+                            const d = new Date(raw);
+                            if (!isNaN(d)) {
+                                // soma 1 dia
+                                d.setDate(d.getDate() + 1);
+                                const dd = String(d.getDate()).padStart(2, '0');
+                                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                                return dd + '/' + mm; // dd/mm (sem ano)
+                            }
+                            const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+                            if (m) {
+                                let day = parseInt(m[3], 10) + 1; // soma 1
+                                return String(day).padStart(2, '0') + '/' + m[2];
+                            }
+                            return raw;
+                        }
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Hectares' }
+                }
+            }
         }
     });
 }
