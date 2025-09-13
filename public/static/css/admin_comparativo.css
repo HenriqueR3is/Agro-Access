@@ -115,3 +115,16 @@
 .signature-credit:hover .sig-name {
   color: #0d8d52;
 }
+
+/* controla a altura padrão dos gráficos */
+.tabcontent .card-body {
+    height: 350px;   /* altura moderada padrão */
+    width: 100%;
+}
+
+/* canvas ocupa todo o espaço do card-body */
+.tabcontent canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+

@@ -422,75 +422,76 @@ try {
         <button class="tab-link" onclick="openTab(event, 'porPeriodo')">Por Período</button>
     </div>
 
-    <!-- Aba 1: Por equipamento -->
+    <!-- Aba 1 -->
     <div id="porEquipamento" class="tabcontent" style="display:block;">
         <div class="card">
-            <div class="card-body">
-                <canvas id="comparativoChart" height="150"></canvas>
+            <div class="card-body grafico-container">
+                <canvas id="comparativoChart"></canvas>
             </div>
         </div>
+    </div>
 
+    <!-- Aba 2 -->
+    <div id="porPeriodo" class="tabcontent" style="display:none;">
         <div class="card">
-            <div class="card-body table-container">
-                <?php if (empty($resultados)): ?>
-                    <p class="text-center">Nenhum dado encontrado para o período selecionado.</p>
-                <?php else: ?>
-                    <table class="table-comparativo">
-                        <thead>
-                            <tr>
-                                <th>Data</th>
-                                <th>Equipamento</th>
-                                <?php if ($producao_tem_fazenda): ?><th>Fazenda</th><?php endif; ?>
-                                <th>Produção Apontada (Agro-Access)</th>
-                                <th>Produção Oficial (SGPA)</th>
-                                <th>Diferença</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($resultados as $row):
-                                $ha_sgpa = (float) ($row['ha_sgpa'] ?? 0);
-                                $ha_agro = (float) ($row['ha_agro_access'] ?? 0);
-                                $dif = $ha_agro - $ha_sgpa;
-                                $cor = $dif > 0 ? 'var(--accent)' : ($dif < 0 ? 'var(--danger)' : '');
-                                $data_display = isset($row['data']) ? (new DateTime($row['data']))->format('d/m/Y') : 'N/A';
-                            ?>
-                            <tr>
-                                <td><?= htmlspecialchars($data_display) ?></td>
-                                <td><?= htmlspecialchars($row['equipamento_nome'] ?? 'N/A') ?></td>
-                                <?php if ($producao_tem_fazenda): ?>
-                                    <td><?= htmlspecialchars($row['fazenda_nome'] ?? 'N/A') ?></td>
-                                <?php endif; ?>
-                                <td><?= number_format($ha_agro, 2, ',', '.') ?> ha</td>
-                                <td><?= number_format($ha_sgpa, 2, ',', '.') ?> ha</td>
-                                <td style="color: <?= $cor ?>; font-weight: bold;">
-                                    <?= ($dif > 0 ? '+' : '') . number_format($dif, 2, ',', '.') ?> ha
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
+            <div class="card-body grafico-container">
+                <canvas id="graficoPeriodo"></canvas>
             </div>
         </div>
     </div>
 
-<!-- Aba 2: Por período -->
-<div id="porPeriodo" class="tabcontent" style="display:none;">
     <div class="card">
-        <div class="card-body" style="height:300px;">
-            <canvas id="graficoPeriodo"></canvas>
+        <div class="card-body table-container">
+            <?php if (empty($resultados)): ?>
+                <p class="text-center">Nenhum dado encontrado para o período selecionado.</p>
+            <?php else: ?>
+                <table class="table-comparativo">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Equipamento</th>
+                            <?php if ($producao_tem_fazenda): ?><th>Fazenda</th><?php endif; ?>
+                            <th>Produção Apontada (Agro-Access)</th>
+                            <th>Produção Oficial (SGPA)</th>
+                            <th>Diferença</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($resultados as $row):
+                            $ha_sgpa = (float) ($row['ha_sgpa'] ?? 0);
+                            $ha_agro = (float) ($row['ha_agro_access'] ?? 0);
+                            $dif = $ha_agro - $ha_sgpa;
+                            $cor = $dif > 0 ? 'var(--accent)' : ($dif < 0 ? 'var(--danger)' : '');
+                            $data_display = isset($row['data']) ? (new DateTime($row['data']))->format('d/m/Y') : 'N/A';
+                        ?>
+                        <tr>
+                            <td><?= htmlspecialchars($data_display) ?></td>
+                            <td><?= htmlspecialchars($row['equipamento_nome'] ?? 'N/A') ?></td>
+                            <?php if ($producao_tem_fazenda): ?>
+                                <td><?= htmlspecialchars($row['fazenda_nome'] ?? 'N/A') ?></td>
+                            <?php endif; ?>
+                            <td><?= number_format($ha_agro, 2, ',', '.') ?> ha</td>
+                            <td><?= number_format($ha_sgpa, 2, ',', '.') ?> ha</td>
+                            <td style="color: <?= $cor ?>; font-weight: bold;">
+                                <?= ($dif > 0 ? '+' : '') . number_format($dif, 2, ',', '.') ?> ha
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
         </div>
     </div>
 </div>
 
-<!-- Créditos -->
-<div class="signature-credit">
-  <p class="sig-text">
-    Desenvolvido por 
-    <span class="sig-name">Bruno Carmo</span> & 
-    <span class="sig-name">Henrique Reis</span>
-  </p>
-</div>
+    <!-- Créditos -->
+    <div class="signature-credit">
+    <p class="sig-text">
+        Desenvolvido por 
+        <span class="sig-name">Bruno Carmo</span> & 
+        <span class="sig-name">Henrique Reis</span>
+    </p>
+    </div>
 
 <script>
 let chartPorEquipamento = null;
@@ -511,6 +512,7 @@ function criarChartPorEquipamento() {
         ] },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: { legend: { position: 'top' } },
             scales: { y: { beginAtZero: true, title: { display: true, text: 'Hectares' } } }
         }
@@ -567,7 +569,6 @@ $periodo_agro = array_map(fn($v) => $v['ha_agro'], $periodoDados);
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            aspectRatio: 2,
             plugins: { legend: { position: 'top' } },
             scales: { y: { beginAtZero: true, title: { display: true, text: 'Hectares' } } }
         }
@@ -590,7 +591,7 @@ function openTab(evt, tabName) {
     // Cria gráfico correspondente
     if(tabName === 'porEquipamento') criarChartPorEquipamento();
     if(tabName === 'porPeriodo') criarChartPorPeriodo();
-}
+} 
 
 document.addEventListener('DOMContentLoaded', function() {
     // Inicializa modal
