@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../../config/db/conexao.php';
 
 // Verifica a sessão para garantir que o usuário está logado
 if (!isset($_SESSION['usuario_id'])) {
+    $_SESSION['unidade_id'] = $usuario['unidade_id'];
     header("Location: login.php");
     exit();
 }
@@ -159,22 +160,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
         $fazenda_data = $stmt_unidade->fetch(PDO::FETCH_ASSOC);
         $unidade_id = $fazenda_data['unidade_id'] ?? $unidade_do_usuario;
 
-        // Combinar data atual com o horário selecionado (usando fuso de Brasília)
-        $data_atual = date('Y-m-d');
-        $data_hora = $data_atual . ' ' . $report_time . ':00';
-        
-        // Converter para UTC antes de salvar no banco
-        $datetime_brasilia = new DateTime($data_hora, new DateTimeZone('America/Sao_Paulo'));
-        $datetime_utc = $datetime_brasilia->setTimezone(new DateTimeZone('UTC'));
-        $data_hora_utc = $datetime_utc->format('Y-m-d H:i:s');
+        // Obter a data atual no fuso horário de Brasília
+        $data_hoje_brasilia = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
 
-        // Inserir o apontamento no banco de dados
+// Dividir a hora selecionada para análise
+$hora_selecionada = explode(':', $report_time);
+$hora = (int)$hora_selecionada[0];
+        
+// Se a hora selecionada for menor que 6 (madrugada), considerar que é do próximo dia
+// Isso porque nosso primeiro horário do turno é 06:00
+if ($hora < 6) {
+    // Adiciona um dia à data
+    $data_hoje_brasilia->modify('+1 day');
+}
+
+// Combina a data (ajustada se necessário) com a hora selecionada
+$data_hora_brasilia_string = $data_hoje_brasilia->format('Y-m-d') . ' ' . $report_time . ':00';
+
+// Cria o objeto DateTime com a data/hora e o fuso de Brasília
+$datetime_brasilia = new DateTime($data_hora_brasilia_string, new DateTimeZone('America/Sao_Paulo'));
+
+// Converte o objeto para UTC antes de salvar no banco
+        $datetime_utc = clone $datetime_brasilia;
+        $datetime_utc->setTimezone(new DateTimeZone('UTC'));
+        $data_hora_utc = $datetime_utc->format('Y-m-d H:i:s');
+        
+        // Inserir o apontamento no banco de dados, incluindo a hora selecionada
         $stmt = $pdo->prepare("
             INSERT INTO apontamentos
-            (usuario_id, unidade_id, equipamento_id, operacao_id, hectares, data_hora, observacoes, fazenda_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (usuario_id, unidade_id, equipamento_id, operacao_id, hectares, data_hora, hora_selecionada, observacoes, fazenda_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-
         $stmt->execute([
             $usuario_id,
             $unidade_id,
@@ -182,11 +198,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
             $operacao_id,
             $hectares,
             $data_hora_utc, // Usando data/hora em UTC
+            $report_time, // Salvando a hora selecionada separadamente
             $observacoes,
-            $fazenda_id // Adicionado o ID da fazenda
+            $fazenda_id
         ]);
+        
+        // Converter a hora salva (UTC) de volta para Brasília para a mensagem
+        $datetime_saved = new DateTime($data_hora_utc, new DateTimeZone('UTC'));
+        $datetime_saved->setTimezone(new DateTimeZone('America/Sao_Paulo'));
+        $hora_salva_brasilia = $datetime_saved->format('H:i');
 
-        $_SESSION['feedback_message'] = "Apontamento salvo com sucesso!";
+        $_SESSION['feedback_message'] = "Apontamento salvo com sucesso para às $hora_salva_brasilia! (selecionado: " . $_POST['report_time'] . ")";
+        
         header("Location: /dashboard");
         exit();
 

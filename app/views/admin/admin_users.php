@@ -175,7 +175,6 @@ require_once __DIR__ . '/../../../app/includes/header.php';
 <body>
     <div class="admin-container">
 
-
         <main class="admin-main">
             <div class="card">
                 <div class="card-header">

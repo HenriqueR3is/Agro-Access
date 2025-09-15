@@ -273,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.btn-editar').forEach(btn => {
         btn.addEventListener('click', function() {
             const id = this.dataset.id;
-            fetch('/get_fazenda?id=' + id)
+            fetch('/get_fazenda_por_id.php?id=' + id)
                 .then(res => res.json())
                 .then(data => {
                     if (data.error) { alert(data.error); return; }

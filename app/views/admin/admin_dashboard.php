@@ -412,7 +412,7 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
                 <tbody>
                     <?php foreach ($apontamentos as $row): ?>
                         <tr>
-                            <td><?php echo date('H:i', strtotime($row['data_hora'])); ?></td>
+                            <td><?php echo date('H:i', strtotime($row['data_hora'] . ' -3 hours')); ?></td>
                             <td><?php echo htmlspecialchars($row['unidade']); ?></td>
                             <td><?php echo htmlspecialchars($row['usuario']); ?></td>
                             <td><?php echo htmlspecialchars($row['equipamento']); ?></td>
@@ -668,32 +668,37 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
             .catch(error => console.error('Erro ao buscar dados da tabela:', error));
     }
 
-    function updateTable(apontamentos) {
-        const tbody = document.getElementById('apontamentos-table').querySelector('tbody');
-        tbody.innerHTML = '';
-        if (apontamentos.length === 0) {
-            const row = document.createElement('tr');
-            row.innerHTML = `<td colspan="9" style="text-align: center;">Nenhum apontamento encontrado para os filtros selecionados.</td>`;
-            tbody.appendChild(row);
-            return;
-        }
-
-        apontamentos.forEach(row => {
-            const newRow = document.createElement('tr');
-            newRow.innerHTML = `
-                <td>${new Date(row.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
-                <td>${row.unidade}</td>
-                <td>${row.usuario}</td>
-                <td>${row.equipamento}</td>
-                <td>${row.implemento_nome ? row.implemento_nome + ' (' + row.numero_identificacao + ')' : 'N/A'}</td>
-                <td>${parseFloat(row.hectares).toFixed(2).replace('.', ',')}</td>
-                <td>${row.codigo_fazenda}</td>
-                <td>${row.nome_fazenda}</td>
-                <td>${row.operacao}</td>
-            `;
-            tbody.appendChild(newRow);
-        });
+function updateTable(apontamentos) {
+    const tbody = document.getElementById('apontamentos-table').querySelector('tbody');
+    tbody.innerHTML = '';
+    if (apontamentos.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td colspan="9" style="text-align: center;">Nenhum apontamento encontrado para os filtros selecionados.</td>`;
+        tbody.appendChild(row);
+        return;
     }
+
+    apontamentos.forEach(row => {
+        // Ajusta hora (-3h)
+        const d = new Date(row.data_hora);
+        d.setHours(d.getHours() - 3);
+        const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+            <td>${hora}</td>
+            <td>${row.unidade}</td>
+            <td>${row.usuario}</td>
+            <td>${row.equipamento}</td>
+            <td>${row.implemento_nome ? row.implemento_nome + ' (' + row.numero_identificacao + ')' : 'N/A'}</td>
+            <td>${parseFloat(row.hectares).toFixed(2).replace('.', ',')}</td>
+            <td>${row.codigo_fazenda}</td>
+            <td>${row.nome_fazenda}</td>
+            <td>${row.operacao}</td>
+        `;
+        tbody.appendChild(newRow);
+    });
+}
 
     document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('chart-date-filter').addEventListener('change', fetchChartData);
@@ -707,15 +712,68 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
         document.getElementById('table-operacao-filter').addEventListener('change', fetchTableData);
         document.getElementById('table-equipamento-filter').addEventListener('change', fetchTableData);
         document.getElementById('table-implemento-filter').addEventListener('change', fetchTableData);
+    document.getElementById('export-excel-btn').addEventListener('click', function() {
+        // Obter dados da tabela via AJAX para ter todos os dados (não apenas os visíveis)
+        const date = document.getElementById('table-date-filter').value;
+        const unidade = document.getElementById('table-unidade-filter').value;
+        const operacao = document.getElementById('table-operacao-filter').value;
+        const equipamento = document.getElementById('table-equipamento-filter').value;
+        const implemento = document.getElementById('table-implemento-filter').value;
 
-        document.getElementById('export-excel-btn').addEventListener('click', function() {
-            const table = document.getElementById('apontamentos-table');
-            const ws = XLSX.utils.table_to_sheet(table);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Apontamentos");
-            const date = document.getElementById('table-date-filter').value;
-            XLSX.writeFile(wb, `apontamentos_${date}.xlsx`);
-        });
+        let url = `?ajax_data=1&type=table&date=${date}`;
+        if (unidade) url += `&unidade_id=${unidade}`;
+        if (operacao) url += `&operacao_id=${operacao}`;
+        if (equipamento) url += `&equipamento_id=${equipamento}`;
+        if (implemento) url += `&implemento_id=${implemento}`;
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                exportToExcel(data, date);
+            })
+            .catch(error => console.error('Erro ao buscar dados para exportação:', error));
+    });
+
+    function exportToExcel(data, date) {
+        // Criar workbook e worksheet
+        const wb = XLSX.utils.book_new();
+        
+        // Preparar dados formatados
+        const excelData = data.map(row => ({
+            'Hora': new Date(row.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            'Unidade': row.unidade,
+            'Usuário': row.usuario,
+            'Equipamento': row.equipamento,
+            'Implemento': row.numero_identificacao || 'N/A',
+            'Hectares': parseFloat(row.hectares).toFixed(2).replace('.', ','),
+            'Código Fazenda': row.codigo_fazenda,
+            'Nome Fazenda': row.nome_fazenda,
+            'Operação': row.operacao
+        }));
+
+        // Converter para worksheet
+        const ws = XLSX.utils.json_to_sheet(excelData);
+        
+        // Ajustar largura das colunas
+        const colWidths = [
+            { wch: 10 }, // Hora
+            { wch: 20 }, // Unidade
+            { wch: 20 }, // Usuário
+            { wch: 20 }, // Equipamento
+            { wch: 25 }, // Implemento
+            { wch: 15 }, // Hectares
+            { wch: 20 }, // Código Fazenda
+            { wch: 30 }, // Nome Fazenda
+            { wch: 20 }  // Operação
+        ];
+        ws['!cols'] = colWidths;
+        
+        // Adicionar worksheet ao workbook
+        XLSX.utils.book_append_sheet(wb, ws, "Apontamentos");
+        
+        // Gerar arquivo Excel
+        XLSX.writeFile(wb, `apontamentos_${date}.xlsx`);
+    }
 
         // Carregar dados iniciais
         fetchChartData();
