@@ -151,6 +151,7 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
     <title>Dashboard Administrativo</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/public/static/css/admin.css">
+    <link rel="icon" type="image/x-icon" href="./public/static/favicon.ico">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
     <style>

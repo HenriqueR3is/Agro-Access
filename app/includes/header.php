@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agro-Dash Admin</title>
     <link rel="stylesheet" href="/public/static/css/style.css">
+    <link rel="icon" type="image/x-icon" href="./public/static/favicon.ico">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
