@@ -1,41 +1,26 @@
 RewriteEngine On
 RewriteBase /
 
-# Permite acesso normal aos arquivos existentes
-RewriteCond %{REQUEST_URI} ^/$
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
+# Sirva arquivos/pastas reais normalmente
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Redireciona raiz para login
+# Rotas amigáveis (páginas)
 RewriteRule ^$ index.php [L]
-
-# URL amigável para dashboard
+RewriteRule ^login$ index.php [L]
 RewriteRule ^dashboard$ app/views/user/dashboard.php [L]
-
-# URL amigável para admin_dashboard
 RewriteRule ^admin_dashboard$ app/views/admin/admin_dashboard.php [L]
-
-# URL amigável para gestão usuarios
 RewriteRule ^admin_users$ app/views/admin/admin_users.php [L]
-
-# URL amigável para gestão usuarios
 RewriteRule ^admin_fleet$ app/views/admin/admin_fleet.php [L]
-
-# URL amigável para gestão usuarios
 RewriteRule ^fazendas$ app/views/admin/admin_farms.php [L]
-
-# URL amigável para gestão usuarios
-RewriteRule ^submit$ app/views/user/submit_apontamento.php [L]
-RewriteRule ^apontamentos$ app/views/user/fetch_apontamentos.php [L]
-RewriteRule ^salvafda$ app/views/admin/salvar_fazenda.php [L]
-RewriteRule ^get_fazenda$ app/views/admin/get_fazenda.php [L]
-RewriteRule ^importar_fazendas$ app/views/admin/importar_fazendas_csv.php [L]
 RewriteRule ^comparativo$ app/views/admin/admin_comparativo.php [L]
 
+# Endpoints (APIs)
+RewriteRule ^apontamentos$ app/views/user/fetch_apontamentos.php [L]
 RewriteRule ^equipamentos$ app/views/user/get_equipamentos.php [L]
-
+RewriteRule ^get_fazendas$ app/views/user/get_fazendas.php [L]
+RewriteRule ^get_fazenda_por_id$ app/views/admin/get_fazenda_por_id.php [L]
 RewriteRule ^fleet_actions$ app/views/admin/fleet_actions.php [L]
-
-RewriteRule ^login$ /index.php [L]
-
+RewriteRule ^salvafda$ app/views/admin/salvar_fazenda.php [L]
+RewriteRule ^importar_fazendas$ app/views/admin/importar_fazendas_csv.php [L]

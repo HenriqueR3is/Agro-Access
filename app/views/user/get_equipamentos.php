@@ -3,53 +3,59 @@ session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
 if (!isset($_SESSION['usuario_id'])) {
-    header('HTTP/1.1 403 Forbidden');
-    echo json_encode(['error' => 'Acesso não autorizado']);
+    http_response_code(401);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['success' => false, 'error' => 'Não autenticado']);
     exit();
 }
 
-if (!isset($_GET['operacao_nome']) || empty($_GET['operacao_nome'])) {
-    header('HTTP/1.1 400 Bad Request');
-    echo json_encode(['error' => 'Nome da operação não fornecido']);
+$operacao_id = filter_input(INPUT_GET, 'operacao_id', FILTER_VALIDATE_INT);
+if (!$operacao_id) {
+    http_response_code(400);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['success' => false, 'error' => 'operacao_id inválido']);
     exit();
 }
 
-$operacao_nome = trim($_GET['operacao_nome']);
+$usuario_id  = (int) $_SESSION['usuario_id'];
+$usuario_tipo = $_SESSION['usuario_tipo'] ?? 'operador';
 
 try {
-    // Recuperar a unidade do usuário logado
-    $stmt = $pdo->prepare("SELECT unidade_id FROM usuarios WHERE id = ?");
-    $stmt->execute([$_SESSION['usuario_id']]);
-    $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Descobre a unidade do usuário (para operador) ou aceita unidade_id do admin
+    $unidade_id = null;
 
-    if (!$usuario || !$usuario['unidade_id']) {
-        header('HTTP/1.1 403 Forbidden');
-        echo json_encode(['error' => 'Usuário não possui unidade vinculada']);
-        exit();
+    if ($usuario_tipo === 'admin') {
+        $unidade_id = filter_input(INPUT_GET, 'unidade_id', FILTER_VALIDATE_INT) ?: null;
+    } else {
+        $stmtU = $pdo->prepare("SELECT unidade_id FROM usuarios WHERE id = ? LIMIT 1");
+        $stmtU->execute([$usuario_id]);
+        $unidade_id = $stmtU->fetchColumn();
     }
 
-    $unidade_id = $usuario['unidade_id'];
+    // Monta SQL: SEMPRE filtra por operacao_id; filtra por unidade_id quando disponível
+    $sql = "SELECT id, nome 
+            FROM equipamentos
+            WHERE operacao_id = :operacao_id";
+    $params = [':operacao_id' => $operacao_id];
 
-    // Buscar equipamentos filtrados pela operação e pela unidade do usuário
-    $stmt = $pdo->prepare("
-        SELECT id, nome 
-        FROM equipamentos 
-        WHERE operacao = ? AND unidade_id = ?
-        ORDER BY nome
-    ");
-    $stmt->execute([$operacao_nome, $unidade_id]);
+    if (!empty($unidade_id)) {
+        $sql .= " AND unidade_id = :unidade_id";
+        $params[':unidade_id'] = $unidade_id;
+    }
 
+    $sql .= " ORDER BY nome";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
     $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
     echo json_encode([
         'success' => true,
-        'equipamentos' => $equipamentos,
-        'operacao_nome' => $operacao_nome,
-        'unidade_id' => $unidade_id // pode ser útil no front
+        'equipamentos' => $equipamentos
     ]);
 
 } catch (PDOException $e) {
-    header('HTTP/1.1 500 Internal Server Error');
-    echo json_encode(['error' => 'Erro no banco de dados: ' . $e->getMessage()]);
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['success' => false, 'error' => 'Erro DB: ' . $e->getMessage()]);
 }

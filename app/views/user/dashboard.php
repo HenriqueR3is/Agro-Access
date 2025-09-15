@@ -490,361 +490,373 @@ $datetime_brasilia = new DateTime($data_hora_brasilia_string, new DateTimeZone('
         </div>
     </div>
 
-    <script>
-    $(document).ready(function() {
-        // Atualizar relógio com fuso horário de Brasília
-        function updateBrasiliaTime() {
-            const now = new Date();
-            // Ajustar para o fuso horário de Brasília (UTC-3)
-            const brasiliaOffset = -3 * 60; // UTC-3 em minutos
-            const localOffset = now.getTimezoneOffset();
-            const brasiliaTime = new Date(now.getTime() + (localOffset - brasiliaOffset) * 60000);
-            
-            const options = { 
-                timeZone: 'America/Sao_Paulo',
-                hour: '2-digit', 
-                minute: '2-digit', 
-                second: '2-digit',
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric'
-            };
-            
-            const formatter = new Intl.DateTimeFormat('pt-BR', options);
-            const parts = formatter.formatToParts(brasiliaTime);
-            
-            let day, month, year, hour, minute, second;
-            for (const part of parts) {
-                if (part.type === 'day') day = part.value;
-                if (part.type === 'month') month = part.value;
-                if (part.type === 'year') year = part.value;
-                if (part.type === 'hour') hour = part.value;
-                if (part.type === 'minute') minute = part.value;
-                if (part.type === 'second') second = part.value;
-            }
-            
-            $('#current-time').text(`Horário atual: ${day}/${month}/${year} ${hour}:${minute}:${second} (Brasília)`);
-        }
-        
-        // Atualizar a cada segundo
-        setInterval(updateBrasiliaTime, 1000);
-        updateBrasiliaTime();
-        
-        // Variável para armazenar a unidade do usuário
-        const userUnidadeId = <?php echo $unidade_do_usuario ? $unidade_do_usuario : 'null'; ?>;
-        
-        // Função para carregar equipamentos baseado na operação selecionada
-        function carregarEquipamentosPorOperacao(operacaoId, operacaoNome) {
-            if (!operacaoId || !operacaoNome) {
-                // Se nenhuma operação selecionada, desabilitar equipamentos
-                $('#equipment').html('<option value="">Primeiro selecione uma operação</option>');
-                $('#equipment').prop('disabled', true).trigger('change');
+<script>
+$(document).ready(function() {
+  // ======================= RELÓGIO BRASÍLIA =======================
+  function updateBrasiliaTime() {
+    const now = new Date();
+    const brasiliaOffset = -3 * 60; // UTC-3 em minutos
+    const localOffset = now.getTimezoneOffset();
+    const brasiliaTime = new Date(now.getTime() + (localOffset - brasiliaOffset) * 60000);
+
+    const options = {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    };
+
+    const formatter = new Intl.DateTimeFormat('pt-BR', options);
+    const parts = formatter.formatToParts(brasiliaTime);
+
+    let day, month, year, hour, minute, second;
+    for (const part of parts) {
+      if (part.type === 'day') day = part.value;
+      if (part.type === 'month') month = part.value;
+      if (part.type === 'year') year = part.value;
+      if (part.type === 'hour') hour = part.value;
+      if (part.type === 'minute') minute = part.value;
+      if (part.type === 'second') second = part.value;
+    }
+
+    $('#current-time').text(`Horário atual: ${day}/${month}/${year} ${hour}:${minute}:${second} (Brasília)`);
+  }
+  setInterval(updateBrasiliaTime, 1000);
+  updateBrasiliaTime();
+  // ================================================================
+
+  // Unidade do usuário (injetada via PHP)
+  const userUnidadeId = <?php echo $unidade_do_usuario ? (int)$unidade_do_usuario : 'null'; ?>;
+
+  // ======================= SELECT2 =======================
+  $('.select-search').select2({
+    placeholder: "Clique ou digite para pesquisar...",
+    allowClear: true,
+    width: '100%'
+  });
+  // =======================================================
+
+  // ======================= FAZENDAS DA UNIDADE =======================
+  // Carrega as fazendas da unidade do usuário e popula #fazenda_id
+function carregarFazendasDoUsuario() {
+    const $fazenda = $('#fazenda_id');
+    $fazenda.prop('disabled', true)
+            .html('<option value="">Carregando fazendas...</option>')
+            .trigger('change');
+
+    fetch('/get_fazendas', { credentials: 'same-origin' })
+        .then(r => {
+            if (!r.ok) throw new Error('Falha ao carregar fazendas');
+            return r.json();
+        })
+        .then(json => {
+            if (!json.success) throw new Error(json.error || 'Erro ao carregar fazendas');
+
+            const fazendas = json.fazendas || [];
+            $fazenda.empty();
+
+            if (fazendas.length === 0) {
+                $fazenda.append('<option value="">Nenhuma fazenda disponível</option>');
+                $fazenda.prop('disabled', true).trigger('change');
                 return;
             }
-            
-            // Habilitar dropdown de equipamentos
-            $('#equipment').prop('disabled', false);
-            
-            // Mostrar loading
-            $('#equipment').html('<option value="">Carregando equipamentos...</option>').trigger('change');
-            
-            // Fazer requisição AJAX
-            $.ajax({
-                url: '/equipamentos',
-                type: 'GET',
-                data: {
-                    operacao_nome: operacaoNome,
-                    unidade_id: userUnidadeId
-                },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        $('#equipment').html('<option value="">Selecione um equipamento...</option>');
-                        if (response.equipamentos.length > 0) {
-                            response.equipamentos.forEach(function(equipamento) {
-                                $('#equipment').append('<option value="' + equipamento.id + '">' + equipamento.nome + '</option>');
-                            });
-                        } else {
-                            $('#equipment').html('<option value="">Nenhum equipamento encontrado para ' + response.operacao_nome + '</option>');
-                        }
-                        $('#equipment').trigger('change');
-                    } else {
-                        alert('Erro ao carregar equipamentos: ' + response.error);
-                        $('#equipment').html('<option value="">Erro ao carregar equipamentos</option>');
-                    }
-                },
-                error: function() {
-                    alert('Erro na requisição. Tente novamente.');
-                    $('#equipment').html('<option value="">Erro ao carregar equipamentos</option>');
-                }
+
+            $fazenda.append('<option value="">Selecione uma fazenda...</option>');
+            fazendas.forEach(f => {
+                const label = `${f.nome} (${f.codigo_fazenda || 's/ código'})`;
+                $fazenda.append(new Option(label, f.id));
             });
-        }
-        
-        // Event listener para mudança de operação
-        $('#operation').on('change', function() {
-            const operacaoId = $(this).val();
-            const operacaoNome = $(this).find('option:selected').data('nome');
-            carregarEquipamentosPorOperacao(operacaoId, operacaoNome);
-        });
-        
-        // Inicializar Select2
-        $('.select-search').select2({
-            placeholder: "Clique ou digite para pesquisar...",
-            allowClear: true,
-            width: '100%'
-        });
 
-        // Lógica para mostrar/esconder o campo de motivo de parada
-        $('#status').on('change', function() {
-            const status = $(this).val();
-            const hectaresGroup = $('#hectares-group');
-            const reasonGroup = $('#reason-group');
+            $fazenda.prop('disabled', false).trigger('change');
+        })
+        .catch(err => {
+            console.error(err);
+            $('#fazenda_id')
+                .html('<option value="">Erro ao carregar fazendas</option>')
+                .prop('disabled', true)
+                .trigger('change');
+        });
+}
+  carregarFazendasDoUsuario();
+  // ===================================================================
 
-            if (status === 'parado') {
-                hectaresGroup.hide();
-                hectaresGroup.find('input').prop('required', false).val(0);
-                reasonGroup.show();
-                reasonGroup.find('textarea').prop('required', true);
+  // ======================= EQUIPAMENTOS POR OPERAÇÃO + UNIDADE =======================
+function carregarEquipamentosPorOperacao(operacaoId) {
+    const $equip = $('#equipment');
+
+    if (!operacaoId) {
+        $equip.html('<option value="">Primeiro selecione uma operação</option>');
+        $equip.prop('disabled', true).trigger('change');
+        return;
+    }
+    
+    $equip.prop('disabled', false);
+    $equip.html('<option value="">Carregando equipamentos...</option>').trigger('change');
+    
+    $.ajax({
+        url: '/equipamentos',
+        type: 'GET',
+        data: { operacao_id: operacaoId }, // <— agora por ID
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                $equip.html('<option value="">Selecione um equipamento...</option>');
+                if ((response.equipamentos || []).length > 0) {
+                    response.equipamentos.forEach(function(equipamento) {
+                        $equip.append('<option value="' + equipamento.id + '">' + equipamento.nome + '</option>');
+                    });
+                } else {
+                    $equip.html('<option value="">Nenhum equipamento encontrado para a operação selecionada</option>');
+                }
+                $equip.prop('disabled', false).trigger('change');
             } else {
-                hectaresGroup.show();
-                hectaresGroup.find('input').prop('required', true).val('');
-                reasonGroup.hide();
-                reasonGroup.find('textarea').prop('required', false).val('');
+                alert('Erro ao carregar equipamentos: ' + (response.error || 'Erro desconhecido'));
+                $equip.html('<option value="">Erro ao carregar equipamentos</option>')
+                     .prop('disabled', true).trigger('change');
             }
-        }).trigger('change');
-
-        // Gráfico de Progresso Diário (Chart.js)
-        const dailyProgressCtx = document.getElementById('dailyProgressChart').getContext('2d');
-        const dailyGoal = <?php echo $daily_goal; ?>;
-        const dailyHectares = <?php echo $daily_hectares; ?>;
-        let dailyPercentage = Math.min(100, (dailyHectares / dailyGoal) * 100);
-
-        const dailyProgressChart = new Chart(dailyProgressCtx, {
-            type: 'doughnut',
-            data: {
-                datasets: [{
-                    data: [dailyHectares, Math.max(0, dailyGoal - dailyHectares)],
-                    backgroundColor: ['#00796b', '#e0e0e0'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '80%',
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { enabled: false }
-                }
-            }
-        });
-        $('#dailyProgressText').text(`${Math.round(dailyPercentage)}%`);
-
-        // Função para buscar e exibir os apontamentos
-        function fetchApontamentos(date) {
-            const userId = <?php echo json_encode($_SESSION['usuario_id']); ?>;
-            $('#recent-entries-list').html('<div style="text-align: center;">Carregando...</div>');
-            $('#no-entries-message').hide();
-
-            $.ajax({
-                url: '/apontamentos',
-                type: 'GET',
-                data: { date: date, usuario_id: userId },
-                dataType: 'json',
-                success: function(response) {
-                    const list = $('#recent-entries-list');
-                    list.empty();
-                    if (response.length > 0) {
-                        response.forEach(function(entry) {
-                            const entryJson = JSON.stringify(entry);
-                            
-                            // Converter data/hora UTC para fuso de Brasília
-                            const dataHoraUTC = new Date(entry.data_hora + 'Z');
-                            const options = { 
-                                timeZone: 'America/Sao_Paulo',
-                                hour: '2-digit', 
-                                minute: '2-digit'
-                            };
-                            const formatter = new Intl.DateTimeFormat('pt-BR', options);
-                            const horaBrasilia = formatter.format(dataHoraUTC);
-                            
-                            const listItem = `
-                                <li class="entry-item" data-entry-id="${entry.id}" data-entry='${entryJson}'>
-                                    <div class="entry-details">
-                                        <strong>${entry.equipamento_nome}</strong>
-                                        <p>${entry.unidade_nome} - ${entry.operacao_nome}</p>
-                                        <small>Hectares: ${entry.hectares} | Hora: ${horaBrasilia}</small>
-                                    </div>
-                                    <div class="entry-action">
-                                        <button class="open-modal-btn">Detalhes</button>
-                                    </div>
-                                </li>
-                            `;
-                            list.append(listItem);
-                        });
-                    } else {
-                        $('#no-entries-message').show();
-                    }
-                },
-                error: function() {
-                    list.html('<div style="text-align: center; color: red;">Erro ao carregar os apontamentos.</div>');
-                }
-            });
+        },
+        error: function() {
+            alert('Erro na requisição. Tente novamente.');
+            $equip.html('<option value="">Erro ao carregar equipamentos</option>')
+                 .prop('disabled', true).trigger('change');
         }
+    });
+}
 
-        // Ação ao mudar a data no filtro
-        $('#filter-date').on('change', function() {
-            fetchApontamentos($(this).val());
-        });
+// Quando mudar a operação, passe o VALOR (id)
+$('#operation').on('change', function() {
+    const operacaoId = $(this).val(); // id numérico
+    carregarEquipamentosPorOperacao(operacaoId);
+});
 
-        // Carrega os apontamentos da data atual ao carregar a página
-        fetchApontamentos($('#filter-date').val());
+  // ====================================================================================
 
-        // Lógica do Modal
-        const modal = $('#editModal');
-        const closeBtn = $('.close-btn');
+  // ======================= STATUS ATIVO/PARADO =======================
+  $('#status').on('change', function() {
+    const status = $(this).val();
+    const hectaresGroup = $('#hectares-group');
+    const reasonGroup = $('#reason-group');
 
-        // Função para abrir o modal
-        window.openModal = function(entry) {
-            $('#modal-id').val(entry.id);
-            
-            // Converter data/hora UTC para fuso de Brasília
+    if (status === 'parado') {
+      hectaresGroup.hide();
+      hectaresGroup.find('input').prop('required', false).val(0);
+      reasonGroup.show();
+      reasonGroup.find('textarea').prop('required', true);
+    } else {
+      hectaresGroup.show();
+      hectaresGroup.find('input').prop('required', true).val('');
+      reasonGroup.hide();
+      reasonGroup.find('textarea').prop('required', false).val('');
+    }
+  }).trigger('change');
+  // ===================================================================
+
+  // ======================= GRÁFICO PROGRESSO DIÁRIO =======================
+  const dailyProgressCtx = document.getElementById('dailyProgressChart').getContext('2d');
+  const dailyGoal = <?php echo $daily_goal; ?>;
+  const dailyHectares = <?php echo $daily_hectares; ?>;
+  let dailyPercentage = Math.min(100, (dailyHectares / dailyGoal) * 100);
+
+  const dailyProgressChart = new Chart(dailyProgressCtx, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [dailyHectares, Math.max(0, dailyGoal - dailyHectares)],
+        backgroundColor: ['#00796b', '#e0e0e0'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '80%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false }
+      }
+    }
+  });
+  $('#dailyProgressText').text(`${Math.round(dailyPercentage)}%`);
+  // =======================================================================
+
+  // ======================= LISTAGEM ÚLTIMOS LANÇAMENTOS =======================
+  function fetchApontamentos(date) {
+    const userId = <?php echo json_encode($_SESSION['usuario_id']); ?>;
+    $('#recent-entries-list').html('<div style="text-align: center;">Carregando...</div>');
+    $('#no-entries-message').hide();
+
+    $.ajax({
+      url: '/apontamentos',
+      type: 'GET',
+      data: { date: date, usuario_id: userId },
+      dataType: 'json',
+      success: function(response) {
+        const list = $('#recent-entries-list');
+        list.empty();
+        if (response.length > 0) {
+          response.forEach(function(entry) {
+            const entryJson = JSON.stringify(entry);
+
             const dataHoraUTC = new Date(entry.data_hora + 'Z');
-            const options = { 
-                timeZone: 'America/Sao_Paulo',
-                day: '2-digit', 
-                month: '2-digit', 
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
+            const options = {
+              timeZone: 'America/Sao_Paulo',
+              hour: '2-digit',
+              minute: '2-digit'
             };
             const formatter = new Intl.DateTimeFormat('pt-BR', options);
-            const dataHoraBrasilia = formatter.format(dataHoraUTC);
-            
-            $('#modal-datetime').val(dataHoraBrasilia);
-            $('#modal-farm').val(entry.unidade_nome);
-            $('#modal-equipment').val(entry.equipamento_nome);
-            $('#modal-operation').val(entry.operacao_nome);
-            $('#modal-hectares').val(entry.hectares);
-            $('#modal-reason').val(entry.observacoes);
-            modal.show();
-        };
+            const horaBrasilia = formatter.format(dataHoraUTC);
 
-        // Event listener para abrir o modal quando o botão é clicado
-        $('#recent-entries-list').on('click', '.open-modal-btn', function() {
-            const listItem = $(this).closest('.entry-item');
-            const entryJson = listItem.data('entry');
-            openModal(entryJson);
-        });
-
-        closeBtn.on('click', function() {
-            modal.hide();
-        });
-
-        $(window).on('click', function(event) {
-            if ($(event.target).is(modal)) {
-                modal.hide();
-            }
-        });
-
-        // Controle das abas
-        $('.tab-button').on('click', function() {
-            $('.tab-button').removeClass('active');
-            $('.tab-content').removeClass('active');
-
-            $(this).addClass('active');
-            const tabId = $(this).data('tab');
-            $(`#${tabId}-tab`).addClass('active');
-
-            if (tabId === 'comparison') {
-                updateComparisonChart();
-            }
-        });
-
-        // Inicializar o gráfico de comparação
-        updateComparisonChart();
-    });
-
-    // Dados de exemplo para os gráficos comparativos
-    const comparisonData = <?php echo json_encode($comparison_data); ?>;
-
-    // Função para atualizar o gráfico de comparação
-    function updateComparisonChart() {
-        const period = $('#comparison-period').val();
-        renderComparisonChart(comparisonData);
-    }
-
-    // Renderizar gráfico de comparação
-    function renderComparisonChart(data) {
-        const ctx = document.getElementById('comparisonChart').getContext('2d');
-
-        if (window.comparisonChartInstance) {
-            window.comparisonChartInstance.destroy();
+            const listItem = `
+              <li class="entry-item" data-entry-id="${entry.id}" data-entry='${entryJson}'>
+                <div class="entry-details">
+                  <strong>${entry.equipamento_nome}</strong>
+                  <p>${entry.unidade_nome} - ${entry.operacao_nome}</p>
+                  <small>Hectares: ${entry.hectares} | Hora: ${horaBrasilia}</small>
+                </div>
+                <div class="entry-action">
+                  <button class="open-modal-btn">Detalhes</button>
+                </div>
+              </li>
+            `;
+            list.append(listItem);
+          });
+        } else {
+          $('#no-entries-message').show();
         }
+      },
+      error: function() {
+        $('#recent-entries-list').html('<div style="text-align: center; color: red;">Erro ao carregar os apontamentos.</div>');
+      }
+    });
+  }
 
-        const labels = data.map(item => {
-            const date = new Date(item.data);
-            return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-        });
+  $('#filter-date').on('change', function() {
+    fetchApontamentos($(this).val());
+  });
+  fetchApontamentos($('#filter-date').val());
+  // ===========================================================================
 
-        const manualData = data.map(item => parseFloat(item.ha_manual) || 0);
-        const solinftecData = data.map(item => parseFloat(item.ha_solinftec) || 0);
+  // ======================= MODAL DETALHES =======================
+  const modal = $('#editModal');
+  const closeBtn = $('.close-btn');
 
-        window.comparisonChartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'Hectares Solinftec',
-                        data: solinftecData,
-                        backgroundColor: 'rgba(0, 121, 107, 0.7)',
-                        borderColor: 'rgba(0, 121, 107, 1)',
-                        borderWidth: 1
-                    },
-                    {
-                        label: 'Hectares Manual',
-                        data: manualData,
-                        backgroundColor: 'rgba(255, 152, 0, 0.7)',
-                        borderColor: 'rgba(255, 152, 0, 1)',
-                        borderWidth: 1
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Hectares'
-                        }
-                    },
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Data'
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                    title: {
-                        display: true,
-                        text: 'Comparativo de Hectares - Solinftec vs Manual'
-                    }
-                }
-            }
-        });
+  window.openModal = function(entry) {
+    $('#modal-id').val(entry.id);
+
+    const dataHoraUTC = new Date(entry.data_hora + 'Z');
+    const options = {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    const formatter = new Intl.DateTimeFormat('pt-BR', options);
+    const dataHoraBrasilia = formatter.format(dataHoraUTC);
+
+    $('#modal-datetime').val(dataHoraBrasilia);
+    $('#modal-farm').val(entry.unidade_nome);
+    $('#modal-equipment').val(entry.equipamento_nome);
+    $('#modal-operation').val(entry.operacao_nome);
+    $('#modal-hectares').val(entry.hectares);
+    $('#modal-reason').val(entry.observacoes);
+    modal.show();
+  };
+
+  $('#recent-entries-list').on('click', '.open-modal-btn', function() {
+    const listItem = $(this).closest('.entry-item');
+    const entryJson = listItem.data('entry');
+    openModal(entryJson);
+  });
+
+  closeBtn.on('click', function() { modal.hide(); });
+  $(window).on('click', function(event) { if ($(event.target).is(modal)) modal.hide(); });
+  // =============================================================
+
+  // ======================= ABAS / COMPARATIVO =======================
+  $('.tab-button').on('click', function() {
+    $('.tab-button').removeClass('active');
+    $('.tab-content').removeClass('active');
+
+    $(this).addClass('active');
+    const tabId = $(this).data('tab');
+    $(`#${tabId}-tab`).addClass('active');
+
+    if (tabId === 'comparison') {
+      updateComparisonChart();
     }
+  });
 
-    // Event listener para o filtro de período
-    $('#comparison-period').on('change', updateComparisonChart);
-    </script>
+  updateComparisonChart();
+  // ==================================================================
+});
+
+// ======================= COMPARATIVO (gráfico) =======================
+const comparisonData = <?php echo json_encode($comparison_data); ?>;
+
+function updateComparisonChart() {
+  const period = $('#comparison-period').val();
+  renderComparisonChart(comparisonData);
+}
+
+function renderComparisonChart(data) {
+  const ctx = document.getElementById('comparisonChart').getContext('2d');
+
+  if (window.comparisonChartInstance) {
+    window.comparisonChartInstance.destroy();
+  }
+
+  const labels = data.map(item => {
+    const date = new Date(item.data);
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  });
+
+  const manualData = data.map(item => parseFloat(item.ha_manual) || 0);
+  const solinftecData = data.map(item => parseFloat(item.ha_solinftec) || 0);
+
+  window.comparisonChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Hectares Solinftec',
+          data: solinftecData,
+          backgroundColor: 'rgba(0, 121, 107, 0.7)',
+          borderColor: 'rgba(0, 121, 107, 1)',
+          borderWidth: 1
+        },
+        {
+          label: 'Hectares Manual',
+          data: manualData,
+          backgroundColor: 'rgba(255, 152, 0, 0.7)',
+          borderColor: 'rgba(255, 152, 0, 1)',
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'Hectares' } },
+        x: { title: { display: true, text: 'Data' } }
+      },
+      plugins: {
+        legend: { position: 'top' },
+        title: { display: true, text: 'Comparativo de Hectares - Solinftec vs Manual' }
+      }
+    }
+  });
+}
+
+$('#comparison-period').on('change', updateComparisonChart);
+</script>
+
 </body>
 
 <!-- Créditos -->

@@ -70,11 +70,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             case 'add':
                 $nome = $_POST['nome'];
                 $unidade_id = $_POST['unidade_id'];
-                $operacao = $_POST['operacao'];
+                $operacao_id = $_POST['operacao_id'];
                 $implemento_id = $_POST['implemento_id'] ?? null;
                 
-                $stmt = $pdo->prepare("INSERT INTO equipamentos (nome, unidade_id, operacao, implemento_id) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$nome, $unidade_id, $operacao, $implemento_id]);
+                $stmt = $pdo->prepare("INSERT INTO equipamentos (nome, unidade_id, operacao_id, implemento_id) VALUES (?, ?, ?, ?)");
+                $stmt->execute([$nome, $unidade_id, $operacao_id, $implemento_id]);
                 
                 $_SESSION['message'] = "Equipamento adicionado com sucesso!";
                 break;
@@ -83,11 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $id = $_GET['id'] ?? 0;
                 $nome = $_POST['nome'];
                 $unidade_id = $_POST['unidade_id'];
-                $operacao = $_POST['operacao'];
+                $operacao_id = $_POST['operacao_id'];
                 $implemento_id = $_POST['implemento_id'] ?? null;
                 
-                $stmt = $pdo->prepare("UPDATE equipamentos SET nome = ?, unidade_id = ?, operacao = ?, implemento_id = ? WHERE id = ?");
-                $stmt->execute([$nome, $unidade_id, $operacao, $implemento_id, $id]);
+                $stmt = $pdo->prepare("UPDATE equipamentos SET nome = ?, unidade_id = ?, operacao_id = ?, implemento_id = ? WHERE id = ?");
+                $stmt->execute([$nome, $unidade_id, $operacao_id, $implemento_id, $id]);
                 
                 $_SESSION['message'] = "Equipamento atualizado com sucesso!";
                 break;
@@ -110,19 +110,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Buscar unidades, operações e implementos para filtros
-$unidades = $pdo->query("SELECT DISTINCT id, nome FROM unidades ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
-$operacoes = $pdo->query("SELECT DISTINCT operacao FROM equipamentos WHERE operacao IS NOT NULL")->fetchAll(PDO::FETCH_ASSOC);
+$unidades = $pdo->query("SELECT id, nome FROM unidades ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
+$operacoes = $pdo->query("SELECT id, nome FROM tipos_operacao ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 $implementos = $pdo->query("SELECT id, nome, modelo, numero_identificacao FROM implementos ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
 
-// Filtro aplicado
-$filtro_unidade = $_GET['unidade'] ?? '';
-$filtro_operacao = $_GET['operacao'] ?? '';
-$filtro_implemento = $_GET['implemento'] ?? '';
+// Filtros (GET)
+$filtro_unidade     = $_GET['unidade']      ?? '';
+$filtro_operacao_id = $_GET['operacao_id']  ?? '';
+$filtro_implemento  = $_GET['implemento']   ?? '';
 
-$sql = "SELECT e.*, u.nome AS unidade_nome, i.nome AS implemento_nome, i.modelo AS implemento_modelo, i.numero_identificacao 
+// Mapa de ícones por operacao_id (1=ACOP, 2=PLANTIO, 3=SUBSOLAGEM, 4=VINHAÇA)
+$iconePorOperacao = [
+    1 => 'fa-tractor text-success',   // ACOP
+    2 => 'fa-seedling text-primary',  // PLANTIO
+    3 => 'fa-shovel text-warning',    // SUBSOLAGEM (FA6)
+    4 => 'fa-wine-bottle text-danger' // VINHAÇA
+];
+
+// Query principal já trazendo o nome da operação
+$sql = "SELECT 
+            e.*,
+            u.nome AS unidade_nome,
+            i.nome AS implemento_nome,
+            i.modelo AS implemento_modelo,
+            i.numero_identificacao,
+            t.nome AS operacao_nome
         FROM equipamentos e
-        LEFT JOIN unidades u ON e.unidade_id = u.id
-        LEFT JOIN implementos i ON e.implemento_id = i.id
+        LEFT JOIN unidades u       ON e.unidade_id   = u.id
+        LEFT JOIN implementos i    ON e.implemento_id = i.id
+        LEFT JOIN tipos_operacao t  ON e.operacao_id  = t.id
         WHERE 1=1";
 
 $params = [];
@@ -130,9 +146,9 @@ if ($filtro_unidade) {
     $sql .= " AND e.unidade_id = :unidade";
     $params[':unidade'] = $filtro_unidade;
 }
-if ($filtro_operacao) {
-    $sql .= " AND e.operacao = :operacao";
-    $params[':operacao'] = $filtro_operacao;
+if ($filtro_operacao_id) {
+    $sql .= " AND e.operacao_id = :operacao_id";
+    $params[':operacao_id'] = $filtro_operacao_id;
 }
 if ($filtro_implemento) {
     $sql .= " AND e.implemento_id = :implemento";
@@ -143,6 +159,7 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
 <!-- Bootstrap 5 CSS -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -186,13 +203,11 @@ $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
         <!-- Filtro de Operação -->
         <div class="col-md-3">
-            <select name="operacao" class="form-select">
+            <select name="operacao_id" class="form-select">
                 <option value="">Todas as Operações</option>
-                <?php 
-                $operacoes_fixas = ["ACOP", "SUBSOLAGEM", "PLANTIO", "VINHAÇA"];
-                foreach ($operacoes_fixas as $op): ?>
-                    <option value="<?= $op ?>" <?= $filtro_operacao == $op ? 'selected' : '' ?>>
-                        <?= $op ?>
+                <?php foreach ($operacoes as $op): ?>
+                    <option value="<?= $op['id'] ?>" <?= (string)$filtro_operacao_id === (string)$op['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($op['nome']) ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -224,10 +239,7 @@ $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="row g-4">
         <?php foreach ($equipamentos as $eq): 
             // Definir ícone conforme operação
-            $icone = "fa-tractor text-secondary";
-            if ($eq['operacao'] === 'ACOP') $icone = "fa-tractor text-success";
-            elseif ($eq['operacao'] === 'VINHAÇA') $icone = "fa-wine-bottle text-danger";
-            elseif ($eq['operacao'] === 'PLANTIO') $icone = "fa-seedling text-primary";
+            $icone = $iconePorOperacao[(int)($eq['operacao_id'] ?? 0)] ?? 'fa-tractor text-secondary';
         ?>
         <div class="col-md-3">
             <div class="card shadow-lg border-0 h-100">
@@ -235,7 +247,7 @@ $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <i class="fas <?= $icone ?> fa-3x mb-3"></i>
                     <h5 class="card-title"><?= htmlspecialchars($eq['nome']) ?></h5>
                     <p class="card-text"><strong>Unidade:</strong> <?= htmlspecialchars($eq['unidade_nome'] ?? 'Não vinculada') ?></p>
-                    <p class="card-text"><strong>Operação:</strong> <?= htmlspecialchars($eq['operacao']) ?></p>
+                    <p class="card-text"><strong>Operação:</strong> <?= htmlspecialchars($eq['operacao_nome'] ?? 'N/A') ?></p>
                     
                     <?php if (!empty($eq['implemento_nome'])): ?>
                         <p class="card-text">
@@ -275,11 +287,11 @@ $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <select name="operacao" class="form-select mb-3">
+                        <select name="operacao_id" class="form-select mb-3" required>
                             <option value="">Selecione a Operação</option>
-                            <?php foreach (["ACOP", "SUBSOLAGEM", "PLANTIO", "VINHAÇA"] as $op): ?>
-                                <option value="<?= $op ?>" <?= $eq['operacao'] == $op ? 'selected' : '' ?>>
-                                    <?= $op ?>
+                            <?php foreach ($operacoes as $op): ?>
+                                <option value="<?= $op['id'] ?>" <?= (string)$eq['operacao_id'] === (string)$op['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($op['nome']) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -338,10 +350,10 @@ $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['nome']) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <select name="operacao" class="form-select mb-3">
+                <select name="operacao_id" class="form-select mb-3" required>
                     <option value="">Selecione a Operação</option>
-                    <?php foreach (["ACOP", "SUBSOLAGEM", "PLANTIO", "VINHAÇA"] as $op): ?>
-                        <option value="<?= $op ?>"><?= $op ?></option>
+                    <?php foreach ($operacoes as $op): ?>
+                        <option value="<?= $op['id'] ?>"><?= htmlspecialchars($op['nome']) ?></option>
                     <?php endforeach; ?>
                 </select>
                 <select name="implemento_id" class="form-select">

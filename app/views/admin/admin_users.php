@@ -10,142 +10,162 @@ if (!isset($_SESSION['usuario_id']) || strtolower($_SESSION['usuario_tipo']) !==
 
 // Lógica de CRUD
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    try {
-        $action = $_POST['action'] ?? '';
-        
-        if ($action == 'add_user' || $action == 'edit_user') {
-            // Validação e sanitização
-            $nome = filter_input(INPUT_POST, 'nome', FILTER_SANITIZE_STRING);
-            $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
-            $tipo = filter_input(INPUT_POST, 'tipo', FILTER_SANITIZE_STRING);
-            $ativo = isset($_POST['ativo']) ? 1 : 0;
-            $unidades = $_POST['unidades'] ?? [];
-            $operacoes = $_POST['operacoes'] ?? [];
-
-            if ($action == 'add_user') {
-                $senha = password_hash($_POST['senha'], PASSWORD_DEFAULT);
-                $stmt = $pdo->prepare("INSERT INTO usuarios (nome, email, senha, tipo, ativo) VALUES (:nome, :email, :senha, :tipo, :ativo)");
-                $stmt->execute([
-                    ':nome' => $nome,
-                    ':email' => $email,
-                    ':senha' => $senha,
-                    ':tipo' => $tipo,
-                    ':ativo' => $ativo
-                ]);
-                $user_id = $pdo->lastInsertId();
-            } else { // edit_user
-                $user_id = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
-                $stmt = $pdo->prepare("UPDATE usuarios SET nome = :nome, email = :email, tipo = :tipo, ativo = :ativo WHERE id = :id");
-                $stmt->execute([
-                    ':nome' => $nome,
-                    ':email' => $email,
-                    ':tipo' => $tipo,
-                    ':ativo' => $ativo,
-                    ':id' => $user_id
-                ]);
-
-                // Alterar senha se fornecida
-                if (!empty($_POST['senha'])) {
-                    $senha = password_hash($_POST['senha'], PASSWORD_DEFAULT);
-                    $stmt = $pdo->prepare("UPDATE usuarios SET senha = :senha WHERE id = :id");
-                    $stmt->execute([':senha' => $senha, ':id' => $user_id]);
-                }
-
-                // Excluir permissões antigas
-                $pdo->prepare("DELETE FROM usuario_unidade WHERE usuario_id = :id")->execute([':id' => $user_id]);
-                $pdo->prepare("DELETE FROM usuario_operacao WHERE usuario_id = :id")->execute([':id' => $user_id]);
-            }
-
-// Inserir novas permissões
-$stmt_unidade = $pdo->prepare("INSERT INTO usuario_unidade (usuario_id, unidade_id) VALUES (:usuario_id, :unidade_id)");
-$stmt_operacao = $pdo->prepare("INSERT INTO usuario_operacao (usuario_id, operacao_id) VALUES (:usuario_id, :operacao_id)");
-
-foreach ($unidades as $unidade_id) {
-    $stmt_unidade->execute([
-        ':usuario_id' => $user_id,
-        ':unidade_id' => $unidade_id
-    ]);
-}
-
-foreach ($operacoes as $operacao_id) {
-    $stmt_operacao->execute([
-        ':usuario_id' => $user_id,
-        ':operacao_id' => $operacao_id
-    ]);
-}
-            
-            $_SESSION['success_message'] = "Usuário " . ($action == 'add_user' ? 'adicionado' : 'atualizado') . " com sucesso!";
-            
-// substituir apenas o bloco delete_user dentro do try principal
-} elseif ($action == 'delete_user') {
-    $user_id = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
-    if (!$user_id) {
-        $_SESSION['error_message'] = "ID de usuário inválido.";
-        header("Location: /app/views/admin/admin_users.php");
-        exit();
-    }
-
-    // detecta se é requisição AJAX (útil se for usar fetch para deletar)
+    // Detecta se é uma chamada AJAX pra responder JSON
     $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
               strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-    try {
-        // garante que o PDO lance exceções (deveria estar em conexao.php)
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-        $pdo->beginTransaction();
-
-        // 1) Apagar permissões/filhos primeiro
-        $stmt = $pdo->prepare("DELETE FROM usuario_unidade WHERE usuario_id = :id");
-        $stmt->execute([':id' => $user_id]);
-
-        $stmt = $pdo->prepare("DELETE FROM usuario_operacao WHERE usuario_id = :id");
-        $stmt->execute([':id' => $user_id]);
-
-        // 2) Apagar o usuário
-        $stmt = $pdo->prepare("DELETE FROM usuarios WHERE id = :id");
-        $stmt->execute([':id' => $user_id]);
-
-        // checar se alguma linha foi removida (opcional)
-        if ($stmt->rowCount() === 0) {
-            throw new Exception("Usuário não encontrado ou já removido.");
-        }
-
-        $pdo->commit();
-
-        if ($isAjax) {
-            header('Content-Type: application/json');
-            echo json_encode(['success' => true, 'message' => 'Usuário excluído com sucesso.']);
-            exit();
-        }
-
-        $_SESSION['success_message'] = "Usuário excluído com sucesso!";
-    } catch (Exception $e) {
-        // desfaz se algo deu errado
-        if ($pdo->inTransaction()) $pdo->rollBack();
-
-        if ($isAjax) {
-            header('Content-Type: application/json');
-            http_response_code(500);
-            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-            exit();
-        }
-
-        // em produção você pode querer logar $e->getMessage() em log ao invés de mostrar
-        $_SESSION['error_message'] = "Erro ao excluir usuário: " . $e->getMessage();
-    }
-
-    header("Location: /app/views/admin/admin_users.php");
-    exit();
-}
-
-        
-        header("Location: /app/views/admin/admin_users.php");
+    // Helper rápido pra responder JSON e sair
+    $jsonOut = function(array $payload) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($payload);
         exit();
-        
-    } catch (PDOException $e) {
-        $_SESSION['error_message'] = "Erro no banco de dados: " . $e->getMessage();
-        header("Location: /app/views/admin/admin_users.php");
+    };
+
+    try {
+        $action = $_POST['action'] ?? '';
+
+        if ($action === 'add_user' || $action === 'edit_user') {
+            $nome  = trim($_POST['nome'] ?? '');
+            $email = trim($_POST['email'] ?? '');
+            $tipo  = trim($_POST['tipo'] ?? 'operador');
+            $ativo = isset($_POST['ativo']) ? 1 : 0;
+
+            $unidades  = array_values(array_filter(array_map('intval', $_POST['unidades']  ?? [])));
+            $operacoes = array_values(array_filter(array_map('intval', $_POST['operacoes'] ?? [])));
+            $unidade_principal = $unidades[0] ?? null;
+
+            if ($nome === '' || $email === '' || $tipo === '') {
+                if ($isAjax) $jsonOut(['success' => false, 'error' => 'Preencha nome, e-mail e tipo.']);
+                $_SESSION['error_message'] = "Preencha nome, e-mail e tipo.";
+                header("Location: /admin_users");
+                exit();
+            }
+
+            $pdo->beginTransaction();
+
+            if ($action === 'add_user') {
+                $senha_plana = $_POST['senha'] ?? '';
+                if ($senha_plana === '') {
+                    $pdo->rollBack();
+                    if ($isAjax) $jsonOut(['success' => false, 'error' => 'Informe uma senha para o novo usuário.']);
+                    $_SESSION['error_message'] = "Informe uma senha para o novo usuário.";
+                    header("Location: /admin_users");
+                    exit();
+                }
+                $senha_hash = password_hash($senha_plana, PASSWORD_DEFAULT);
+
+                $sql = "INSERT INTO usuarios (nome, email, senha, tipo, ativo, unidade_id)
+                        VALUES (:nome, :email, :senha, :tipo, :ativo, :unidade_id)";
+                $stmt = $pdo->prepare($sql);
+                $stmt->bindValue(':nome', $nome);
+                $stmt->bindValue(':email', $email);
+                $stmt->bindValue(':senha', $senha_hash);
+                $stmt->bindValue(':tipo', $tipo);
+                $stmt->bindValue(':ativo', $ativo, PDO::PARAM_INT);
+                if ($unidade_principal !== null) {
+                    $stmt->bindValue(':unidade_id', $unidade_principal, PDO::PARAM_INT);
+                } else {
+                    $stmt->bindValue(':unidade_id', null, PDO::PARAM_NULL);
+                }
+                $stmt->execute();
+
+                $user_id = (int)$pdo->lastInsertId();
+
+            } else { // edit_user
+                $user_id = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
+                if (!$user_id) {
+                    $pdo->rollBack();
+                    if ($isAjax) $jsonOut(['success' => false, 'error' => 'ID de usuário inválido.']);
+                    $_SESSION['error_message'] = "ID de usuário inválido.";
+                    header("Location: /admin_users");
+                    exit();
+                }
+
+                $sql = "UPDATE usuarios
+                           SET nome = :nome,
+                               email = :email,
+                               tipo = :tipo,
+                               ativo = :ativo,
+                               unidade_id = :unidade_id
+                         WHERE id = :id LIMIT 1";
+                $stmt = $pdo->prepare($sql);
+                $stmt->bindValue(':nome', $nome);
+                $stmt->bindValue(':email', $email);
+                $stmt->bindValue(':tipo', $tipo);
+                $stmt->bindValue(':ativo', $ativo, PDO::PARAM_INT);
+                if ($unidade_principal !== null) {
+                    $stmt->bindValue(':unidade_id', $unidade_principal, PDO::PARAM_INT);
+                } else {
+                    $stmt->bindValue(':unidade_id', null, PDO::PARAM_NULL);
+                }
+                $stmt->bindValue(':id', $user_id, PDO::PARAM_INT);
+                $stmt->execute();
+
+                if (!empty($_POST['senha'])) {
+                    $senha_hash = password_hash($_POST['senha'], PASSWORD_DEFAULT);
+                    $pdo->prepare("UPDATE usuarios SET senha = :senha WHERE id = :id")
+                        ->execute([':senha' => $senha_hash, ':id' => $user_id]);
+                }
+
+                $pdo->prepare("DELETE FROM usuario_unidade  WHERE usuario_id = :id")->execute([':id' => $user_id]);
+                $pdo->prepare("DELETE FROM usuario_operacao WHERE usuario_id = :id")->execute([':id' => $user_id]);
+            }
+
+            if (!empty($unidades)) {
+                $stmtU = $pdo->prepare("INSERT INTO usuario_unidade (usuario_id, unidade_id) VALUES (:usuario_id, :unidade_id)");
+                foreach ($unidades as $uid) {
+                    $stmtU->execute([':usuario_id' => $user_id, ':unidade_id' => $uid]);
+                }
+            }
+
+            if (!empty($operacoes)) {
+                $stmtO = $pdo->prepare("INSERT INTO usuario_operacao (usuario_id, operacao_id) VALUES (:usuario_id, :operacao_id)");
+                foreach ($operacoes as $opid) {
+                    $stmtO->execute([':usuario_id' => $user_id, ':operacao_id' => $opid]);
+                }
+            }
+
+            $pdo->commit();
+
+            if ($isAjax) $jsonOut(['success' => true, 'message' => 'Usuário salvo com sucesso!']);
+            $_SESSION['success_message'] = "Usuário " . ($action === 'add_user' ? 'adicionado' : 'atualizado') . " com sucesso!";
+            header("Location: /admin_users");
+            exit();
+
+        } elseif ($action === 'delete_user') {
+            $user_id = filter_input(INPUT_POST, 'user_id', FILTER_VALIDATE_INT);
+            if (!$user_id) {
+                if ($isAjax) $jsonOut(['success' => false, 'error' => 'ID de usuário inválido.']);
+                $_SESSION['error_message'] = "ID de usuário inválido.";
+                header("Location: /admin_users");
+                exit();
+            }
+
+            $pdo->beginTransaction();
+            $pdo->prepare("DELETE FROM usuario_unidade  WHERE usuario_id = :id")->execute([':id' => $user_id]);
+            $pdo->prepare("DELETE FROM usuario_operacao WHERE usuario_id = :id")->execute([':id' => $user_id]);
+            $stmt = $pdo->prepare("DELETE FROM usuarios WHERE id = :id");
+            $stmt->execute([':id' => $user_id]);
+            $pdo->commit();
+
+            if ($isAjax) $jsonOut(['success' => true, 'message' => 'Usuário excluído com sucesso!']);
+            $_SESSION['success_message'] = "Usuário excluído com sucesso!";
+            header("Location: /admin_users");
+            exit();
+        }
+
+        // ação desconhecida
+        if ($isAjax) $jsonOut(['success' => false, 'error' => 'Ação inválida.']);
+        header("Location: /admin_users");
+        exit();
+
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($isAjax) {
+            $jsonOut(['success' => false, 'error' => 'Erro: ' . $e->getMessage()]);
+        }
+        $_SESSION['error_message'] = "Erro: " . $e->getMessage();
+        header("Location: /admin_users");
         exit();
     }
 }
@@ -360,150 +380,199 @@ require_once __DIR__ . '/../../../app/includes/header.php';
   </p>
 </div>
 
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Elementos do modal
-        const userModal = document.getElementById('userModal');
-        const confirmModal = document.getElementById('confirmModal');
-        const addUserBtn = document.getElementById('addUserBtn');
-        const modalCloses = document.querySelectorAll('.modal-close');
-        
-        // Funções para abrir/fechar modais
-        function openModal(modal) {
-            modal.classList.add('active');
-            document.body.style.overflow = 'hidden';
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Elementos do modal
+    const userModal    = document.getElementById('userModal');
+    const confirmModal = document.getElementById('confirmModal');
+    const addUserBtn   = document.getElementById('addUserBtn');
+    const modalCloses  = document.querySelectorAll('.modal-close');
+
+    // Helpers de modal
+    function openModal(modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeModal(modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    // Helper de alerta visual
+    function showAlert(type, message) {
+        // type: 'success' | 'danger'
+        const container = document.querySelector('.card-body') || document.body;
+        const el = document.createElement('div');
+        el.className = `alert alert-${type}`;
+        el.innerHTML = `${message} <button class="alert-close">&times;</button>`;
+        container.prepend(el);
+        // auto-close
+        setTimeout(() => el.remove(), 4000);
+    }
+    // Fechar alertas (inclusive os criados dinamicamente)
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('alert-close')) {
+            e.target.closest('.alert')?.remove();
         }
-        
-        function closeModal(modal) {
-            modal.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-        
-        // Event listeners
-        addUserBtn.addEventListener('click', () => {
-            document.getElementById('modalTitle').textContent = 'Adicionar Usuário';
-            document.getElementById('formAction').value = 'add_user';
-            document.getElementById('userForm').reset();
-            document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
-            document.getElementById('ativo').checked = true;
-            openModal(userModal);
+    });
+
+    // Abrir modal "Adicionar"
+    addUserBtn.addEventListener('click', () => {
+        document.getElementById('modalTitle').textContent = 'Adicionar Usuário';
+        document.getElementById('formAction').value = 'add_user';
+        document.getElementById('userForm').reset();
+        document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+        document.getElementById('ativo').checked = true;
+        openModal(userModal);
+    });
+
+    // Abrir modal "Editar"
+    document.querySelectorAll('.edit-user').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.getAttribute('data-id');
+
+            fetch(`/app/views/admin/get_user.php?id=${userId}`, { credentials: 'same-origin' })
+                .then(res => {
+                    if (!res.ok) throw new Error('Erro ao buscar dados do usuário');
+                    return res.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        showAlert('danger', data.error);
+                        return;
+                    }
+
+                    // Preenche campos
+                    document.getElementById('modalTitle').textContent = 'Editar Usuário';
+                    document.getElementById('formAction').value = 'edit_user';
+                    document.getElementById('userId').value  = data.user.id;
+                    document.getElementById('nome').value    = data.user.nome;
+                    document.getElementById('email').value   = data.user.email;
+                    document.getElementById('tipo').value    = data.user.tipo;
+                    document.getElementById('ativo').checked = data.user.ativo == 1;
+
+                    // Limpa senha
+                    document.getElementById('senha').value = '';
+
+                    // Checkbox Unidades
+                    const unidadesIds = (data.unidades || []).map(id => parseInt(id));
+                    document.querySelectorAll('input[name="unidades[]"]').forEach(cb => {
+                        cb.checked = unidadesIds.includes(parseInt(cb.value));
+                    });
+
+                    // Checkbox Operações
+                    const operacoesIds = (data.operacoes || []).map(id => parseInt(id));
+                    document.querySelectorAll('input[name="operacoes[]"]').forEach(cb => {
+                        cb.checked = operacoesIds.includes(parseInt(cb.value));
+                    });
+
+                    openModal(userModal);
+                })
+                .catch(err => {
+                    showAlert('danger', "Erro ao buscar dados do usuário: " + err.message);
+                    console.error(err);
+                });
         });
-        
-document.querySelectorAll('.edit-user').forEach(btn => {
-    btn.addEventListener('click', function() {
-        const userId = this.getAttribute('data-id');
+    });
 
-        fetch(`/app/views/admin/get_user.php?id=${userId}`)
-            .then(res => {
-                if (!res.ok) {
-                    throw new Error('Erro ao buscar dados do usuário');
-                }
-                return res.json();
-            })
-            .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
+    // Submit do formulário (Salvar) com AJAX + feedback
+    document.getElementById('userForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
 
-                // Preencher campos básicos
-                document.getElementById('modalTitle').textContent = 'Editar Usuário';
-                document.getElementById('formAction').value = 'edit_user';
-                document.getElementById('userId').value = data.user.id;
-                document.getElementById('nome').value = data.user.nome;
-                document.getElementById('email').value = data.user.email;
-                document.getElementById('tipo').value = data.user.tipo;
-                document.getElementById('ativo').checked = data.user.ativo == 1;
+        const form = this;
+        const btnSubmit = form.querySelector('.btn.btn-primary');
+        const originalText = btnSubmit.textContent;
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = 'Salvando...';
 
-                // Limpar campo de senha
-                document.getElementById('senha').value = '';
+        try {
+            const res = await fetch(location.href, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: new FormData(form)
+            });
 
-                // Selecionar unidades - converter IDs para número para comparação
-                const unidadesIds = data.unidades.map(id => parseInt(id));
-                document.querySelectorAll('input[name="unidades[]"]').forEach(cb => {
-                    cb.checked = unidadesIds.includes(parseInt(cb.value));
+            const data = await res.json().catch(() => null);
+
+            if (data && data.success) {
+                closeModal(userModal);
+                showAlert('success', data.message || 'Usuário salvo com sucesso!');
+                setTimeout(() => location.reload(), 900);
+            } else {
+                const msg = data && data.error ? data.error : 'Erro ao salvar usuário.';
+                showAlert('danger', msg);
+            }
+        } catch (err) {
+            showAlert('danger', 'Erro na requisição: ' + err.message);
+            console.error(err);
+        } finally {
+            btnSubmit.disabled = false;
+            btnSubmit.textContent = originalText;
+        }
+    });
+
+    // Abrir modal de confirmação (Excluir)
+    document.querySelectorAll('.delete-user').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.getElementById('deleteUserId').value = this.getAttribute('data-id');
+            openModal(confirmModal);
+        });
+    });
+
+    // Submit do excluir com AJAX + feedback (opcional mas recomendado)
+    const deleteForm = document.getElementById('deleteForm');
+    if (deleteForm) {
+        deleteForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const btn = deleteForm.querySelector('button[type="submit"]');
+            const original = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Excluindo...';
+
+            try {
+                const res = await fetch(location.href, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new FormData(deleteForm)
                 });
+                const data = await res.json().catch(() => null);
 
-                // Selecionar operações - converter IDs para número para comparação
-                const operacoesIds = data.operacoes.map(id => parseInt(id));
-                document.querySelectorAll('input[name="operacoes[]"]').forEach(cb => {
-                    cb.checked = operacoesIds.includes(parseInt(cb.value));
-                });
-
-                openModal(userModal);
-            })
-            .catch(err => {
-                alert("Erro ao buscar dados do usuário: " + err.message);
+                if (data && data.success) {
+                    closeModal(confirmModal);
+                    showAlert('success', data.message || 'Usuário excluído com sucesso!');
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    const msg = data && data.error ? data.error : 'Erro ao excluir usuário.';
+                    showAlert('danger', msg);
+                }
+            } catch (err) {
+                showAlert('danger', 'Erro na requisição: ' + err.message);
                 console.error(err);
-            });
-    });
-});
-
-
-document.getElementById('userForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-
-    const formData = new FormData(this);
-
-    fetch(location.href, {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => res.text())
-    .then(() => {
-        closeModal(userModal);
-
-        // Exibir notificação
-        const msg = document.createElement('div');
-        msg.className = 'alert alert-success';
-        msg.innerHTML = 'Usuário salvo com sucesso! <button class="alert-close">&times;</button>';
-        document.querySelector('.card-body').prepend(msg);
-
-        // Fechar automaticamente
-        setTimeout(() => msg.remove(), 4000);
-
-        // Atualizar tabela sem reload
-        location.reload();
-    })
-    .catch(err => {
-        closeModal(userModal);
-        const msg = document.createElement('div');
-        msg.className = 'alert alert-danger';
-        msg.innerHTML = 'Erro ao salvar usuário! <button class="alert-close">&times;</button>';
-        document.querySelector('.card-body').prepend(msg);
-        console.error(err);
-    });
-});
-
-        
-        document.querySelectorAll('.delete-user').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.getElementById('deleteUserId').value = this.getAttribute('data-id');
-                openModal(confirmModal);
-            });
-        });
-        
-        modalCloses.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const modal = this.closest('.modal-overlay');
-                closeModal(modal);
-            });
-        });
-        
-        // Fechar modal ao clicar fora
-        window.addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal-overlay')) {
-                closeModal(e.target);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = original;
             }
         });
-        
-        // Fechar alerts
-        document.querySelectorAll('.alert-close').forEach(btn => {
-            btn.addEventListener('click', function() {
-                this.parentElement.style.display = 'none';
-            });
+    }
+
+    // Fechar modais (X)
+    modalCloses.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const modal = this.closest('.modal-overlay');
+            closeModal(modal);
         });
     });
-    </script>
+
+    // Fechar modal ao clicar fora
+    window.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) {
+            closeModal(e.target);
+        }
+    });
+});
+</script>
 </body>
 </html>
