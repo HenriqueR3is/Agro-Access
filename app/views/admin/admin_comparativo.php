@@ -291,73 +291,91 @@ try {
 
     if ($producao_tem_fazenda) {
         $sql = "
-        SELECT
-            e.nome AS equipamento_nome,
-            f.nome AS fazenda_nome,
-            COALESCE(agro.total_ha, 0) AS ha_agro_access,
-            COALESCE(sgpa.total_ha, 0) AS ha_sgpa,
-            p.data
-        FROM (
-            SELECT DISTINCT equipamento_id, fazenda_id, DATE(data) AS data
-            FROM producao_sgpa
-            WHERE DATE(data) BETWEEN ? AND ?
-        ) p
-        JOIN equipamentos e ON p.equipamento_id = e.id
-        LEFT JOIN (
-            SELECT equipamento_id, fazenda_id, SUM(hectares) AS total_ha, DATE(data_hora) as data
-            FROM apontamentos
-            WHERE DATE(data_hora) BETWEEN ? AND ?
-            GROUP BY equipamento_id, fazenda_id, DATE(data_hora)
-        ) AS agro 
-            ON agro.equipamento_id = p.equipamento_id 
-           AND agro.fazenda_id = p.fazenda_id 
-           AND agro.data = p.data
-        LEFT JOIN (
-            SELECT equipamento_id, fazenda_id, SUM(hectares_sgpa) AS total_ha, DATE(data) as data
-            FROM producao_sgpa
-            WHERE DATE(data) BETWEEN ? AND ?
-            GROUP BY equipamento_id, fazenda_id, DATE(data)
-        ) AS sgpa
-            ON sgpa.equipamento_id = p.equipamento_id 
-           AND sgpa.fazenda_id = p.fazenda_id 
-           AND sgpa.data = p.data
-        LEFT JOIN fazendas f ON f.id = p.fazenda_id
-        ORDER BY p.data, e.nome, f.nome
-        ";
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$data_inicio, $data_fim, $data_inicio, $data_fim, $data_inicio, $data_fim]);
-        $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            SELECT
+                e.nome AS equipamento_nome,
+                f.nome AS fazenda_nome,
+                COALESCE(agro.total_ha, 0) AS ha_agro_access,
+                COALESCE(sgpa.total_ha, 0) AS ha_sgpa,
+                p.data
+            FROM (
+                -- chaves unificadas (SGPA ∪ Apontamentos)
+                SELECT equipamento_id, fazenda_id, data FROM (
+                    SELECT equipamento_id, fazenda_id, DATE(data) AS data
+                    FROM producao_sgpa
+                    WHERE DATE(data) BETWEEN ? AND ?
+                    UNION
+                    SELECT equipamento_id, fazenda_id, DATE(data_hora) AS data
+                    FROM apontamentos
+                    WHERE DATE(data_hora) BETWEEN ? AND ?
+                ) x
+            ) p
+            JOIN equipamentos e ON e.id = p.equipamento_id
+            LEFT JOIN (
+                SELECT equipamento_id, fazenda_id, DATE(data_hora) AS data, SUM(hectares) AS total_ha
+                FROM apontamentos
+                WHERE DATE(data_hora) BETWEEN ? AND ?
+                GROUP BY equipamento_id, fazenda_id, DATE(data_hora)
+            ) agro
+            ON agro.equipamento_id = p.equipamento_id
+            AND agro.fazenda_id     = p.fazenda_id
+            AND agro.data           = p.data
+            LEFT JOIN (
+                SELECT equipamento_id, fazenda_id, DATE(data) AS data, SUM(hectares_sgpa) AS total_ha
+                FROM producao_sgpa
+                WHERE DATE(data) BETWEEN ? AND ?
+                GROUP BY equipamento_id, fazenda_id, DATE(data)
+            ) sgpa
+            ON sgpa.equipamento_id = p.equipamento_id
+            AND sgpa.fazenda_id     = p.fazenda_id
+            AND sgpa.data           = p.data
+            LEFT JOIN fazendas f ON f.id = p.fazenda_id
+            ORDER BY p.data, e.nome, f.nome
+            ";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$data_inicio, $data_fim, $data_inicio, $data_fim, $data_inicio, $data_fim, $data_inicio, $data_fim]);
+            $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     } else {
         $sql = "
-        SELECT
-            e.nome AS equipamento_nome,
-            COALESCE(agro.total_ha, 0) AS ha_agro_access,
-            COALESCE(sgpa.total_ha, 0) AS ha_sgpa,
-            DATE(p.data) as data
-        FROM producao_sgpa p
-        JOIN equipamentos e ON p.equipamento_id = e.id
-        LEFT JOIN (
-            SELECT equipamento_id, SUM(hectares) AS total_ha, DATE(data_hora) as data
-            FROM apontamentos
-            WHERE DATE(data_hora) BETWEEN ? AND ?
-            GROUP BY equipamento_id, DATE(data_hora)
-        ) AS agro 
-        ON agro.equipamento_id = p.equipamento_id AND agro.data = DATE(p.data)
-        LEFT JOIN (
-            SELECT equipamento_id, SUM(hectares_sgpa) AS total_ha, DATE(data) as data
-            FROM producao_sgpa
-            WHERE DATE(data) BETWEEN ? AND ?
-            GROUP BY equipamento_id, DATE(data)
-        ) AS sgpa
-        ON sgpa.equipamento_id = p.equipamento_id AND sgpa.data = DATE(p.data)
-        WHERE DATE(p.data) BETWEEN ? AND ?
-        ORDER BY e.nome, DATE(p.data)
-        ";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$data_inicio, $data_fim, $data_inicio, $data_fim, $data_inicio, $data_fim]);
-        $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            SELECT
+                e.nome AS equipamento_nome,
+                COALESCE(agro.total_ha, 0) AS ha_agro_access,
+                COALESCE(sgpa.total_ha, 0) AS ha_sgpa,
+                p.data
+            FROM (
+                -- chaves unificadas (SGPA ∪ Apontamentos)
+                SELECT equipamento_id, data FROM (
+                    SELECT equipamento_id, DATE(data) AS data
+                    FROM producao_sgpa
+                    WHERE DATE(data) BETWEEN ? AND ?
+                    UNION
+                    SELECT equipamento_id, DATE(data_hora) AS data
+                    FROM apontamentos
+                    WHERE DATE(data_hora) BETWEEN ? AND ?
+                ) x
+            ) p
+            JOIN equipamentos e ON e.id = p.equipamento_id
+            LEFT JOIN (
+                SELECT equipamento_id, DATE(data_hora) AS data, SUM(hectares) AS total_ha
+                FROM apontamentos
+                WHERE DATE(data_hora) BETWEEN ? AND ?
+                GROUP BY equipamento_id, DATE(data_hora)
+            ) agro
+            ON agro.equipamento_id = p.equipamento_id
+            AND agro.data           = p.data
+            LEFT JOIN (
+                SELECT equipamento_id, DATE(data) AS data, SUM(hectares_sgpa) AS total_ha
+                FROM producao_sgpa
+                WHERE DATE(data) BETWEEN ? AND ?
+                GROUP BY equipamento_id, DATE(data)
+            ) sgpa
+            ON sgpa.equipamento_id = p.equipamento_id
+            AND sgpa.data           = p.data
+            ORDER BY p.data, e.nome
+            ";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$data_inicio, $data_fim, $data_inicio, $data_fim, $data_inicio, $data_fim, $data_inicio, $data_fim]);
+            $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
 } catch (PDOException $e) {

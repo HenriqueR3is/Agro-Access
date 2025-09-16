@@ -2,114 +2,104 @@
 <?php
 session_start();
 require_once(__DIR__ . '/../../../config/db/conexao.php');
+// "Hoje" no fuso de Brasília (para consultas iniciais)
+$today_br = (new DateTime('now', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
 
 if (!isset($_SESSION['usuario_id']) || $_SESSION['usuario_tipo'] !== 'admin') {
     header("Location: /");
     exit();
 }
 
-// Verifica se a requisição é para a API (via AJAX) para a tabela ou gráfico
 if (isset($_GET['ajax_data'])) {
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
 
-    $date_filter = $_GET['date'] ?? date('Y-m-d');
-    $unidade_filter = $_GET['unidade_id'] ?? null;
-    $operacao_filter = $_GET['operacao_id'] ?? null;
+    // use o dia de Brasília como default
+    $today_br = (new DateTime('now', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
+
+    $date_filter        = $_GET['date'] ?? $today_br;
+    $unidade_filter     = $_GET['unidade_id'] ?? null;
+    $operacao_filter    = $_GET['operacao_id'] ?? null;
     $equipamento_filter = $_GET['equipamento_id'] ?? null;
-    $implemento_filter = $_GET['implemento_id'] ?? null;
-    $type = $_GET['type'] ?? 'table';
+    $implemento_filter  = $_GET['implemento_id'] ?? null;
+    $type               = $_GET['type'] ?? 'table';
 
     if ($type === 'table') {
-        $sql = "SELECT a.data_hora, a.hectares, u.nome AS unidade, us.nome AS usuario, t.nome AS operacao, 
-                       eq.nome AS equipamento, i.nome AS implemento_nome, i.numero_identificacao,
-                       f.nome AS nome_fazenda, f.codigo_fazenda
+        $sql = "SELECT 
+                    a.data_hora,
+                    a.hora_selecionada,
+                    DATE(a.data_hora) AS data_brasilia,
+                    DATE_FORMAT(a.data_hora, '%H:%i') AS hora_brasilia,
+                    a.hectares,
+                    u.nome  AS unidade,
+                    us.nome AS usuario,
+                    t.nome  AS operacao,
+                    eq.nome AS equipamento,
+                    i.nome  AS implemento_nome,
+                    i.numero_identificacao,
+                    f.nome  AS nome_fazenda,
+                    f.codigo_fazenda
                 FROM apontamentos a
-                JOIN unidades u ON a.unidade_id = u.id
-                JOIN usuarios us ON a.usuario_id = us.id
-                JOIN tipos_operacao t ON a.operacao_id = t.id
-                JOIN equipamentos eq ON a.equipamento_id = eq.id
+                JOIN unidades u         ON a.unidade_id     = u.id
+                JOIN usuarios us        ON a.usuario_id     = us.id
+                JOIN tipos_operacao t   ON a.operacao_id    = t.id
+                JOIN equipamentos eq    ON a.equipamento_id = eq.id
                 LEFT JOIN implementos i ON eq.implemento_id = i.id
-                JOIN fazendas f ON a.fazenda_id = f.id
+                JOIN fazendas f         ON a.fazenda_id     = f.id
                 WHERE DATE(a.data_hora) = :date_filter";
-        if ($unidade_filter) {
-            $sql .= " AND a.unidade_id = :unidade_id";
-        }
-        if ($operacao_filter) {
-            $sql .= " AND a.operacao_id = :operacao_id";
-        }
-        if ($equipamento_filter) {
-            $sql .= " AND a.equipamento_id = :equipamento_id";
-        }
-        if ($implemento_filter) {
-            $sql .= " AND eq.implemento_id = :implemento_id";
-        }
+
+        if ($unidade_filter)     { $sql .= " AND a.unidade_id = :unidade_id"; }
+        if ($operacao_filter)    { $sql .= " AND a.operacao_id = :operacao_id"; }
+        if ($equipamento_filter) { $sql .= " AND a.equipamento_id = :equipamento_id"; }
+        if ($implemento_filter)  { $sql .= " AND eq.implemento_id = :implemento_id"; }
+
         $sql .= " ORDER BY a.data_hora DESC";
-        
+
         $stmt = $pdo->prepare($sql);
         $stmt->bindParam(':date_filter', $date_filter);
-        if ($unidade_filter) {
-            $stmt->bindParam(':unidade_id', $unidade_filter);
-        }
-        if ($operacao_filter) {
-            $stmt->bindParam(':operacao_id', $operacao_filter);
-        }
-        if ($equipamento_filter) {
-            $stmt->bindParam(':equipamento_id', $equipamento_filter);
-        }
-        if ($implemento_filter) {
-            $stmt->bindParam(':implemento_id', $implemento_filter);
-        }
+        if ($unidade_filter)     { $stmt->bindParam(':unidade_id', $unidade_filter); }
+        if ($operacao_filter)    { $stmt->bindParam(':operacao_id', $operacao_filter); }
+        if ($equipamento_filter) { $stmt->bindParam(':equipamento_id', $equipamento_filter); }
+        if ($implemento_filter)  { $stmt->bindParam(':implemento_id', $implemento_filter); }
         $stmt->execute();
-        
-        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        echo json_encode($results);
 
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        exit;
     } elseif ($type === 'chart') {
-        $sql = "SELECT eq.nome AS equipamento_nome, SUM(a.hectares) AS total_hectares
+        $sql = "SELECT 
+                    eq.nome AS equipamento_nome, 
+                    SUM(a.hectares) AS total_hectares
                 FROM apontamentos a
                 JOIN equipamentos eq ON a.equipamento_id = eq.id
                 LEFT JOIN implementos i ON eq.implemento_id = i.id
                 WHERE DATE(a.data_hora) = :date_filter";
-        if ($unidade_filter) {
-            $sql .= " AND a.unidade_id = :unidade_id";
-        }
-        if ($operacao_filter) {
-            $sql .= " AND a.operacao_id = :operacao_id";
-        }
-        if ($equipamento_filter) {
-            $sql .= " AND a.equipamento_id = :equipamento_id";
-        }
-        if ($implemento_filter) {
-            $sql .= " AND eq.implemento_id = :implemento_id";
-        }
+
+        if ($unidade_filter)     { $sql .= " AND a.unidade_id = :unidade_id"; }
+        if ($operacao_filter)    { $sql .= " AND a.operacao_id = :operacao_id"; }
+        if ($equipamento_filter) { $sql .= " AND a.equipamento_id = :equipamento_id"; }
+        if ($implemento_filter)  { $sql .= " AND eq.implemento_id = :implemento_id"; }
+
         $sql .= " GROUP BY eq.nome";
-        
+
         $stmt = $pdo->prepare($sql);
         $stmt->bindParam(':date_filter', $date_filter);
-        if ($unidade_filter) {
-            $stmt->bindParam(':unidade_id', $unidade_filter);
-        }
-        if ($operacao_filter) {
-            $stmt->bindParam(':operacao_id', $operacao_filter);
-        }
-        if ($equipamento_filter) {
-            $stmt->bindParam(':equipamento_id', $equipamento_filter);
-        }
-        if ($implemento_filter) {
-            $stmt->bindParam(':implemento_id', $implemento_filter);
-        }
+        if ($unidade_filter)     { $stmt->bindParam(':unidade_id', $unidade_filter); }
+        if ($operacao_filter)    { $stmt->bindParam(':operacao_id', $operacao_filter); }
+        if ($equipamento_filter) { $stmt->bindParam(':equipamento_id', $equipamento_filter); }
+        if ($implemento_filter)  { $stmt->bindParam(':implemento_id', $implemento_filter); }
         $stmt->execute();
-        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $chart_data = array_map(function($row) {
-            $row['total_hectares'] = (float) $row['total_hectares'];
+            $row['total_hectares'] = (float)$row['total_hectares'];
             return $row;
         }, $results);
 
         echo json_encode($chart_data);
+        exit;
+    } else {
+        echo json_encode([]);
+        exit;
     }
-    
-    exit();
 }
 
 require_once __DIR__ . '/../../../app/includes/header.php';
@@ -125,22 +115,33 @@ $default_unidade_id = !empty($unidades_list) ? $unidades_list[0]['id'] : null;
 $default_operacao_id = !empty($operacoes_list) ? $operacoes_list[0]['id'] : null;
 
 // Consulta inicial para a tabela (com "Todas" por padrão)
-$sql_apontamentos = "SELECT a.data_hora, a.hectares, u.nome AS unidade, us.nome AS usuario, t.nome AS operacao, 
-                            eq.nome AS equipamento, i.nome AS implemento_nome, i.numero_identificacao,
-                            f.nome AS nome_fazenda, f.codigo_fazenda
-                     FROM apontamentos a
-                     JOIN unidades u ON a.unidade_id = u.id
-                     JOIN usuarios us ON a.usuario_id = us.id
-                     JOIN tipos_operacao t ON a.operacao_id = t.id
-                     JOIN equipamentos eq ON a.equipamento_id = eq.id
-                     LEFT JOIN implementos i ON eq.implemento_id = i.id
-                     JOIN fazendas f ON a.fazenda_id = f.id
-                     WHERE DATE(a.data_hora) = CURDATE()
-                     ORDER BY a.data_hora DESC";
+$sql_apontamentos = "SELECT 
+                        a.data_hora,
+                        a.hora_selecionada,
+                        DATE(a.data_hora) AS data_brasilia,
+                        DATE_FORMAT(a.data_hora, '%H:%i') AS hora_brasilia,
+                        a.hectares,
+                        u.nome  AS unidade,
+                        us.nome AS usuario,
+                        t.nome  AS operacao, 
+                        eq.nome AS equipamento,
+                        i.nome  AS implemento_nome,
+                        i.numero_identificacao,
+                        f.nome  AS nome_fazenda,
+                        f.codigo_fazenda
+                    FROM apontamentos a
+                    JOIN unidades u         ON a.unidade_id     = u.id
+                    JOIN usuarios us        ON a.usuario_id     = us.id
+                    JOIN tipos_operacao t   ON a.operacao_id    = t.id
+                    JOIN equipamentos eq    ON a.equipamento_id = eq.id
+                    LEFT JOIN implementos i ON eq.implemento_id = i.id
+                    JOIN fazendas f         ON a.fazenda_id     = f.id
+                    WHERE DATE(a.data_hora) = :today_br
+                    ORDER BY a.data_hora DESC";
 $stmt_apontamentos = $pdo->prepare($sql_apontamentos);
+$stmt_apontamentos->bindValue(':today_br', $today_br);
 $stmt_apontamentos->execute();
 $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
-
 ?>
 
 <!DOCTYPE html>
@@ -150,192 +151,13 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Administrativo</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/public/static/css/admin.css">
+    <link rel="stylesheet" href="/public/static/css/admin_dashboard.css">
     <link rel="icon" type="image/x-icon" href="./public/static/favicon.ico">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
-    <style>
-        :root {
-            --primary-green: #2e7d32;
-            --light-green: #4caf50;
-            --dark-green: #1b5e20;
-            --background-color: #f0f4f8;
-            --card-bg: #ffffff;
-            --text-color: #333;
-            --light-text: #666;
-            --border-color: #e0e0e0;
-            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            --transition-speed: 0.4s;
-        }
 
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: var(--background-color);
-            margin: 0;
-            color: var(--text-color);
-        }
-
-        h2 {
-            font-size: 2em;
-            color: var(--primary-green);
-            border-bottom: 3px solid var(--primary-green);
-            padding-bottom: 10px;
-            margin-bottom: 25px;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
-        }
-
-        .card {
-            background-color: var(--card-bg);
-            padding: 30px;
-            border-radius: 16px;
-            box-shadow: var(--shadow);
-            margin-bottom: 25px;
-            transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-        }
-
-        .filters-group {
-            display: flex;
-            gap: 20px;
-            align-items: flex-end;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        .filter-item {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .filters-group label {
-            font-weight: 600;
-            color: var(--light-text);
-        }
-
-        .filters-group input[type="date"],
-        .filters-group select {
-            padding: 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            font-family: 'Poppins', sans-serif;
-            transition: border-color 0.3s, box-shadow 0.3s;
-            background-color: #f9f9f9;
-        }
-        
-        .filters-group input[type="date"]:focus,
-        .filters-group select:focus {
-            outline: none;
-            border-color: var(--primary-green);
-            box-shadow: 0 0 8px rgba(46, 125, 50, 0.2);
-        }
-
-        .chart-container {
-            padding: 20px;
-            background-color: #f9f9f9;
-            border-radius: 12px;
-            box-shadow: inset 0 0 5px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
-        }
-        
-        .tab-navigation {
-            display: flex;
-            border-bottom: 2px solid var(--border-color);
-            margin-bottom: 20px;
-        }
-
-        .tab-button {
-            padding: 12px 25px;
-            cursor: pointer;
-            background-color: #f0f0f0;
-            border: none;
-            border-radius: 8px 8px 0 0;
-            margin-right: 5px;
-            font-weight: 600;
-            color: var(--light-text);
-            transition: all 0.3s ease;
-        }
-
-        .tab-button.active {
-            background-color: var(--card-bg);
-            border-bottom: 2px solid var(--primary-green);
-            color: var(--primary-green);
-            transform: translateY(2px);
-        }
-
-        .tab-button:hover:not(.active) {
-            background-color: #e5e5e5;
-        }
-
-        .tab-content {
-            display: none;
-            animation: fadeIn 0.5s ease forwards;
-        }
-        .tab-content.active {
-            display: block;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .table-container {
-            overflow-x: auto;
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: inset 0 0 5px rgba(0,0,0,0.02);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-        }
-
-        th, td {
-            padding: 15px;
-            border-bottom: 1px solid var(--border-color);
-            transition: background-color 0.3s ease;
-        }
-
-        th {
-            background-color: var(--dark-green);
-            color: white;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        tr:nth-child(even) {
-            background-color: #f8f8f8;
-        }
-
-        tr:hover {
-            background-color: #eef5f9;
-        }
-        
-        .button-excel {
-            background-color: var(--primary-green);
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: 600;
-            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
-        }
-
-        .button-excel:hover {
-            background-color: var(--dark-green);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-        }
-    </style>
 </head>
 <body>
 
@@ -352,7 +174,7 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
         <div class="filters-group">
             <div class="filter-item">
                 <label for="table-date-filter">Data:</label>
-                <input type="date" id="table-date-filter" value="<?php echo date('Y-m-d'); ?>">
+                <input type="date" id="table-date-filter" value="<?php echo htmlspecialchars($today_br); ?>">
             </div>
             <div class="filter-item">
                 <label for="table-unidade-filter">Unidade:</label>
@@ -413,7 +235,7 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
                 <tbody>
                     <?php foreach ($apontamentos as $row): ?>
                         <tr>
-                            <td><?php echo date('H:i', strtotime($row['data_hora'] . ' -3 hours')); ?></td>
+                            <td><?= htmlspecialchars($row['hora_selecionada'] ?: $row['hora_brasilia']) ?></td>
                             <td><?php echo htmlspecialchars($row['unidade']); ?></td>
                             <td><?php echo htmlspecialchars($row['usuario']); ?></td>
                             <td><?php echo htmlspecialchars($row['equipamento']); ?></td>
@@ -440,7 +262,7 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
         <div class="filters-group">
             <div class="filter-item">
                 <label for="chart-date-filter">Data:</label>
-                <input type="date" id="chart-date-filter" value="<?php echo date('Y-m-d'); ?>">
+                <input type="date" id="chart-date-filter" value="<?php echo htmlspecialchars($today_br); ?>">
             </div>
             <div class="filter-item">
                 <label for="chart-unidade-filter">Unidade:</label>
@@ -670,35 +492,37 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
     }
 
 function updateTable(apontamentos) {
-    const tbody = document.getElementById('apontamentos-table').querySelector('tbody');
-    tbody.innerHTML = '';
-    if (apontamentos.length === 0) {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="9" style="text-align: center;">Nenhum apontamento encontrado para os filtros selecionados.</td>`;
-        tbody.appendChild(row);
-        return;
+  const tbody = document.getElementById('apontamentos-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  if (apontamentos.length === 0) {
+    const row = document.createElement('tr');
+    row.innerHTML = `<td colspan="9" style="text-align: center;">Nenhum apontamento encontrado para os filtros selecionados.</td>`;
+    tbody.appendChild(row);
+    return;
+  }
+
+  apontamentos.forEach(row => {
+    // Escolha de hora: hora_selecionada > hora_brasilia > fallback do data_hora (convertendo de UTC p/ Brasília)
+    let hora = row.hora_selecionada || row.hora_brasilia;
+    if (!hora && row.data_hora) {
+      const d = new Date((row.data_hora.includes('T') ? row.data_hora : row.data_hora.replace(' ', 'T')) + 'Z');
+      hora = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }).format(d);
     }
 
-    apontamentos.forEach(row => {
-        // Ajusta hora (-3h)
-        const d = new Date(row.data_hora);
-        d.setHours(d.getHours() - 3);
-        const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-        const newRow = document.createElement('tr');
-        newRow.innerHTML = `
-            <td>${hora}</td>
-            <td>${row.unidade}</td>
-            <td>${row.usuario}</td>
-            <td>${row.equipamento}</td>
-            <td>${row.implemento_nome ? row.implemento_nome + ' (' + row.numero_identificacao + ')' : 'N/A'}</td>
-            <td>${parseFloat(row.hectares).toFixed(2).replace('.', ',')}</td>
-            <td>${row.codigo_fazenda}</td>
-            <td>${row.nome_fazenda}</td>
-            <td>${row.operacao}</td>
-        `;
-        tbody.appendChild(newRow);
-    });
+    const newRow = document.createElement('tr');
+    newRow.innerHTML = `
+      <td>${hora || '--:--'}</td>
+      <td>${row.unidade}</td>
+      <td>${row.usuario}</td>
+      <td>${row.equipamento}</td>
+      <td>${row.implemento_nome ? row.implemento_nome + ' (' + row.numero_identificacao + ')' : 'N/A'}</td>
+      <td>${parseFloat(row.hectares).toFixed(2).replace('.', ',')}</td>
+      <td>${row.codigo_fazenda}</td>
+      <td>${row.nome_fazenda}</td>
+      <td>${row.operacao}</td>
+    `;
+    tbody.appendChild(newRow);
+  });
 }
 
     document.addEventListener('DOMContentLoaded', function() {
