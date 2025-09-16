@@ -735,46 +735,69 @@ function updateTable(apontamentos) {
             .catch(error => console.error('Erro ao buscar dados para exportação:', error));
     });
 
-    function exportToExcel(data, date) {
-        // Criar workbook e worksheet
-        const wb = XLSX.utils.book_new();
-        
-        // Preparar dados formatados
-        const excelData = data.map(row => ({
-            'Hora': new Date(row.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            'Unidade': row.unidade,
-            'Usuário': row.usuario,
-            'Equipamento': row.equipamento,
-            'Implemento': row.numero_identificacao || 'N/A',
-            'Hectares': parseFloat(row.hectares).toFixed(2).replace('.', ','),
-            'Código Fazenda': row.codigo_fazenda,
-            'Nome Fazenda': row.nome_fazenda,
-            'Operação': row.operacao
-        }));
+function exportToExcel(data, date) {
+  // helpers: tratar "YYYY-MM-DD HH:mm:ss" como UTC
+  const parseUTC = (s) => s
+    ? new Date((s.includes('T') ? s : s.replace(' ', 'T')) + (s.endsWith('Z') ? '' : 'Z'))
+    : null;
 
-        // Converter para worksheet
-        const ws = XLSX.utils.json_to_sheet(excelData);
-        
-        // Ajustar largura das colunas
-        const colWidths = [
-            { wch: 10 }, // Hora
-            { wch: 20 }, // Unidade
-            { wch: 20 }, // Usuário
-            { wch: 20 }, // Equipamento
-            { wch: 25 }, // Implemento
-            { wch: 15 }, // Hectares
-            { wch: 20 }, // Código Fazenda
-            { wch: 30 }, // Nome Fazenda
-            { wch: 20 }  // Operação
-        ];
-        ws['!cols'] = colWidths;
-        
-        // Adicionar worksheet ao workbook
-        XLSX.utils.book_append_sheet(wb, ws, "Apontamentos");
-        
-        // Gerar arquivo Excel
-        XLSX.writeFile(wb, `apontamentos_${date}.xlsx`);
-    }
+  const fmtBRDate = (d) => new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric'
+  }).format(d);
+
+  const fmtBRTime = (d) => new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit'
+  }).format(d);
+
+  // ======= AQUI é o que muda: Data e Hora “certas” =======
+  const excelData = data.map(row => {
+    // Data: preferir a que já veio do backend (data_brasilia)
+    const dataStr = row.data_brasilia
+      ? fmtBRDate(new Date(row.data_brasilia + 'T00:00:00'))
+      : (row.data_hora ? fmtBRDate(parseUTC(row.data_hora)) : '');
+
+    // Hora: preferir hora_selecionada; fallback hora_brasilia; senão converte de UTC
+    const horaStr = row.hora_selecionada
+      ? row.hora_selecionada
+      : (row.hora_brasilia
+          ? row.hora_brasilia
+          : (row.data_hora ? fmtBRTime(parseUTC(row.data_hora)) : '--:--'));
+
+    return {
+      'Data': dataStr,
+      'Hora': horaStr,
+      'Unidade': row.unidade,
+      'Usuário': row.usuario,
+      'Equipamento': row.equipamento,
+      'Implemento': row.numero_identificacao || 'N/A',
+      'Hectares': parseFloat(row.hectares).toFixed(2).replace('.', ','),
+      'Código Fazenda': row.codigo_fazenda,
+      'Nome Fazenda': row.nome_fazenda,
+      'Operação': row.operacao
+    };
+  });
+  // ================================================
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(excelData);
+
+  // larguras (incluí a coluna "Data")
+  ws['!cols'] = [
+    { wch: 10 }, // Data
+    { wch: 8 },  // Hora
+    { wch: 20 }, // Unidade
+    { wch: 20 }, // Usuário
+    { wch: 20 }, // Equipamento
+    { wch: 25 }, // Implemento
+    { wch: 12 }, // Hectares
+    { wch: 18 }, // Código Fazenda
+    { wch: 28 }, // Nome Fazenda
+    { wch: 16 }  // Operação
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, "Apontamentos");
+  XLSX.writeFile(wb, `apontamentos_${date}.xlsx`);
+}
 
         // Carregar dados iniciais
         fetchChartData();

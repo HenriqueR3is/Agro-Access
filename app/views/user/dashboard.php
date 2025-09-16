@@ -74,7 +74,7 @@ try {
     $stmt_daily = $pdo->prepare("
         SELECT SUM(hectares) as total_ha, COUNT(*) as total_entries
         FROM apontamentos
-        WHERE usuario_id = ? AND DATE(CONVERT_TZ(data_hora, '+00:00', '-03:00')) = ?
+        WHERE usuario_id = ? AND DATE(data_hora) = ?
     ");
     $stmt_daily->execute([$usuario_id, $data_hoje]);
     $daily_data = $stmt_daily->fetch(PDO::FETCH_ASSOC);
@@ -85,8 +85,9 @@ try {
     $stmt_monthly = $pdo->prepare("
         SELECT SUM(hectares) as total_ha, COUNT(*) as total_entries
         FROM apontamentos
-        WHERE usuario_id = ? AND MONTH(CONVERT_TZ(data_hora, '+00:00', '-03:00')) = ? 
-        AND YEAR(CONVERT_TZ(data_hora, '+00:00', '-03:00')) = ?
+        WHERE usuario_id = ? 
+        AND MONTH(data_hora) = ?
+        AND YEAR(data_hora) = ?
     ");
     $stmt_monthly->execute([$usuario_id, $mes_atual, $ano_atual]);
     $monthly_data = $stmt_monthly->fetch(PDO::FETCH_ASSOC);
@@ -163,29 +164,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
         // Obter a data atual no fuso horário de Brasília
         $data_hoje_brasilia = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
 
-// Dividir a hora selecionada para análise
-$hora_selecionada = explode(':', $report_time);
-$hora = (int)$hora_selecionada[0];
+        // Dividir a hora selecionada para análise
+        $hora_selecionada = explode(':', $report_time);
+        $hora = (int)$hora_selecionada[0];
         
-// Se a hora selecionada for menor que 6 (madrugada), considerar que é do próximo dia
-// Isso porque nosso primeiro horário do turno é 06:00
-if ($hora < 6) {
-    // Adiciona um dia à data
-    $data_hoje_brasilia->modify('+1 day');
-}
+        // CORREÇÃO: Sempre usar a data atual, independentemente da hora
+        // A data deve ser sempre a data atual, não importa se é madrugada
+        $data_hora_brasilia_string = $data_hoje_brasilia->format('Y-m-d') . ' ' . $report_time . ':00';
 
-// Combina a data (ajustada se necessário) com a hora selecionada
-$data_hora_brasilia_string = $data_hoje_brasilia->format('Y-m-d') . ' ' . $report_time . ':00';
+        // Cria o objeto DateTime com a data/hora e o fuso de Brasília
+        $datetime_brasilia = new DateTime($data_hora_brasilia_string, new DateTimeZone('America/Sao_Paulo'));
 
-// Cria o objeto DateTime com a data/hora e o fuso de Brasília
-$datetime_brasilia = new DateTime($data_hora_brasilia_string, new DateTimeZone('America/Sao_Paulo'));
+        // Salva no banco exatamente em hora local (sem converter para UTC)
+        $data_hora_local = $datetime_brasilia->format('Y-m-d H:i:s');
 
-// Converte o objeto para UTC antes de salvar no banco
-        $datetime_utc = clone $datetime_brasilia;
-        $datetime_utc->setTimezone(new DateTimeZone('UTC'));
-        $data_hora_utc = $datetime_utc->format('Y-m-d H:i:s');
-        
-        // Inserir o apontamento no banco de dados, incluindo a hora selecionada
         $stmt = $pdo->prepare("
             INSERT INTO apontamentos
             (usuario_id, unidade_id, equipamento_id, operacao_id, hectares, data_hora, hora_selecionada, observacoes, fazenda_id)
@@ -197,16 +189,14 @@ $datetime_brasilia = new DateTime($data_hora_brasilia_string, new DateTimeZone('
             $equipamento_id,
             $operacao_id,
             $hectares,
-            $data_hora_utc, // Usando data/hora em UTC
-            $report_time, // Salvando a hora selecionada separadamente
+            $data_hora_local, // <-- agora vai local
+            $report_time,
             $observacoes,
             $fazenda_id
         ]);
-        
-        // Converter a hora salva (UTC) de volta para Brasília para a mensagem
-        $datetime_saved = new DateTime($data_hora_utc, new DateTimeZone('UTC'));
-        $datetime_saved->setTimezone(new DateTimeZone('America/Sao_Paulo'));
-        $hora_salva_brasilia = $datetime_saved->format('H:i');
+
+        // Feedback: já está em BRT
+        $hora_salva_brasilia = $datetime_brasilia->format('H:i');
 
         $_SESSION['feedback_message'] = "Apontamento salvo com sucesso para às $hora_salva_brasilia! (selecionado: " . $_POST['report_time'] . ")";
         
@@ -683,61 +673,59 @@ $('#operation').on('change', function() {
   $('#dailyProgressText').text(`${Math.round(dailyPercentage)}%`);
   // =======================================================================
 
-  // ======================= LISTAGEM ÚLTIMOS LANÇAMENTOS =======================
-  function fetchApontamentos(date) {
-    const userId = <?php echo json_encode($_SESSION['usuario_id']); ?>;
-    $('#recent-entries-list').html('<div style="text-align: center;">Carregando...</div>');
-    $('#no-entries-message').hide();
+// ======================= LISTAGEM ÚLTIMOS LANÇAMENTOS =======================
+function fetchApontamentos(date) {
+  const userId = <?php echo json_encode($_SESSION['usuario_id']); ?>;
+  $('#recent-entries-list').html('<div style="text-align: center;">Carregando...</div>');
+  $('#no-entries-message').hide();
 
-    $.ajax({
-      url: '/apontamentos',
-      type: 'GET',
-      data: { date: date, usuario_id: userId },
-      dataType: 'json',
-      success: function(response) {
-        const list = $('#recent-entries-list');
-        list.empty();
-        if (response.length > 0) {
-          response.forEach(function(entry) {
-            const entryJson = JSON.stringify(entry);
+  $.ajax({
+    url: '/apontamentos',
+    type: 'GET',
+    data: { date: date, usuario_id: userId },
+    dataType: 'json',
+    success: function(response) {
+      const list = $('#recent-entries-list');
+      list.empty();
 
-            const dataHoraUTC = new Date(entry.data_hora + 'Z');
-            const options = {
-              timeZone: 'America/Sao_Paulo',
-              hour: '2-digit',
-              minute: '2-digit'
-            };
-            const formatter = new Intl.DateTimeFormat('pt-BR', options);
-            const horaBrasilia = formatter.format(dataHoraUTC);
+      if (Array.isArray(response) && response.length > 0) {
+        response.forEach(function(entry) {
+          const entryJson = JSON.stringify(entry);
 
-            const listItem = `
-              <li class="entry-item" data-entry-id="${entry.id}" data-entry='${entryJson}'>
-                <div class="entry-details">
-                  <strong>${entry.equipamento_nome}</strong>
-                  <p>${entry.unidade_nome} - ${entry.operacao_nome}</p>
-                  <small>Hectares: ${entry.hectares} | Hora: ${horaBrasilia}</small>
-                </div>
-                <div class="entry-action">
-                  <button class="open-modal-btn">Detalhes</button>
-                </div>
-              </li>
-            `;
-            list.append(listItem);
-          });
-        } else {
-          $('#no-entries-message').show();
-        }
-      },
-      error: function() {
-        $('#recent-entries-list').html('<div style="text-align: center; color: red;">Erro ao carregar os apontamentos.</div>');
+          // 1) Preferir hora_selecionada (vem "HH:MM")
+          // 2) Fallback: extrair "HH:MM" de "YYYY-MM-DD HH:MM:SS"
+          const horaTexto = entry.hora_selecionada
+            ? String(entry.hora_selecionada).slice(0, 5)
+            : (entry.data_hora ? String(entry.data_hora).replace('T',' ').slice(11, 16) : '--:--');
+
+          const listItem = `
+            <li class="entry-item" data-entry-id="${entry.id}" data-entry='${entryJson}'>
+              <div class="entry-details">
+                <strong>${entry.equipamento_nome ?? ''}</strong>
+                <p>${entry.unidade_nome ?? ''} - ${entry.operacao_nome ?? ''}</p>
+                <small>Hectares: ${entry.hectares ?? 0} | Hora: ${horaTexto}</small>
+              </div>
+              <div class="entry-action">
+                <button class="open-modal-btn">Detalhes</button>
+              </div>
+            </li>
+          `;
+          list.append(listItem);
+        });
+      } else {
+        $('#no-entries-message').show();
       }
-    });
-  }
-
-  $('#filter-date').on('change', function() {
-    fetchApontamentos($(this).val());
+    },
+    error: function() {
+      $('#recent-entries-list').html('<div style="text-align: center; color: red;">Erro ao carregar os apontamentos.</div>');
+    }
   });
-  fetchApontamentos($('#filter-date').val());
+}
+
+$('#filter-date').on('change', function() {
+  fetchApontamentos($(this).val());
+});
+fetchApontamentos($('#filter-date').val());
   // ===========================================================================
 
   // ======================= MODAL DETALHES =======================
