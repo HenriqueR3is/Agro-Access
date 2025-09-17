@@ -8,7 +8,8 @@ if (!isset($_SESSION['usuario_id'])) {
     exit();
 }
 
-header('Content-Type: application/json; charset=utf-8');
+header('Content-Type: application/json; charset=UTF-8');
+echo json_encode($data, JSON_UNESCAPED_UNICODE);
 
 try {
     $usuario_id = (int) $_SESSION['usuario_id'];

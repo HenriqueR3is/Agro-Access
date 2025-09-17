@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db/conexao.php';
 
 if (!isset($_SESSION['usuario_id'])) {
     http_response_code(401);
-    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Type: application/json; charset=UTF-8');
     echo json_encode(['success' => false, 'error' => 'Não autenticado']);
     exit();
 }
@@ -12,7 +12,7 @@ if (!isset($_SESSION['usuario_id'])) {
 $operacao_id = filter_input(INPUT_GET, 'operacao_id', FILTER_VALIDATE_INT);
 if (!$operacao_id) {
     http_response_code(400);
-    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Type: application/json; charset=UTF-8');
     echo json_encode(['success' => false, 'error' => 'operacao_id inválido']);
     exit();
 }
@@ -48,7 +48,7 @@ try {
     $stmt->execute($params);
     $equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Type: application/json; charset=UTF-8');
     echo json_encode([
         'success' => true,
         'equipamentos' => $equipamentos
@@ -56,6 +56,6 @@ try {
 
 } catch (PDOException $e) {
     http_response_code(500);
-    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Type: application/json; charset=UTF-8');
     echo json_encode(['success' => false, 'error' => 'Erro DB: ' . $e->getMessage()]);
 }

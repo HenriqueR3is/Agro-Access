@@ -173,7 +173,7 @@ try {
 }
 
 // Horas fixas do dropdown
-$report_hours = ['06:00','08:00','10:00','12:00','14:00','16:00','18:00','20:00','22:00','00:00','02:00','04:00'];
+$report_hours = ['02:00','04:00','06:00','08:00','10:00','12:00','14:00','16:00','18:00','20:00','22:00','00:00'];
 
 // Salvar novo apontamento (salvando data_hora em BRT/local)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {

@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     // Helper rápido pra responder JSON e sair
     $jsonOut = function(array $payload) {
-        header('Content-Type: application/json; charset=utf-8');
+        header('Content-Type: application/json; charset=UTF-8');
         echo json_encode($payload);
         exit();
     };

@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db/conexao.php';
 
 if (!isset($_SESSION['usuario_id'])) {
     http_response_code(401);
-    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Type: application/json; charset=UTF-8');
     echo json_encode(['success' => false, 'error' => 'Não autenticado']);
     exit();
 }
@@ -40,11 +40,11 @@ try {
     $stmt->execute($params);
     $fazendas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Type: application/json; charset=UTF-8');
     echo json_encode(['success' => true, 'fazendas' => $fazendas]);
 
 } catch (PDOException $e) {
     http_response_code(500);
-    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Type: application/json; charset=UTF-8');
     echo json_encode(['success' => false, 'error' => 'Erro DB: ' . $e->getMessage()]);
 }

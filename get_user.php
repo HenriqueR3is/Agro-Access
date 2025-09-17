@@ -41,7 +41,7 @@ try {
     $operacoes = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
 
     // Retornar os dados em JSON
-    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Type: application/json; charset=UTF-8');
     echo json_encode([
         'user' => $user,
         'unidades' => $unidades,
