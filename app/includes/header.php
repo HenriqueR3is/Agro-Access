@@ -31,7 +31,9 @@
                 <a href="admin_users" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_users.php' ? 'active' : ''; ?>">Gestão de Usuários</a>
                 <a href="admin_fleet" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_fleet.php' ? 'active' : ''; ?>">Controle de Frota</a>
                 <a href="fazendas" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_farms.php' ? 'active' : ''; ?>">Fazendas e Unidades</a>
+                                <a href="metas" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_metas.php' ? 'active' : ''; ?>">Controle Metas</a>
                 <a href="comparativo" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_comparativo.php' ? 'active' : ''; ?>">Comparativo de Produção</a>
+
             </div>
         </div>
         <div class="container">

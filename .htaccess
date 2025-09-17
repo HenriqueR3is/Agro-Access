@@ -24,3 +24,5 @@ RewriteRule ^get_fazenda_por_id$ app/views/admin/get_fazenda_por_id.php [L]
 RewriteRule ^fleet_actions$ app/views/admin/fleet_actions.php [L]
 RewriteRule ^salvafda$ app/views/admin/salvar_fazenda.php [L]
 RewriteRule ^importar_fazendas$ app/views/admin/importar_fazendas_csv.php [L]
+
+RewriteRule ^metas$ app/views/admin/admin_metas.php [L]

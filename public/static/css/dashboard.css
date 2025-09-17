@@ -639,3 +639,32 @@
   color: #0d8d52;
 }
 
+.goals-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+.goal-card {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+}
+.goal-card h4 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.2em;
+    color: #00796b;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 10px;
+}
+.goal-details p {
+    margin: 5px 0;
+}
+.goal-details strong {
+    color: #333;
+}
+
