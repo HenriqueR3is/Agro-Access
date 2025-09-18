@@ -2,53 +2,41 @@
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
-if (!isset($_SESSION['usuario_id'])) {
+header('Content-Type: application/json; charset=UTF-8');
+
+if (!isset($_SESSION['usuario_id']) || ($_SESSION['usuario_tipo'] ?? '') !== 'admin') {
     http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'Acesso não autorizado']);
+    echo json_encode(['error' => 'Acesso não autorizado']);
     exit();
 }
 
-header('Content-Type: application/json; charset=UTF-8');
-echo json_encode($data, JSON_UNESCAPED_UNICODE);
+$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+if (!$id) {
+    http_response_code(400);
+    echo json_encode(['error' => 'ID inválido']);
+    exit();
+}
 
 try {
-    $usuario_id = (int) $_SESSION['usuario_id'];
-    $tipo       = $_SESSION['usuario_tipo'] ?? 'operador';
+    $stmt = $pdo->prepare("
+        SELECT 
+          id, nome, codigo_fazenda, unidade_id, localizacao,
+          distancia_terra, distancia_asfalto, distancia_total
+        FROM fazendas
+        WHERE id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Descobre a unidade do usuário
-    $stmt = $pdo->prepare("SELECT unidade_id FROM usuarios WHERE id = ?");
-    $stmt->execute([$usuario_id]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    $unidade_id_usuario = $user['unidade_id'] ?? null;
-
-    // Admin pode opcionalmente filtrar por unidade via ?unidade_id=#
-    $unidade_param = filter_input(INPUT_GET, 'unidade_id', FILTER_VALIDATE_INT);
-
-    if ($tipo === 'admin') {
-        if ($unidade_param) {
-            $stmtF = $pdo->prepare("SELECT id, nome, codigo_fazenda FROM fazendas WHERE unidade_id = ? ORDER BY nome");
-            $stmtF->execute([$unidade_param]);
-        } else {
-            $stmtF = $pdo->query("SELECT id, nome, codigo_fazenda FROM fazendas ORDER BY nome");
-        }
-    } else {
-        // Operador (ou coordenador) recebe apenas as fazendas da própria unidade
-        if (!$unidade_id_usuario) {
-            echo json_encode(['success' => true, 'unidade_id' => null, 'fazendas' => []]);
-            exit();
-        }
-        $stmtF = $pdo->prepare("SELECT id, nome, codigo_fazenda FROM fazendas WHERE unidade_id = ? ORDER BY nome");
-        $stmtF->execute([$unidade_id_usuario]);
+    if (!$row) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Registro não encontrado']);
+        exit();
     }
 
-    $fazendas = $stmtF->fetchAll(PDO::FETCH_ASSOC);
-    echo json_encode([
-        'success'    => true,
-        'unidade_id' => $tipo === 'admin' ? ($unidade_param ?: null) : $unidade_id_usuario,
-        'fazendas'   => $fazendas
-    ]);
-
+    echo json_encode($row, JSON_UNESCAPED_UNICODE);
 } catch (PDOException $e) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Erro no banco de dados: ' . $e->getMessage()]);
+    echo json_encode(['error' => 'Erro no banco de dados: ' . $e->getMessage()]);
 }

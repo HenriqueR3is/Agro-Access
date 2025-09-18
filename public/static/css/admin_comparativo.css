@@ -128,3 +128,15 @@
     height: 100% !important;
 }
 
+.card-header .flex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: end;
+}
+.card-header label { white-space: nowrap; }
+.card-header .form-input, .card-header select { min-width: 160px; }
+@media (max-width: 1200px) {
+  .card-header .btn { width: 100%; }
+}
+
