@@ -2,28 +2,13 @@
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
-// Verificar se o usuário é admin
-$_SESSION['usuario_tipo'] = strtolower($row['tipo'] ?? '');
+$tipoSess = strtolower($_SESSION['usuario_tipo'] ?? '');
+$ADMIN_LIKE = ['admin','cia_admin','cia_dev'];
 
-switch ($_SESSION['usuario_tipo']) {
-  case 'cia_user':
-  case 'cia_admin':
-  case 'cia_dev':
-    header('Location: /dashboard'); // CIA sempre cai no portal unificado
-    break;
-
-  case 'admin':
-    header('Location: /admin_dashboard'); // admin “clássico”
-    break;
-
-  case 'coordenador':
-  case 'operador':
-  default:
-    header('Location: /user_dashboard'); // campo
-    break;
+if (!isset($_SESSION['usuario_id']) || !in_array($tipoSess, $ADMIN_LIKE, true)) {
+    header("Location: /");
+    exit();
 }
-exit;
-
 
 if (!isset($_GET['id'])) {
     echo json_encode(['error' => 'ID do usuário não fornecido']);
@@ -68,3 +53,4 @@ try {
 } catch (PDOException $e) {
     echo json_encode(['error' => 'Erro no banco de dados: ' . $e->getMessage()]);
 }
+

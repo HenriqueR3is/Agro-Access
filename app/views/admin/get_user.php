@@ -2,9 +2,11 @@
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
-if (!isset($_SESSION['usuario_id']) || strtolower($_SESSION['usuario_tipo']) !== 'admin') {
-    http_response_code(403);
-    echo json_encode(['error' => 'Acesso negado']);
+$tipoSess = strtolower($_SESSION['usuario_tipo'] ?? '');
+$ADMIN_LIKE = ['admin','cia_admin','cia_dev'];
+
+if (!isset($_SESSION['usuario_id']) || !in_array($tipoSess, $ADMIN_LIKE, true)) {
+    header("Location: /");
     exit();
 }
 

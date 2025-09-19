@@ -4,7 +4,10 @@ require_once(__DIR__ . '/../../../config/db/conexao.php');
 // "Hoje" no fuso de Brasília (para consultas iniciais)
 $today_br = (new DateTime('now', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
 
-if (!isset($_SESSION['usuario_id']) || $_SESSION['usuario_tipo'] !== 'admin') {
+$tipoSess = strtolower($_SESSION['usuario_tipo'] ?? '');
+$ADMIN_LIKE = ['admin','cia_admin','cia_dev'];
+
+if (!isset($_SESSION['usuario_id']) || !in_array($tipoSess, $ADMIN_LIKE, true)) {
     header("Location: /");
     exit();
 }

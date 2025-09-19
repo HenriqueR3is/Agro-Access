@@ -1,6 +1,5 @@
 <?php
 session_start();
-$_SESSION['usuario_tipo'] = strtolower($row['tipo'] ?? '');
 
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
@@ -21,9 +20,9 @@ require_once __DIR__ . '/../../../app/includes/header.php';
       <ul>
         <li><a href="/admin_dashboard">Admin Dashboard</a></li>
         <li><a href="/user_dashboard">User Dashboard</a></li>
-        <li><a href="http://192.168.0.10:8080">SGPA</a></li>
-        <li><a href="http://192.168.0.11:3000">Sistema X</a></li>
-        <li><a href="http://192.168.0.12">Relatórios BI</a></li>
+        <li><a href="#">SGPA</a></li>
+        <li><a href="#">Sistema X</a></li>
+        <li><a href="#">Relatórios BI</a></li>
       </ul>
     </nav>
   </aside>
@@ -40,12 +39,12 @@ require_once __DIR__ . '/../../../app/includes/header.php';
       <div class="card">
         <h3>SGPA</h3>
         <p>Apontamentos e produção</p>
-        <a href="http://192.168.0.10:8080" target="_blank" class="btn">Acessar</a>
+        <a href="#" target="_blank" class="btn">Acessar</a>
       </div>
       <div class="card">
         <h3>Relatórios BI</h3>
         <p>Painéis de indicadores</p>
-        <a href="http://192.168.0.12" target="_blank" class="btn">Acessar</a>
+        <a href="#" target="_blank" class="btn">Acessar</a>
       </div>
       <div class="card">
         <h3>Administração</h3>
