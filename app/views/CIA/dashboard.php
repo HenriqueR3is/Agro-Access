@@ -55,4 +55,13 @@ require_once __DIR__ . '/../../../app/includes/header.php';
   </main>
 </div>
 
+<!-- Créditos -->
+<div class="signature-credit">
+  <p class="sig-text">
+    Desenvolvido por 
+    <span class="sig-name">Bruno Carmo</span> & 
+    <span class="sig-name">Henrique Reis</span>
+  </p>
+</div>
+
 <?php require_once __DIR__ . '/../../../app/includes/footer.php'; ?>

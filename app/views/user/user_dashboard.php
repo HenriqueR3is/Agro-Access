@@ -247,8 +247,9 @@ $total_monthly_entries  = array_sum(array_map(fn($r)=>$r['total_entries'] ?? 0, 
         </div>
         <div class="user-info">
             <span>Olá, <strong><?php echo htmlspecialchars($username); ?></strong>! (<?php echo htmlspecialchars($user_role); ?>)</span>
-            <?php if ($user_role === 'admin'): ?>
-                <a href="/metas" class="admin-btn">Gerenciar Metas</a>
+            <?php if ($user_role === 'admin' || 'cia_dev'): ?>
+                <a href="/metas" class="admin-btn">Metas</a>
+                <a href="/admin_dashboard" class="admin-btn">Back</a>
             <?php endif; ?>
             <a href="/" class="logout-btn">Sair</a>
         </div>
