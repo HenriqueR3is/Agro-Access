@@ -9,7 +9,8 @@ RewriteRule ^ - [L]
 # Rotas amigáveis (páginas)
 RewriteRule ^$ index.php [L]
 RewriteRule ^login$ index.php [L]
-RewriteRule ^dashboard$ app/views/user/dashboard.php [L]
+RewriteRule ^dashboard$ app/views/CIA/dashboard.php [L]
+RewriteRule ^user_dashboard$ app/views/user/user_dashboard.php [L]
 RewriteRule ^admin_dashboard$ app/views/admin/admin_dashboard.php [L]
 RewriteRule ^admin_users$ app/views/admin/admin_users.php [L]
 RewriteRule ^admin_fleet$ app/views/admin/admin_fleet.php [L]
@@ -26,3 +27,15 @@ RewriteRule ^salvafda$ app/views/admin/salvar_fazenda.php [L]
 RewriteRule ^importar_fazendas$ app/views/admin/importar_fazendas_csv.php [L]
 
 RewriteRule ^metas$ app/views/admin/admin_metas.php [L]
+
+# ============================
+# Página 404 personalizada
+# ============================
+ErrorDocument 404 /erro404.html
+
+# ============================
+# Bloquear acessos fora das rotas definidas
+# ============================
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ erro404.html [L]

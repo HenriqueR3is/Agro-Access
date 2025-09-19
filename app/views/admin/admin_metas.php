@@ -3,9 +3,13 @@ session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
 // Verificação de permissão de admin
-if (!isset($_SESSION['usuario_tipo']) || $_SESSION['usuario_tipo'] !== 'admin') {
-    header("Location: /dashboard");
-    exit();
+if (!isset($_SESSION['usuario_id'])) { header('Location: /login'); exit(); }
+
+$role = strtolower($_SESSION['usuario_tipo'] ?? '');
+$ADMIN_LIKE = ['admin','cia_admin','cia_dev'];
+if (!in_array($role, $ADMIN_LIKE, true)) {
+  header('Location: /'); // ou /user_dashboard
+  exit();
 }
 
 // Inclui o cabeçalho compartilhado

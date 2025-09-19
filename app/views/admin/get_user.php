@@ -15,6 +15,13 @@ if (!$user_id) {
     exit();
 }
 
+$user_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+if (!$user_id) {
+    http_response_code(400);
+    echo json_encode(['error' => 'ID inválido']);
+    exit();
+}
+
 try {
     // Dados do usuário
     $stmt = $pdo->prepare("SELECT id, nome, email, tipo, ativo FROM usuarios WHERE id = :id");

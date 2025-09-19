@@ -19,7 +19,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             if ($usuario['tipo'] === 'admin') {
                 header("Location: /admin_dashboard");
-            } else {
+            } else if ($usuario['tipo'] === 'operador') {
+                header("Location: /user_dashboard");
+            } else if ($usuario['tipo'] === 'cia_admin') {
+                header("Location: /dashboard");
+            } else if ($usuario['tipo'] === 'cia_user') {
+                header("Location: /dashboard");
+            } else if ($usuario['tipo'] === 'cia_dev') {
                 header("Location: /dashboard");
             }
             exit;

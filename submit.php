@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'dh' => $data_hora
     ]);
 
-    header("Location: /app/views/user/dashboard.php");
+    header("Location: /app/views/user/user_dashboard.php");
  // Ou: $_SESSION['is_admin'] ? 'admin_dashboard.php' : 'operator_dashboard.php'
     exit();
 }

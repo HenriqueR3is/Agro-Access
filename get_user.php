@@ -3,10 +3,27 @@ session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
 // Verificar se o usuário é admin
-if (!isset($_SESSION['usuario_id']) || strtolower($_SESSION['usuario_tipo']) !== 'admin') {
-    echo json_encode(['error' => 'Acesso não autorizado']);
-    exit();
+$_SESSION['usuario_tipo'] = strtolower($row['tipo'] ?? '');
+
+switch ($_SESSION['usuario_tipo']) {
+  case 'cia_user':
+  case 'cia_admin':
+  case 'cia_dev':
+    header('Location: /dashboard'); // CIA sempre cai no portal unificado
+    break;
+
+  case 'admin':
+    header('Location: /admin_dashboard'); // admin “clássico”
+    break;
+
+  case 'coordenador':
+  case 'operador':
+  default:
+    header('Location: /user_dashboard'); // campo
+    break;
 }
+exit;
+
 
 if (!isset($_GET['id'])) {
     echo json_encode(['error' => 'ID do usuário não fornecido']);

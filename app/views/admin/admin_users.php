@@ -23,20 +23,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     try {
         $action = $_POST['action'] ?? '';
-
+        $TIPOS_VALIDOS = ['operador','coordenador','admin','cia_user','cia_admin','cia_dev'];
         if ($action === 'add_user' || $action === 'edit_user') {
             $nome  = trim($_POST['nome'] ?? '');
             $email = trim($_POST['email'] ?? '');
-            $tipo  = trim($_POST['tipo'] ?? 'operador');
+            $tipo  = strtolower(trim($_POST['tipo'] ?? 'operador'));
             $ativo = isset($_POST['ativo']) ? 1 : 0;
 
             $unidades  = array_values(array_filter(array_map('intval', $_POST['unidades']  ?? [])));
             $operacoes = array_values(array_filter(array_map('intval', $_POST['operacoes'] ?? [])));
             $unidade_principal = $unidades[0] ?? null;
 
-            if ($nome === '' || $email === '' || $tipo === '') {
-                if ($isAjax) $jsonOut(['success' => false, 'error' => 'Preencha nome, e-mail e tipo.']);
-                $_SESSION['error_message'] = "Preencha nome, e-mail e tipo.";
+            if ($nome === '' || $email === '') {
+                if ($isAjax) $jsonOut(['success' => false, 'error' => 'Preencha nome e e-mail.']);
+                $_SESSION['error_message'] = "Preencha nome e e-mail.";
+                header("Location: /admin_users");
+                exit();
+            }
+            if (!in_array($tipo, $TIPOS_VALIDOS, true)) {
+                if ($isAjax) $jsonOut(['success' => false, 'error' => 'Tipo de usuário inválido.']);
+                $_SESSION['error_message'] = "Tipo de usuário inválido.";
                 header("Location: /admin_users");
                 exit();
             }
@@ -238,7 +244,17 @@ require_once __DIR__ . '/../../../app/includes/header.php';
                                 <tr>
                                     <td><?php echo htmlspecialchars($user['nome']); ?></td>
                                     <td><?php echo htmlspecialchars($user['email']); ?></td>
-                                    <td><?php echo ucfirst(htmlspecialchars($user['tipo'])); ?></td>
+                                    <?php
+                                    $labelsTipo = [
+                                    'operador'=>'Operador',
+                                    'coordenador'=>'Coordenador',
+                                    'admin'=>'Administrador',
+                                    'cia_user'=>'CIA — Usuário',
+                                    'cia_admin'=>'CIA — Admin',
+                                    'cia_dev'=>'CIA — Dev'
+                                    ];
+                                    ?>
+                                    <td><?php echo htmlspecialchars($labelsTipo[strtolower($user['tipo'])] ?? $user['tipo']); ?></td>
                                     <td>
                                         <span class="badge <?php echo $user['ativo'] ? 'bg-success' : 'bg-danger'; ?>">
                                             <?php echo $user['ativo'] ? 'Ativo' : 'Inativo'; ?>
@@ -299,6 +315,9 @@ require_once __DIR__ . '/../../../app/includes/header.php';
                                 <option value="operador">Operador</option>
                                 <option value="coordenador">Coordenador</option>
                                 <option value="admin">Administrador</option>
+                                <option value="cia_user">CIA - Usuário</option>
+                                <option value="cia_admin">CIA - Admin</option>
+                                <option value="cia_dev">CIA - Dev</option>
                             </select>
                         </div>
                     </div>

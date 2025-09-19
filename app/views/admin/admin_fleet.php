@@ -1,11 +1,16 @@
-
 <?php
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
-if (!isset($_SESSION['usuario_id']) || $_SESSION['usuario_tipo'] !== 'admin') {
-    header("Location: /");
-    exit();
+
+if (!isset($_SESSION['usuario_id'])) { header('Location: /login'); exit(); }
+
+$role = strtolower($_SESSION['usuario_tipo'] ?? '');
+$ADMIN_LIKE = ['admin','cia_admin','cia_dev'];
+if (!in_array($role, $ADMIN_LIKE, true)) {
+  header('Location: /'); // ou /user_dashboard
+  exit();
 }
+
 require_once __DIR__ . '/../../../app/includes/header.php';
 
 // Processar ações de implementos

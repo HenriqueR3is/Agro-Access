@@ -1,7 +1,4 @@
 <?php
-// MERGED: app/views/user/dashboard.php
-
-// Sempre trabalhar em horário de Brasília no app do operador (data_hora salva local)
 date_default_timezone_set('America/Sao_Paulo');
 
 session_start();
@@ -9,7 +6,7 @@ require_once __DIR__ . '/../../../config/db/conexao.php';
 
 // Segurança básica de sessão
 if (!isset($_SESSION['usuario_id'])) {
-    header("Location: login.php");
+    header("Location: /login");
     exit();
 }
 
@@ -209,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
         ]);
 
         $_SESSION['feedback_message'] = "Apontamento salvo com sucesso para às " . substr($report_time,0,5) . "!";
-        header("Location: /dashboard");
+        header("Location: /user_dashboard");
         exit;
 
     } catch (PDOException $e) {
@@ -239,7 +236,7 @@ $total_monthly_entries  = array_sum(array_map(fn($r)=>$r['total_entries'] ?? 0, 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <link rel="stylesheet" href="/public/static/css/styleDash.css">
-    <link rel="stylesheet" href="/public/static/css/dashboard.css">
+    <link rel="stylesheet" href="/public/static/css/user_dashboard.css">
 </head>
 <body class="dashboard-body">
 <header class="main-header">
@@ -308,7 +305,7 @@ $total_monthly_entries  = array_sum(array_map(fn($r)=>$r['total_entries'] ?? 0, 
         <section class="grid-container">
             <div class="card form-card">
                 <h3>Novo Apontamento</h3>
-                <form action="/dashboard" method="POST" id="entryForm">
+                <form action="/user_dashboard" method="POST" id="entryForm">
                     <input type="hidden" name="usuario_id" value="<?php echo (int)$usuario_id; ?>">
 
                     <div class="form-row">
