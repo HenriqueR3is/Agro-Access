@@ -238,6 +238,7 @@ $total_monthly_entries  = array_sum(array_map(fn($r)=>$r['total_entries'] ?? 0, 
     <link rel="stylesheet" href="/public/static/css/styleDash.css">
     <link rel="stylesheet" href="/public/static/css/user_dashboard.css">
 </head>
+
 <body class="dashboard-body">
 <header class="main-header">
     <div class="header-content">
@@ -247,8 +248,9 @@ $total_monthly_entries  = array_sum(array_map(fn($r)=>$r['total_entries'] ?? 0, 
         </div>
         <div class="user-info">
             <span>Olá, <strong><?php echo htmlspecialchars($username); ?></strong>! (<?php echo htmlspecialchars($user_role); ?>)</span>
-            <?php if ($user_role === 'admin'): ?>
-                <a href="/metas" class="admin-btn">Gerenciar Metas</a>
+            <?php if ($user_role === 'admin' || $user_role === 'cia_dev'): ?>
+                <a href="/metas" class="admin-btn">Metas</a>
+                <a href="/dashboard" class="admin-btn">Back</a>
             <?php endif; ?>
             <a href="/" class="logout-btn">Sair</a>
         </div>

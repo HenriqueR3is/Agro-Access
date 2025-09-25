@@ -160,6 +160,7 @@ $apontamentos = $stmt_apontamentos->fetchAll(PDO::FETCH_ASSOC);
     <link rel="icon" type="image/x-icon" href="./public/static/favicon.ico">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+        <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 
 </head>
 <body>

@@ -216,6 +216,7 @@ require_once __DIR__ . '/../../../app/includes/header.php';
 ?>
 <link rel="stylesheet" href="/public/static/css/admin.css">
 <link rel="stylesheet" href="/public/static/css/admin_farms.css">
+    <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 
 <div class="container">
   <div class="flex-between">
@@ -407,6 +408,15 @@ require_once __DIR__ . '/../../../app/includes/header.php';
       </div>
     </form>
   </div>
+</div>
+
+<!-- Créditos -->
+<div class="signature-credit">
+  <p class="sig-text">
+    Desenvolvido por 
+    <span class="sig-name">Bruno Carmo</span> & 
+    <span class="sig-name">Henrique Reis</span>
+  </p>
 </div>
 
 <script>

@@ -471,3 +471,100 @@ font-family: 'Poppins', sans-serif;
   color: #0d8d52;
 }        
         
+ 
+/* toolbar */
+.table-toolbar {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px; margin:8px 0 12px;
+}
+.table-toolbar .muted { color:#777; }
+.table-toolbar .perpage .compact { width:92px; }
+
+/* tabela mais legível */
+.table-responsive { overflow:auto; /* opcional: max-height: 70vh; */ }
+.table-responsive table { width:100%; border-collapse: collapse; }
+.table-responsive thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--primary-dark);
+  color: #fff;
+  border-bottom: 1px solid var(--border);
+}
+.table-responsive tbody tr:nth-child(odd){ background: #fafafa; }
+.table-responsive th, .table-responsive td { padding:10px 12px; }
+
+/* badges já usadas */
+.badge.bg-success { background:#27ae60; color:#fff; }
+.badge.bg-danger  { background:#c0392b; color:#fff; }
+
+/* paginação */
+.pagination-bar {
+  display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+  margin:14px 0 6px;
+}
+.page-link {
+  padding:6px 10px; border:1px solid #ddd; border-radius:6px;
+  text-decoration:none; color:#333; background:#fff;
+}
+.page-link:hover { background:#f4f4f4; }
+.page-link.active { background:#333; color:#fff; border-color:#333; }
+.page-link.disabled, .page-link.disabled:hover {
+  color:#aaa; background:#f8f8f8; border-color:#eee; pointer-events:none;
+}
+.pagination-bar .dots { padding:0 6px; color:#999; }
+
+/* Modal compacto para o userForm */
+.modal-content.modal-sm {
+  width: 88%;
+  max-width: 560px;   /* era 800px */
+}
+
+.modal-content.modal-sm .modal-header,
+.modal-content.modal-sm .modal-footer { padding: 0.9rem 1.1rem; }
+
+.modal-content.modal-sm .modal-body {
+  padding: 1rem 1.1rem;
+}
+
+/* Campos mais compactos só dentro do modal */
+.modal-content.modal-sm .form-control {
+  padding: 0.55rem 0.8rem;
+  font-size: 0.95rem;
+}
+
+.modal-content.modal-sm .form-row {
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+/* Deixe Unidades/Operações mais leves e em grade */
+.modal-content.modal-sm .permissions-container {
+  max-height: 160px;                     /* menor que 200px */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 10px;
+}
+
+.modal-content.modal-sm .permissions-container .form-check {
+  display: flex; align-items: center;
+  padding: 0.35rem 0.4rem;
+  margin: 0;
+  background: transparent;
+}
+
+/* toolbar com filtros */
+.table-toolbar {
+  display:flex; justify-content:space-between; align-items:center; gap:12px;
+  margin:8px 0 12px;
+  flex-wrap: wrap;
+}
+.table-toolbar .left.filters { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.table-toolbar .filter { display:flex; align-items:center; gap:6px; }
+.table-toolbar .compact { height: 36px; padding: 0 10px; }
+.table-toolbar .right { display:flex; align-items:center; gap:12px; }
+.table-toolbar .right .range { color:#777; }
+
+/* botão limpar menor */
+.btn.btn-sm { padding: 0.35rem 0.7rem; font-size: 0.85rem; }
+
+/* opção: deixar a tabela respirar sem ocupar "a tela toda" */
+

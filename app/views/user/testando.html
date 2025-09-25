@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Meteorológico - Monitoramento de Usinas</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #0e1e25;
+            color: #e0f2fe;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #1a6fc4 0%, #154273 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .logo h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .logo-icon {
+            font-size: 24px;
+        }
+        
+        .date-display {
+            text-align: right;
+            font-size: 0.9rem;
+        }
+        
+        main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background-color: #1a2b37;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .panel {
+            margin-bottom: 25px;
+        }
+        
+        .panel h2 {
+            font-size: 1.1rem;
+            color: #7fd1ff;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #2a4353;
+        }
+        
+        .usina-list {
+            list-style: none;
+        }
+        
+        .usina-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background-color: #223744;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .usina-item:hover {
+            background-color: #2a4353;
+        }
+        
+        .usina-item.alerta {
+            border-left-color: #e74c3c;
+            background-color: #3c2229;
+            animation: pulsar 2s infinite;
+        }
+        
+        @keyframes pulsar {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .usina-nome {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #e0f2fe;
+        }
+        
+        .usina-status {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+        }
+        
+        .alerta .usina-status {
+            color: #e74c3c;
+            font-weight: 600;
+        }
+        
+        .previsao-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #2a4353;
+        }
+        
+        .previsao-dia {
+            font-weight: 500;
+        }
+        
+        .previsao-chuva {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .previsao-mm {
+            font-weight: 600;
+            min-width: 40px;
+            text-align: right;
+        }
+        
+        .intensidade {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            color: white;
+        }
+        
+        .leve {
+            background-color: #3498db;
+        }
+        
+        .media {
+            background-color: #f39c12;
+        }
+        
+        .forte {
+            background-color: #e74c3c;
+        }
+        
+        .tempestade {
+            background-color: #9b59b6;
+        }
+        
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .legenda {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background-color: rgba(26, 43, 55, 0.9);
+            padding: 10px 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            color: #e0f2fe;
+        }
+        
+        .legenda h3 {
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            color: #7fd1ff;
+        }
+        
+        .legenda-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 0.85rem;
+        }
+        
+        .legenda-cor {
+            width: 20px;
+            height: 10px;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+        
+        .controles {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 15px;
+            background-color: rgba(26, 43, 55, 0.9);
+            color: #e0f2fe;
+            border: none;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            background-color: #2a4353;
+        }
+        
+        .btn.active {
+            background-color: #1a6fc4;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background-color: #1a2b37;
+            padding: 25px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: #e0f2fe;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-header h2 {
+            color: #7fd1ff;
+        }
+        
+        .close {
+            font-size: 24px;
+            cursor: pointer;
+            color: #7f8c8d;
+        }
+        
+        .alerta-detalhes {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .alerta-grave {
+            background-color: #3c2229;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .alerta-detalhes h3 {
+            margin-bottom: 10px;
+            color: #e74c3c;
+        }
+        
+        .detalhes-item {
+            margin-bottom: 10px;
+        }
+        
+        .acoes {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .btn-confirmar {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .btn-confirmar:hover {
+            background-color: #2980b9;
+        }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            font-size: 1.2rem;
+            color: #7fd1ff;
+        }
+        
+        .loading i {
+            margin-right: 10px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .api-status {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(26, 43, 55, 0.9);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+        }
+        
+        .status-online {
+            width: 10px;
+            height: 10px;
+            background-color: #2ecc71;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            main {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: 40%;
+            }
+            
+            .map-container {
+                height: 60%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <span class="logo-icon"><i class="fas fa-cloud-sun-rain"></i></span>
+            <h1>Monitoramento Meteorológico</h1>
+        </div>
+        <div class="date-display">
+            <div id="current-date">Carregando...</div>
+            <div id="current-time">--:--:--</div>
+        </div>
+    </header>
+    
+    <main>
+        <div class="sidebar">
+            <div class="panel">
+                <h2><i class="fas fa-exclamation-triangle"></i> Usinas em Alerta</h2>
+                <ul class="usina-list" id="alertas-usinas">
+                    <li class="usina-item">
+                        <div class="loading">
+                            <i class="fas fa-spinner"></i> Carregando alertas...
+                        </div>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="panel">
+                <h2><i class="fas fa-calendar-day"></i> Previsão para os Próximos Dias</h2>
+                <div id="previsao-container">
+                    <div class="loading">
+                        <i class="fas fa-spinner"></i> Carregando previsão...
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2><i class="fas fa-info-circle"></i> Legenda de Intensidade</h2>
+                <div class="legenda-intensidade">
+                    <div class="previsao-item">
+                        <span class="intensidade leve">Leve</span>
+                        <span>até 10 mm</span>
+                    </div>
+                    <div class="previsao-item">
+                        <span class="intensidade media">Média</span>
+                        <span>10 - 30 mm</span>
+                    </div>
+                    <div class="previsao-item">
+                        <span class="intensidade forte">Forte</span>
+                        <span>30 - 60 mm</span>
+                    </div>
+                    <div class="previsao-item">
+                        <span class="intensidade tempestade">Tempestade</span>
+                        <span>acima de 60 mm</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <div id="map">
+                <div class="loading">
+                    <i class="fas fa-spinner"></i> Carregando mapa...
+                </div>
+            </div>
+            
+            <div class="controles">
+                <button class="btn active" id="btn-chuva-atual">
+                    <i class="fas fa-cloud-rain"></i> Chuva Atual
+                </button>
+                <button class="btn" id="btn-previsao-chuva">
+                    <i class="fas fa-cloud-showers-heavy"></i> Previsão
+                </button>
+            </div>
+            
+            <div class="legenda">
+                <h3>Intensidade de Chuva</h3>
+                <div class="legenda-item">
+                    <div class="legenda-cor" style="background-color: rgba(52, 152, 219, 0.4);"></div>
+                    <span>Leve</span>
+                </div>
+                <div class="legenda-item">
+                    <div class="legenda-cor" style="background-color: rgba(243, 156, 18, 0.4);"></div>
+                    <span>Média</span>
+                </div>
+                <div class="legenda-item">
+                    <div class="legenda-cor" style="background-color: rgba(231, 76, 60, 0.4);"></div>
+                    <span>Forte</span>
+                </div>
+                <div class="legenda-item">
+                    <div class="legenda-cor" style="background-color: rgba(155, 89, 182, 0.4);"></div>
+                    <span>Tempestade</span>
+                </div>
+            </div>
+            
+            <div class="api-status">
+                <span class="status-online"></span>
+                <span id="api-status-text">Conectando à API...</span>
+            </div>
+        </div>
+    </main>
+    
+    <div class="modal" id="modal-alerta">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-exclamation-circle"></i> Alerta de Chuva</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="alerta-detalhes alerta-grave">
+                <h3 id="alerta-titulo">Alerta de Chuva Forte</h3>
+                <div class="detalhes-item">
+                    <strong>Usina:</strong> <span id="alerta-usina">Usina Hidrelétrica São Paulo</span>
+                </div>
+                <div class="detalhes-item">
+                    <strong>Previsão:</strong> <span id="alerta-previsao">45 mm - Chuva Forte</span>
+                </div>
+                <div class="detalhes-item">
+                    <strong>Período:</strong> <span id="alerta-periodo">15h - 18h</span>
+                </div>
+                <div class="detalhes-item">
+                    <strong>Recomendação:</strong> <span id="alerta-recomendacao">Monitorar níveis dos reservatórios e preparar protocolos de segurança.</span>
+                </div>
+            </div>
+            <div class="acoes">
+                <button class="btn" id="btn-fechar-alerta">Fechar</button>
+                <button class="btn btn-confirmar" id="btn-confirmar-alerta">Confirmar Leitura</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configurações da API - em um ambiente real, esta chave seria protegida
+        const API_KEY = '7ba73e0eb8efe773a258c0d46a5e92cf'; // Chave de exemplo - substitua pela sua
+        const BASE_URL = 'https://api.openweathermap.org/data/2.5';
+        
+        // Dados iniciais - em um sistema real, estes dados viriam de uma API
+        const usinas = [
+            { id: 1, nome: "Usina Hidrelétrica São Paulo", lat: -23.5505, lng: -46.6333, status: "operacional" },
+            { id: 2, nome: "Usina Eólica Vento Norte", lat: -22.9068, lng: -43.1729, status: "operacional" },
+            { id: 3, nome: "Usina Solar Central Brasileira", lat: -15.7975, lng: -47.8919, status: "operacional" },
+            { id: 4, nome: "Usina Hidrelétrica Rio Grande", lat: -20.4697, lng: -45.9581, status: "operacional" },
+            { id: 5, nome: "Usina Termelétrica Sudeste", lat: -19.9167, lng: -43.9333, status: "operacional" }
+        ];
+        
+        // Mapa de intensidade para cores
+        const intensidadeCores = {
+            leve: { cor: '#3498db', rgba: 'rgba(52, 152, 219, 0.4)' },
+            media: { cor: '#f39c12', rgba: 'rgba(243, 156, 18, 0.4)' },
+            forte: { cor: '#e74c3c', rgba: 'rgba(231, 76, 60, 0.4)' },
+            tempestade: { cor: '#9b59b6', rgba: 'rgba(155, 89, 182, 0.4)' }
+        };
+        
+        // Variáveis globais
+        let map;
+        let currentRainLayer = null;
+        let forecastRainLayer = null;
+        let activeLayer = 'current';
+        
+        // Inicialização do mapa
+        function initMap() {
+            map = L.map('map').setView([-15.7801, -47.9292], 5);
+            
+            // Adicionar camada base do mapa
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+            
+            // Adicionar marcadores das usinas
+            usinas.forEach(usina => {
+                const marker = L.marker([usina.lat, usina.lng]).addTo(map);
+                marker.bindPopup(`
+                    <div style="min-width: 200px">
+                        <h3 style="margin: 5px 0; color: #2c3e50;">${usina.nome}</h3>
+                        <p style="margin: 5px 0;">Status: <strong>${usina.status}</strong></p>
+                        <p style="margin: 5px 0;">Última atualização: <span class="update-time">10:15</span></p>
+                        <div class="weather-info">
+                            <p style="margin: 5px 0;"><i class="fas fa-cloud-rain"></i> Chuva atual: <span class="rain-value">Carregando...</span></p>
+                        </div>
+                    </div>
+                `);
+                
+                // Adicionar evento de clique para mostrar alertas
+                marker.on('click', function() {
+                    fetchWeatherData(usina.lat, usina.lng).then(weatherData => {
+                        if (weatherData && weatherData.rain) {
+                            showAlerta(usina, weatherData);
+                        }
+                    });
+                });
+                
+                // Buscar dados meteorológicos para esta usina
+                fetchWeatherData(usina.lat, usina.lng).then(weatherData => {
+                    if (weatherData) {
+                        updateUsinaMarker(marker, usina, weatherData);
+                    }
+                });
+            });
+            
+            // Carregar dados de precipitação
+            loadRainData();
+            
+            return map;
+        }
+        
+        // Carregar dados de chuva da API
+        async function loadRainData() {
+            try {
+                updateApiStatus('Conectando à API de dados meteorológicos...');
+                
+                // Carregar dados de precipitação atual
+                const rainData = await fetchRainData();
+                if (rainData && rainData.list) {
+                    renderRainData(rainData);
+                }
+                
+                // Carregar previsão para os próximos dias
+                const forecastData = await fetchForecastData();
+                if (forecastData && forecastData.list) {
+                    renderForecast(forecastData);
+                    checkAlerts(forecastData);
+                }
+                
+                updateApiStatus('Dados atualizados: ' + new Date().toLocaleTimeString());
+            } catch (error) {
+                console.error('Erro ao carregar dados:', error);
+                updateApiStatus('Erro ao conectar com a API: ' + error.message, 'error');
+            }
+        }
+        
+        // Buscar dados de chuva da API
+        async function fetchRainData() {
+            try {
+                // Esta é uma chamada simulada, já que a API gratuita não fornece dados de precipitação em tempo real para o mundo todo
+                // Em uma implementação real, você usaria a API paga ou outra fonte de dados
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                
+                // Simular dados de resposta
+                return {
+                    list: [
+                        { lat: -23.5505, lon: -46.6333, rain: { '1h': 12.5 } },
+                        { lat: -22.9068, lon: -43.1729, rain: { '1h': 35.2 } },
+                        { lat: -15.7975, lon: -47.8919, rain: { '1h': 8.1 } },
+                        { lat: -20.4697, lon: -45.9581, rain: { '1h': 62.7 } },
+                        { lat: -19.9167, lon: -43.9333, rain: { '1h': 0.5 } }
+                    ]
+                };
+            } catch (error) {
+                console.error('Erro ao buscar dados de chuva:', error);
+                return null;
+            }
+        }
+        
+        // Buscar dados de previsão
+        async function fetchForecastData() {
+            try {
+                // Simular uma chamada à API de previsão
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Simular dados de previsão
+                const now = new Date();
+                const forecast = [];
+                
+                for (let i = 0; i < 7; i++) {
+                    const date = new Date(now);
+                    date.setDate(now.getDate() + i);
+                    
+                    forecast.push({
+                        dt: Math.floor(date.getTime() / 1000),
+                        main: { temp: 25 + Math.random() * 10 },
+                        weather: [{ main: 'Rain', description: 'chuva moderada' }],
+                        rain: { '3h': Math.random() * 70 },
+                        dt_txt: date.toISOString().split('T')[0]
+                    });
+                }
+                
+                return { list: forecast };
+            } catch (error) {
+                console.error('Erro ao buscar dados de previsão:', error);
+                return null;
+            }
+        }
+        
+        // Buscar dados meteorológicos para uma localização específica
+        async function fetchWeatherData(lat, lng) {
+            try {
+                // Simular chamada à API
+                await new Promise(resolve => setTimeout(resolve, 800));
+                
+                // Gerar dados simulados
+                return {
+                    rain: { '1h': Math.random() * 80 },
+                    main: { temp: 20 + Math.random() * 15 },
+                    weather: [{ description: 'chuva moderada' }]
+                };
+            } catch (error) {
+                console.error('Erro ao buscar dados meteorológicos:', error);
+                return null;
+            }
+        }
+        
+        // Renderizar dados de chuva no mapa
+        function renderRainData(rainData) {
+            // Limpar camada anterior
+            if (currentRainLayer) {
+                map.removeLayer(currentRainLayer);
+            }
+            
+            const rainLayer = L.layerGroup();
+            
+            // Adicionar áreas de chuva ao mapa
+            rainData.list.forEach(area => {
+                const intensity = getRainIntensity(area.rain['1h'] || 0);
+                const radius = 50000 + (area.rain['1h'] || 0) * 1000;
+                
+                L.circle([area.lat, area.lon], {
+                    color: intensidadeCores[intensity].cor,
+                    fillColor: intensidadeCores[intensity].rgba,
+                    radius: radius,
+                    fillOpacity: 0.6
+                }).addTo(rainLayer).bindPopup(`
+                    <div style="min-width: 150px; color: #2c3e50;">
+                        <h4 style="margin: 5px 0;">Precipitação: ${area.rain['1h']}mm</h4>
+                        <p style="margin: 5px 0;">Intensidade: ${intensity}</p>
+                    </div>
+                `);
+            });
+            
+            currentRainLayer = rainLayer;
+            if (activeLayer === 'current') {
+                rainLayer.addTo(map);
+            }
+        }
+        
+        // Atualizar marcador da usina com dados meteorológicos
+        function updateUsinaMarker(marker, usina, weatherData) {
+            const rainValue = weatherData.rain ? (weatherData.rain['1h'] || 0) : 0;
+            const intensity = getRainIntensity(rainValue);
+            const intensityClass = intensidadeCores[intensity] ? intensidadeCores[intensity].cor : '#3498db';
+            
+            // Criar ícone personalizado com cor baseada na intensidade da chuva
+            const customIcon = L.divIcon({
+                className: 'custom-usina-icon',
+                html: `<div style="background-color: ${intensityClass}; width: 24px; height: 24px; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: white; font-size: 14px;"><i class="fas fa-industry"></i></div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            
+            marker.setIcon(customIcon);
+            
+            // Atualizar popup
+            const popupContent = `
+                <div style="min-width: 200px">
+                    <h3 style="margin: 5px 0; color: #2c3e50;">${usina.nome}</h3>
+                    <p style="margin: 5px 0;">Status: <strong>${usina.status}</strong></p>
+                    <p style="margin: 5px 0;">Última atualização: <span class="update-time">${new Date().toLocaleTimeString()}</span></p>
+                    <div class="weather-info">
+                        <p style="margin: 5px 0;"><i class="fas fa-cloud-rain"></i> Chuva atual: <span class="rain-value">${rainValue.toFixed(1)}mm (${intensity})</span></p>
+                        <p style="margin: 5px 0;"><i class="fas fa-temperature-high"></i> Temperatura: ${weatherData.main.temp.toFixed(1)}°C</p>
+                    </div>
+                </div>
+            `;
+            
+            marker.setPopupContent(popupContent);
+        }
+        
+        // Renderizar previsão na sidebar
+        function renderForecast(forecastData) {
+            const container = document.getElementById('previsao-container');
+            container.innerHTML = '';
+            
+            const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+            
+            forecastData.list.forEach((day, index) => {
+                const date = new Date(day.dt * 1000);
+                const rainValue = day.rain ? (day.rain['3h'] || 0) : 0;
+                const intensity = getRainIntensity(rainValue);
+                
+                const item = document.createElement('div');
+                item.className = 'previsao-item';
+                
+                let chuvaHTML = '';
+                if (rainValue > 0) {
+                    chuvaHTML = `
+                        <div class="previsao-chuva">
+                            <span class="intensidade ${intensity}">${intensity}</span>
+                            <span class="previsao-mm">${rainValue.toFixed(1)} mm</span>
+                        </div>
+                    `;
+                } else {
+                    chuvaHTML = '<span>Sem chuva</span>';
+                }
+                
+                item.innerHTML = `
+                    <div class="previsao-dia">${index === 0 ? 'Hoje' : days[date.getDay()]} <small>${date.getDate()}/${date.getMonth() + 1}</small></div>
+                    ${chuvaHTML}
+                `;
+                
+                container.appendChild(item);
+            });
+        }
+        
+        // Verificar alertas para usinas
+        function checkAlerts(forecastData) {
+            const alertasContainer = document.getElementById('alertas-usinas');
+            alertasContainer.innerHTML = '';
+            
+            // Verificar previsão para cada usina
+            usinas.forEach(usina => {
+                // Simular dados de previsão para a usina
+                const rainValue = Math.random() * 80;
+                
+                if (rainValue > 20) { // Alertas para chuvas acima de 20mm
+                    const intensity = getRainIntensity(rainValue);
+                    
+                    const item = document.createElement('li');
+                    item.className = 'usina-item alerta';
+                    
+                    item.innerHTML = `
+                        <div class="usina-nome">${usina.nome}</div>
+                        <div class="usina-status">Alerta: ${rainValue.toFixed(1)}mm - ${intensity}</div>
+                    `;
+                    
+                    item.addEventListener('click', () => {
+                        showAlerta(usina, { rain: { '1h': rainValue } });
+                    });
+                    
+                    alertasContainer.appendChild(item);
+                }
+            });
+            
+            if (alertasContainer.children.length === 0) {
+                alertasContainer.innerHTML = '<li class="usina-item"><div class="usina-nome">Nenhum alerta no momento</div></li>';
+            }
+        }
+        
+        // Obter intensidade da chuva com base nos mm
+        function getRainIntensity(mm) {
+            if (mm <= 10) return 'leve';
+            if (mm <= 30) return 'media';
+            if (mm <= 60) return 'forte';
+            return 'tempestade';
+        }
+        
+        // Atualizar data e hora
+        function updateDateTime() {
+            const now = new Date();
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('current-date').textContent = now.toLocaleDateString('pt-BR', options);
+            document.getElementById('current-time').textContent = now.toLocaleTimeString('pt-BR');
+        }
+        
+        // Atualizar status da API
+        function updateApiStatus(message, type = 'info') {
+            const statusElement = document.getElementById('api-status-text');
+            statusElement.textContent = message;
+            
+            const statusIndicator = document.querySelector('.status-online');
+            if (type === 'error') {
+                statusIndicator.style.backgroundColor = '#e74c3c';
+            } else {
+                statusIndicator.style.backgroundColor = '#2ecc71';
+            }
+        }
+        
+        // Mostrar modal de alerta
+        function showAlerta(usina, weatherData) {
+            const rainValue = weatherData.rain ? (weatherData.rain['1h'] || 0) : 0;
+            const intensity = getRainIntensity(rainValue);
+            
+            document.getElementById('alerta-titulo').textContent = `Alerta de Chuva ${intensity}`;
+            document.getElementById('alerta-usina').textContent = usina.nome;
+            document.getElementById('alerta-previsao').textContent = `${rainValue.toFixed(1)}mm - ${intensity}`;
+            document.getElementById('alerta-periodo').textContent = "Próximas 3 horas";
+            
+            let recomendacao = "";
+            if (intensity === "leve") {
+                recomendacao = "Monitorar condições meteorológicas.";
+            } else if (intensity === "media") {
+                recomendacao = "Atenção à possibilidade de alagamentos em áreas baixas.";
+            } else if (intensity === "forte") {
+                recomendacao = "Preparar protocolos de segurança. Possibilidade de interrupção temporária.";
+            } else {
+                recomendacao = "Ativar protocolos de emergência. Risco de danos à infraestrutura.";
+            }
+            
+            document.getElementById('alerta-recomendacao').textContent = recomendacao;
+            
+            document.getElementById('modal-alerta').style.display = 'flex';
+        }
+        
+        // Fechar modal de alerta
+        function closeAlerta() {
+            document.getElementById('modal-alerta').style.display = 'none';
+        }
+        
+        // Alternar entre camadas do mapa
+        function toggleMapLayer(layer) {
+            activeLayer = layer;
+            
+            if (layer === 'current') {
+                document.getElementById('btn-chuva-atual').classList.add('active');
+                document.getElementById('btn-previsao-chuva').classList.remove('active');
+                
+                if (currentRainLayer) {
+                    map.addLayer(currentRainLayer);
+                }
+                if (forecastRainLayer) {
+                    map.removeLayer(forecastRainLayer);
+                }
+            } else {
+                document.getElementById('btn-chuva-atual').classList.remove('active');
+                document.getElementById('btn-previsao-chuva').classList.add('active');
+                
+                if (currentRainLayer) {
+                    map.removeLayer(currentRainLayer);
+                }
+                if (forecastRainLayer) {
+                    map.addLayer(forecastRainLayer);
+                }
+            }
+        }
+        
+        // Inicializar a aplicação
+        document.addEventListener('DOMContentLoaded', function() {
+            // Inicializar mapa
+            initMap();
+            
+            // Atualizar data e hora
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+            
+            // Configurar eventos
+            document.querySelector('.close').addEventListener('click', closeAlerta);
+            document.getElementById('btn-fechar-alerta').addEventListener('click', closeAlerta);
+            document.getElementById('btn-confirmar-alerta').addEventListener('click', closeAlerta);
+            
+            // Eventes para os botões de controle do mapa
+            document.getElementById('btn-chuva-atual').addEventListener('click', function() {
+                toggleMapLayer('current');
+            });
+            
+            document.getElementById('btn-previsao-chuva').addEventListener('click', function() {
+                toggleMapLayer('forecast');
+            });
+            
+            // Atualizar dados a cada 10 minutos
+            setInterval(loadRainData, 10 * 60 * 1000);
+        });
+    </script>
+</body>
+</html>

@@ -178,11 +178,88 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 }
 
-// Consulta de dados
+// Consulta de dados (com paginação, filtros e ordenação por created_at)
 try {
-    $users = $pdo->query("SELECT id, nome, email, tipo, ativo FROM usuarios")->fetchAll(PDO::FETCH_ASSOC);
-    $unidades = $pdo->query("SELECT id, nome FROM unidades")->fetchAll(PDO::FETCH_ASSOC);
+    // filtros via GET
+    $tipoFilter   = strtolower(trim($_GET['tipo'] ?? ''));   // ex.: operador, coordenador, admin, cia_user, cia_admin, cia_dev
+    $statusFilter = trim($_GET['status'] ?? '');              // '', '1', '0'
+
+    // paginação
+    $page     = max(1, (int)($_GET['page'] ?? 1));
+    $perPage  = (int)($_GET['per_page'] ?? 20);
+    $perPage  = max(5, min($perPage, 100));
+    $offset   = ($page - 1) * $perPage;
+
+    // tipos válidos (mesma lista do CRUD)
+    $TIPOS_VALIDOS_FILTER = ['operador','coordenador','admin','cia_user','cia_admin','cia_dev'];
+    if ($tipoFilter && !in_array($tipoFilter, $TIPOS_VALIDOS_FILTER, true)) {
+        $tipoFilter = ''; // sanitiza valor inválido
+    }
+    if ($statusFilter !== '' && !in_array($statusFilter, ['0','1'], true)) {
+        $statusFilter = '';
+    }
+
+    // WHERE dinâmico
+    $where  = [];
+    $params = [];
+
+    if ($tipoFilter !== '') {
+        $where[] = 'tipo = :tipo';
+        $params[':tipo'] = $tipoFilter;
+    }
+    if ($statusFilter !== '') {
+        $where[] = 'ativo = :ativo';
+        $params[':ativo'] = (int)$statusFilter;
+    }
+
+    $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+    // helper pra manter querystring
+    if (!function_exists('qs')) {
+        function qs(array $params = []): string {
+            $base = $_GET;
+            foreach ($params as $k => $v) $base[$k] = $v;
+            return '?' . http_build_query($base);
+        }
+    }
+
+    // total
+    $sqlTotal = "SELECT COUNT(*) FROM usuarios $whereSql";
+    $stmtT = $pdo->prepare($sqlTotal);
+    foreach ($params as $k => $v) $stmtT->bindValue($k, $v, is_int($v) ? PDO::PARAM_INT : PDO::PARAM_STR);
+    $stmtT->execute();
+    $total = (int)$stmtT->fetchColumn();
+    $totalPages = max(1, (int)ceil($total / $perPage));
+    if ($page > $totalPages) { $page = $totalPages; $offset = ($page - 1) * $perPage; }
+
+    // tenta ordenar por created_at, senão cai pra id
+    $orderBy = 'criado_em ASC, id DESC';
+    try {
+        $pdo->query("SELECT criado_em FROM usuarios LIMIT 1"); // smoke test
+    } catch (Throwable $e) {
+        $orderBy = 'id DESC';
+    }
+
+    // dados
+    $sql = "
+        SELECT id, nome, email, tipo, ativo
+        " . ($orderBy !== 'id DESC' ? ", criado_em" : "") . "
+        FROM usuarios
+        $whereSql
+        ORDER BY $orderBy
+        LIMIT :limit OFFSET :offset
+    ";
+    $stmt = $pdo->prepare($sql);
+    foreach ($params as $k => $v) $stmt->bindValue($k, $v, is_int($v) ? PDO::PARAM_INT : PDO::PARAM_STR);
+    $stmt->bindValue(':limit',  $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset,  PDO::PARAM_INT);
+    $stmt->execute();
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // combos auxiliares
+    $unidades  = $pdo->query("SELECT id, nome FROM unidades")->fetchAll(PDO::FETCH_ASSOC);
     $operacoes = $pdo->query("SELECT id, nome FROM tipos_operacao")->fetchAll(PDO::FETCH_ASSOC);
+
 } catch (PDOException $e) {
     die("Erro ao consultar dados: " . $e->getMessage());
 }
@@ -199,6 +276,7 @@ require_once __DIR__ . '/../../../app/includes/header.php';
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/public/static/css/admin_users.css">
     <link rel="icon" type="image/x-icon" href="./public/static/favicon.ico">
+        <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 </head>
 <body>
     <div class="admin-container">
@@ -229,62 +307,126 @@ require_once __DIR__ . '/../../../app/includes/header.php';
                     <?php unset($_SESSION['error_message']); ?>
                 <?php endif; ?>
 
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Nome</th>
-                                    <th>Email</th>
-                                    <th>Tipo</th>
-                                    <th>Status</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach($users as $user): ?>
-                                <tr>
-                                    <td><?php echo htmlspecialchars($user['nome']); ?></td>
-                                    <td><?php echo htmlspecialchars($user['email']); ?></td>
-                                    <?php
-                                    $labelsTipo = [
-                                    'operador'=>'Operador',
-                                    'coordenador'=>'Coordenador',
-                                    'admin'=>'Administrador',
-                                    'cia_user'=>'CIA — Usuário',
-                                    'cia_admin'=>'CIA — Admin',
-                                    'cia_dev'=>'CIA — Dev'
-                                    ];
-                                    ?>
-                                    <td><?php echo htmlspecialchars($labelsTipo[strtolower($user['tipo'])] ?? $user['tipo']); ?></td>
-                                    <td>
-                                        <span class="badge <?php echo $user['ativo'] ? 'bg-success' : 'bg-danger'; ?>">
-                                            <?php echo $user['ativo'] ? 'Ativo' : 'Inativo'; ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <button class="btn btn-warning btn-sm edit-user" 
-                                                data-id="<?php echo $user['id']; ?>">
-                                            <i class="fas fa-edit"></i> Editar
-                                        </button>
-                                        <button class="btn btn-danger btn-sm delete-user" 
-                                                data-id="<?php echo $user['id']; ?>">
-                                            <i class="fas fa-trash"></i> Excluir
-                                        </button>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
+<div class="card-body">
+<div class="table-toolbar">
+  <div class="left filters">
+    <label class="filter">
+      Tipo:
+      <select id="filterTipo" class="form-control compact">
+        <option value=""        <?= $tipoFilter==='' ? 'selected':'' ?>>Todos</option>
+        <option value="operador"     <?= $tipoFilter==='operador' ? 'selected':'' ?>>Operador</option>
+        <option value="coordenador"  <?= $tipoFilter==='coordenador' ? 'selected':'' ?>>Coordenador</option>
+        <option value="admin"        <?= $tipoFilter==='admin' ? 'selected':'' ?>>Administrador</option>
+        <option value="cia_user"     <?= $tipoFilter==='cia_user' ? 'selected':'' ?>>CIA — Usuário</option>
+        <option value="cia_admin"    <?= $tipoFilter==='cia_admin' ? 'selected':'' ?>>CIA — Admin</option>
+        <option value="cia_dev"      <?= $tipoFilter==='cia_dev' ? 'selected':'' ?>>CIA — Dev</option>
+      </select>
+    </label>
+
+    <label class="filter">
+      Status:
+      <select id="filterStatus" class="form-control compact">
+        <option value=""  <?= $statusFilter===''  ? 'selected':'' ?>>Todos</option>
+        <option value="1" <?= $statusFilter==='1' ? 'selected':'' ?>>Ativo</option>
+        <option value="0" <?= $statusFilter==='0' ? 'selected':'' ?>>Inativo</option>
+      </select>
+    </label>
+
+    <button id="resetFilters" class="btn btn-sm btn-secondary" type="button" title="Limpar filtros">Limpar</button>
+  </div>
+
+  <div class="right">
+    <label class="perpage">
+      Itens por página:
+      <select id="perPage" class="form-control compact">
+        <option value="10"  <?= isset($perPage)&&$perPage==10  ? 'selected':'' ?>>10</option>
+        <option value="20"  <?= isset($perPage)&&$perPage==20  ? 'selected':'' ?>>20</option>
+        <option value="50"  <?= isset($perPage)&&$perPage==50  ? 'selected':'' ?>>50</option>
+        <option value="100" <?= isset($perPage)&&$perPage==100 ? 'selected':'' ?>>100</option>
+      </select>
+    </label>
+    <span class="muted range">
+      <?php $from = $total ? ($offset + 1) : 0; $to = min($offset + $perPage, $total); ?>
+      Mostrando <strong><?= $from ?></strong>–<strong><?= $to ?></strong> de <strong><?= $total ?></strong>
+    </span>
+  </div>
+</div>
+
+  <!-- TABELA (somente a tabela dentro do .table-responsive) -->
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Email</th>
+          <th>Tipo</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach($users as $user): ?>
+        <tr>
+          <td><?= htmlspecialchars($user['nome']); ?></td>
+          <td><?= htmlspecialchars($user['email']); ?></td>
+          <?php
+            $labelsTipo = [
+              'operador'=>'Operador',
+              'coordenador'=>'Coordenador',
+              'admin'=>'Administrador',
+              'cia_user'=>'CIA — Usuário',
+              'cia_admin'=>'CIA — Admin',
+              'cia_dev'=>'CIA — Dev'
+            ];
+          ?>
+          <td><?= htmlspecialchars($labelsTipo[strtolower($user['tipo'])] ?? $user['tipo']); ?></td>
+          <td>
+            <span class="badge <?= $user['ativo'] ? 'bg-success' : 'bg-danger'; ?>">
+              <?= $user['ativo'] ? 'Ativo' : 'Inativo'; ?>
+            </span>
+          </td>
+          <td>
+            <button class="btn btn-warning btn-sm edit-user" data-id="<?= $user['id']; ?>">
+              <i class="fas fa-edit"></i> Editar
+            </button>
+            <button class="btn btn-danger btn-sm delete-user" data-id="<?= $user['id']; ?>">
+              <i class="fas fa-trash"></i> Excluir
+            </button>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PAGINAÇÃO (fora da .table-responsive e DEPOIS da tabela) -->
+  <nav class="pagination-bar">
+    <a class="page-link <?= ($page<=1?'disabled':'') ?>" href="<?= $page>1 ? qs(['page'=>$page-1]) : '#' ?>">« Anterior</a>
+
+    <?php
+      $start = max(1, $page - 2);
+      $end   = min($totalPages, $page + 2);
+      if ($start > 1) {
+        echo '<a class="page-link" href="'.qs(['page'=>1]).'">1</a>';
+        if ($start > 2) echo '<span class="dots">…</span>';
+      }
+      for ($p=$start; $p<=$end; $p++) {
+        $active = $p == $page ? 'active' : '';
+        echo '<a class="page-link '.$active.'" href="'.qs(['page'=>$p]).'">'.$p.'</a>';
+      }
+      if ($end < $totalPages) {
+        if ($end < $totalPages-1) echo '<span class="dots">…</span>';
+        echo '<a class="page-link" href="'.qs(['page'=>$totalPages]).'">'.$totalPages.'</a>';
+      }
+    ?>
+
+    <a class="page-link <?= ($page>=$totalPages?'disabled':'') ?>" href="<?= $page<$totalPages ? qs(['page'=>$page+1]) : '#' ?>">Próxima »</a>
+  </nav>
+</div>
 
     <!-- Modal de Usuário -->
     <div id="userModal" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-content modal-sm">
             <div class="modal-header">
                 <h3 class="modal-title" id="modalTitle">Adicionar Usuário</h3>
                 <button class="modal-close">&times;</button>
@@ -594,6 +736,49 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// perPage -> atualiza querystring mantendo demais parâmetros
+const perPageSel = document.getElementById('perPage');
+if (perPageSel) {
+  perPageSel.addEventListener('change', () => {
+    const url = new URL(location.href);
+    url.searchParams.set('per_page', perPageSel.value);
+    url.searchParams.set('page', 1);
+    location.href = url.toString();
+  });
+}
+
+// Filtros Tipo/Status
+const tipoSel = document.getElementById('filterTipo');
+const statusSel = document.getElementById('filterStatus');
+const resetBtn = document.getElementById('resetFilters');
+
+function applyFilter() {
+  const url = new URL(location.href);
+  // tipo
+  if (tipoSel && tipoSel.value) url.searchParams.set('tipo', tipoSel.value);
+  else url.searchParams.delete('tipo');
+  // status
+  if (statusSel && statusSel.value !== '') url.searchParams.set('status', statusSel.value);
+  else url.searchParams.delete('status');
+  // volta pra página 1
+  url.searchParams.set('page', 1);
+  location.href = url.toString();
+}
+
+if (tipoSel)   tipoSel.addEventListener('change', applyFilter);
+if (statusSel) statusSel.addEventListener('change', applyFilter);
+
+if (resetBtn) {
+  resetBtn.addEventListener('click', () => {
+    const url = new URL(location.href);
+    url.searchParams.delete('tipo');
+    url.searchParams.delete('status');
+    url.searchParams.set('page', 1);
+    location.href = url.toString();
+  });
+}
+
 </script>
 </body>
 </html>

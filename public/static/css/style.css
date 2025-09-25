@@ -27,7 +27,7 @@
     --shadow-dark: 0 8px 30px rgba(0, 0, 0, 0.15);
     --transition-speed: 0.3s;
     --border-radius: 8px;
-    --sidebar-width: 250px;
+    --sidebar-width: 260px;
     --header-height: 60px;
 }
 
@@ -80,7 +80,7 @@ body {
 }
 
 .header .logo {
-    font-size: 1.25rem;
+    font-size: 1.15rem;
     font-weight: 700;
     color: var(--primary-color);
     display: flex;
@@ -488,19 +488,15 @@ table th {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
 }
 
-
-
-
-
 .sidebar-nav a {
     display: flex;
     align-items: center;
-    padding: 0.9rem 1.5rem;
+    padding: 0.7rem 1.5rem;
     color: var(--text-color-light);
     position: relative;
     transition: all var(--transition-speed);
     border-radius: var(--border-radius);
-    margin: 0 0.5rem;
+
     font-weight: 500;
     font-size: 0.95rem;
 text-decoration: none;
@@ -556,5 +552,254 @@ a {
 
 a:hover {
     color: var(--secondary-color-dark);
+}
+
+/* ===============================================
+   AJUSTES PARA O SIDEBAR E O PERFIL NO FINAL
+   =============================================== */
+
+.sidebar {
+    position: fixed;
+    top: 65px; 
+    left: 0;
+    height: calc(100vh - 65px);
+    width: 250px;
+    background-color: #34495e;
+    color: #ecf0f1;
+    overflow-y: auto;
+    padding-bottom: 20px;
+    z-index: 999;
+    
+    /* Adiciona Flexbox para empurrar o footer para baixo */
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-nav {
+    flex-grow: 1; /* Faz o menu ocupar o espaço restante */
+}
+
+/* Estilos para o bloco de perfil no final do sidebar */
+.sidebar-profile-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    border-top: 1px solid #4a627a;
+    margin-top: auto; /* Empurra o bloco para o final */
+    background-color: #2c3e50; /* Um pouco mais escuro para destaque */
+}
+
+.profile-picture-footer {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid #3498db;
+    flex-shrink: 0;
+}
+
+.profile-picture-footer img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-info-footer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.profile-name-footer {
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profile-role-footer {
+    font-size: 0.8rem;
+    color: #bdc3c7;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Estilos para os badges de conquistas */
+.badges-container-footer {
+    display: flex;
+    gap: 5px;
+    margin-top: 3px;
+}
+
+.badge-icon {
+    font-size: 0.9rem;
+    transition: transform 0.2s ease;
+    cursor: help;
+}
+
+.badge-icon:hover {
+    transform: scale(1.2);
+}
+
+/* Estilos para o bloco de perfil no final do sidebar */
+.sidebar-profile-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    border-top: 1px solid #4caf50; /* Cor de borda mais clara para combinar com o degradê */
+    margin-top: auto; /* Empurra o bloco para o final */
+    background-color: #1b5e20; /* Usa a cor escura do degradê */
+    border-radius: 0 0 10px 10px; /* Borda arredondada somente na parte de baixo */
+}
+
+.profile-picture-footer {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid #81c784; /* Tom de verde mais claro para a borda da foto */
+    flex-shrink: 0;
+}
+
+.profile-picture-footer img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-info-footer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.profile-name-footer {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #e8f5e9; /* Tom de verde muito claro para o nome */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profile-role-footer {
+    font-size: 0.8rem;
+    color: #c8e6c9; /* Tom de verde claro para o cargo */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ===============================================
+   AJUSTES PARA UM PERFIL MODERNO E COMPACTO
+   =============================================== */
+
+/* O estilo do .sidebar deve conter display: flex e flex-direction: column */
+.sidebar {
+    background: linear-gradient(180deg, #1b5e20, #2e7d32);
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 65px);
+    /* ... mantenha os outros estilos do sidebar ... */
+}
+
+/* O estilo do .sidebar-nav deve ter flex-grow: 1 para ocupar o espaço restante */
+.sidebar-nav {
+    flex-grow: 1;
+    /* ... mantenha os outros estilos do sidebar-nav ... */
+}
+
+/* Estilos para o bloco de perfil com visual compacto */
+.sidebar-profile-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px;
+    border-top: 2px solid rgba(255, 255, 255, 0.1);
+    background-color: #2e7d32;
+    margin-top: auto;
+    box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.sidebar-profile-footer:hover {
+    background-color: #388e3c;
+    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.profile-picture-footer {
+    width: 45px; /* Tamanho da foto reduzido */
+    height: 45px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 3px solid #81c784;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s ease, border-color 0.3s ease;
+    flex-shrink: 0;
+}
+
+.profile-picture-footer img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-picture-footer:hover {
+    transform: scale(1.05);
+    border-color: #a5d6a7;
+}
+
+.profile-info-footer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.profile-name-footer {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #e8f5e9;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.profile-role-footer {
+    font-size: 0.8rem;
+    color: #c8e6c9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Estilos para os badges, pequenos e elegantes */
+.badges-container-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+}
+
+.badge-icon {
+    font-size: 0.9rem;
+    color: #aed581;
+    text-shadow: 0 0 5px rgba(174, 213, 129, 0.5);
+    transition: transform 0.2s ease, text-shadow 0.2s ease;
+    cursor: help;
+}
+
+.badge-icon:hover {
+    transform: scale(1.15);
+    text-shadow: 0 0 8px rgba(174, 213, 129, 0.8);
 }
 
