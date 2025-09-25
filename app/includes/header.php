@@ -1,8 +1,4 @@
 <?php
-// ===============================================
-// HEADER.PHP - CÓDIGO CORRIGIDO
-// ===============================================
-
 ob_start();
 
 if (session_status() == PHP_SESSION_NONE) {
@@ -33,14 +29,14 @@ $usuario_cargo = $labelsTipo[$usuario_tipo_raw] ?? 'Desconhecido';
 $badges = [];
 if (in_array($usuario_tipo_raw, ['admin', 'cia_admin'])) {
     $badges[] = [
-        'title' => 'CIA: Administrador',
+        'title' => 'Administrador',
         'icon' => 'fas fa-shield-alt',
         'color' => '#f39c12'
     ];
 }
-if ($usuario_tipo_raw === 'coordenador') {
+if ($usuario_tipo_raw === 'cia_user') {
     $badges[] = [
-        'title' => 'CIA: Coordenador',
+        'title' => 'Usuário',
         'icon' => 'fas fa-star',
         'color' => '#3498db'
     ];
@@ -91,7 +87,7 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                 <i class="fas fa-chart-bar"></i>
                 <small>Relatórios</small>
             </a>
-            <a href="/admin_users" class="shortcut-link">
+            <a href="/admin_users" data-cap="users:crud" class="shortcut-link">
                 <i class="fas fa-users-cog"></i>
                 <small>Usuários</small>
             </a>
@@ -104,20 +100,20 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
             <div class="sidebar-nav">
                 <div class="has-submenu">👨‍💼 Gestão <span class="arrow"></span></div>
                 <div class="submenu">
-                    <a href="admin_users" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_users.php' ? 'active' : ''; ?>">👥 Gestão de Usuários</a>
-                    <a href="admin_fleet" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_fleet.php' ? 'active' : ''; ?>">🚜 Gestão de Frota</a>
-                    <a href="fazendas" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_farms.php' ? 'active' : ''; ?>">🌾 Gestão Fda/Uni</a>
-                    <a href="metas" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_metas.php' ? 'active' : ''; ?>">🎯 Gestão de Metas</a>
+                    <a href="admin_users" data-cap="users:crud" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_users.php' ? 'active' : ''; ?>">👥 Gestão de Usuários</a>
+                    <a href="admin_fleet" data-cap="equip:crud" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_fleet.php' ? 'active' : ''; ?>">🚜 Gestão de Frota</a>
+                    <a href="fazendas" data-cap="fazendas:crud" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_farms.php' ? 'active' : ''; ?>">🌾 Gestão Fda/Uni</a>
+                    <a href="metas" data-cap="metas:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_metas.php' ? 'active' : ''; ?>">🎯 Gestão de Metas</a>
                 </div>
                 <div class="has-submenu">📊 Relatórios <span class="arrow"></span></div>
                 <div class="submenu">
-                    <a href="comparativo" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_comparativo.php' ? 'active' : ''; ?>">📈 Comparativo de Produção</a>
-                    <a href="admin_dashboard" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_dashboard.php' ? 'active' : ''; ?>">💻 Apontamentos</a>
+                    <a href="comparativo" data-cap="comparativo:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_comparativo.php' ? 'active' : ''; ?>">📈 Comparativo de Produção</a>
+                    <a href="admin_dashboard" data-cap="apontamentos:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_dashboard.php' ? 'active' : ''; ?>">💻 Apontamentos</a>
                 </div>
                 <div class="has-submenu">📈 CIA Dashboards <span class="arrow"></span></div>
                 <div class="submenu">
                     <a href="dashboard" class="<?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">💻 Dash CIA</a>
-                    <a href="user_dashboard" class="<?php echo basename($_SERVER['PHP_SELF']) == 'user_dashboard.php' ? 'active' : ''; ?>">🧑‍🌾 Dash User</a>
+                    <a href="user_dashboard" data-cap="user_dashboard:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'user_dashboard.php' ? 'active' : ''; ?>">🧑‍🌾 Dash User</a>
                 </div>
             </div>
             
@@ -143,6 +139,35 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
             </div>
         <div class="container"> </div>
     </body>
+
+<?php
+  $role = strtolower($_SESSION['usuario_tipo'] ?? '');
+
+  // Lista única de capabilities usadas nas telas/menus
+  $ALL_CAPS = [
+    'dashboard:view','admin:menu','admin:pages','users:crud', 'equip:crud',
+    'fazendas:crud', 'metas:view','metas:edit','admin_dashboard:view', 'apontamentos:view','user_dashboard:view'
+  ];
+
+  $caps = [];
+  if (function_exists('can')) {
+    foreach ($ALL_CAPS as $c) if (can($c)) $caps[] = $c;
+  } else {
+    if ($role === 'cia_dev') {
+      $caps = ['*']; // acesso total
+    } elseif ($role === 'admin') {
+      $caps = ['dashboard:view','admin:menu','admin:pages','users:crud','fazendas:crud','equip:crud','comparativo:view','metas:view','metas:edit'];
+    } elseif ($role === 'cia_admin') {
+      $caps = ['dashboard:view','admin:menu','users:view','fazendas:crud','equip:crud','comparativo:view','metas:view', 'apontamentos:view'];
+    } elseif ($role === 'cia_user') {
+      $caps = ['dashboard:view','comparativo:view'];
+    } elseif ($role === 'operador') {
+      $caps = ['user_dashboard:view'];
+    } else {
+      $caps = [];
+    }
+  }
+?>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -196,4 +221,48 @@ document.addEventListener('DOMContentLoaded', function() {
 
     restoreState();
 });
+
+  window.ROLE = <?= json_encode($role) ?>;
+  window.CAPS = <?= json_encode($caps, JSON_UNESCAPED_SLASHES) ?>;
+
+(function(){
+  const ROLE = (window.ROLE || '').toLowerCase();
+  const CAPS = Array.isArray(window.CAPS) ? window.CAPS.map(s => (s||'').toLowerCase().trim()) : [];
+  const HAS_ALL = ROLE === 'cia_dev' || CAPS.includes('*');
+
+  const can = (cap) => {
+    if (!cap) return true;
+    if (HAS_ALL) return true;
+    return CAPS.includes((cap||'').toLowerCase().trim());
+  };
+
+  document.querySelectorAll('a[data-cap]').forEach(a => {
+    const reqRaw = (a.dataset.cap || '').trim();
+    // suporta "cap1|cap2" ou "cap1,cap2" (qualquer uma libera)
+    const reqCaps = reqRaw.split(/[|,]/).map(s => s.trim()).filter(Boolean);
+    const allowed = reqCaps.length ? reqCaps.some(can) : true;
+
+    if (!allowed) {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        show403Toast('Você não tem permissão para acessar esta área.');
+      });
+      // opcional: visual desabilitado mas clicável para o aviso
+      a.classList.add('is-disabled-click');
+    }
+  });
+
+  // Toast no TOPO central
+  window.show403Toast = (msg) => {
+    const t = document.createElement('div');
+    t.className = 'toast-403';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    // animação
+    requestAnimationFrame(()=> t.classList.add('show'));
+    setTimeout(()=> { t.classList.remove('show'); setTimeout(()=>t.remove(), 200); }, 2400);
+  };
+})();
+
 </script>
