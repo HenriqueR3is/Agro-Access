@@ -28,7 +28,7 @@ RewriteRule ^importar_fazendas$ app/views/admin/importar_fazendas_csv.php [L]
 
 RewriteRule ^metas$ app/views/admin/admin_metas.php [L]
 
-RewriteRule ^audit_logs$ app/views/admin/audit_logs.php [L]
+RewriteRule ^audit_logs$ app/views/admin/audit_logs.php [L,QSA]
 # ============================
 # Página 404 personalizada
 # ============================

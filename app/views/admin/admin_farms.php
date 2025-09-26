@@ -34,129 +34,164 @@ function detect_delim($line){
 
 /* ---------------------- CRUD + Import ---------------------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // força import se veio arquivo
     $action = $_POST['action'] ?? '';
-
-    // se tiver arquivo, força a ação de import
     if (!empty($_FILES['arquivo_csv']['name'])) $action = 'import_csv';
 
     try {
-        if ($action === 'add' || $action === 'edit') {
-            $id              = isset($_POST['id']) ? (int)$_POST['id'] : 0;
-            $nome            = str_clean($_POST['nome'] ?? '');
-            $codigo          = str_clean($_POST['codigo_fazenda'] ?? '');
-            $unidade_id      = ($_POST['unidade_id'] ?? '') !== '' ? (int)$_POST['unidade_id'] : null;
-            $localizacao     = str_clean($_POST['localizacao'] ?? '');
-            $dist_terra      = num_or_null($_POST['distancia_terra'] ?? '');
-            $dist_asfalto    = num_or_null($_POST['distancia_asfalto'] ?? '');
-            $dist_total      = num_or_null($_POST['distancia_total'] ?? '');
+        switch ($action) {
 
-            if ($nome==='' || $codigo==='') throw new Exception("Preencha Nome e Código.");
+            case 'add': {
+                $nome        = str_clean($_POST['nome'] ?? '');
+                $codigo      = str_clean($_POST['codigo_fazenda'] ?? '');
+                $unidade_id  = ($_POST['unidade_id'] ?? '') !== '' ? (int)$_POST['unidade_id'] : null;
+                $localizacao = str_clean($_POST['localizacao'] ?? '');
+                $dist_terra  = num_or_null($_POST['distancia_terra'] ?? '');
+                $dist_asfalto= num_or_null($_POST['distancia_asfalto'] ?? '');
+                $dist_total  = num_or_null($_POST['distancia_total'] ?? '');
 
-            if ($action==='add') {
+                if ($nome==='' || $codigo==='') throw new Exception("Preencha Nome e Código.");
+
                 $stmt = $pdo->prepare("
                   INSERT INTO fazendas (nome, codigo_fazenda, unidade_id, localizacao, distancia_terra, distancia_asfalto, distancia_total)
                   VALUES (?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([$nome, $codigo, $unidade_id, $localizacao, $dist_terra, $dist_asfalto, $dist_total]);
+
+                $fazenda_id = (int)$pdo->lastInsertId();
+                Audit::log($pdo, [
+                  'action'=>'created','entity'=>'fazendas','entity_id'=>$fazenda_id,
+                  'meta'=>['nome'=>$nome,'codigo'=>$codigo,'unidade_id'=>$unidade_id]
+                ]);
+
                 $_SESSION['success_message'] = "Fazenda adicionada com sucesso!";
-            } else {
+                break;
+            }
+
+            case 'edit': {
+                $id          = (int)($_POST['id'] ?? 0);
+                $nome        = str_clean($_POST['nome'] ?? '');
+                $codigo      = str_clean($_POST['codigo_fazenda'] ?? '');
+                $unidade_id  = ($_POST['unidade_id'] ?? '') !== '' ? (int)$_POST['unidade_id'] : null;
+                $localizacao = str_clean($_POST['localizacao'] ?? '');
+                $dist_terra  = num_or_null($_POST['distancia_terra'] ?? '');
+                $dist_asfalto= num_or_null($_POST['distancia_asfalto'] ?? '');
+                $dist_total  = num_or_null($_POST['distancia_total'] ?? '');
+
                 if ($id<=0) throw new Exception("ID inválido para edição.");
+                if ($nome==='' || $codigo==='') throw new Exception("Preencha Nome e Código.");
+
                 $stmt = $pdo->prepare("
                   UPDATE fazendas
                   SET nome=?, codigo_fazenda=?, unidade_id=?, localizacao=?, distancia_terra=?, distancia_asfalto=?, distancia_total=?
                   WHERE id=?
                 ");
                 $stmt->execute([$nome, $codigo, $unidade_id, $localizacao, $dist_terra, $dist_asfalto, $dist_total, $id]);
+
+                Audit::log($pdo, [
+                  'action'=>'updated','entity'=>'fazendas','entity_id'=>$id,
+                  'meta'=>['nome'=>$nome,'codigo'=>$codigo,'unidade_id'=>$unidade_id]
+                ]);
+
                 $_SESSION['success_message'] = "Fazenda atualizada com sucesso!";
+                break;
             }
 
-        } elseif ($action === 'delete') {
-            $id = (int)($_POST['id'] ?? 0);
-            if ($id<=0) throw new Exception("ID inválido para exclusão.");
-            $pdo->prepare("DELETE FROM fazendas WHERE id=?")->execute([$id]);
-            $_SESSION['success_message'] = "Fazenda excluída com sucesso!";
+            case 'delete': {
+                $id = (int)($_POST['id'] ?? 0);
+                if ($id<=0) throw new Exception("ID inválido para exclusão.");
 
-        } elseif ($action === 'import_csv') {
-            if (!isset($_FILES['arquivo_csv']) || $_FILES['arquivo_csv']['error'] !== UPLOAD_ERR_OK) {
-                throw new Exception("Erro no upload do arquivo.");
+                $pdo->prepare("DELETE FROM fazendas WHERE id=?")->execute([$id]);
+
+                Audit::log($pdo, [
+                  'action'=>'deleted','entity'=>'fazendas','entity_id'=>$id
+                ]);
+
+                $_SESSION['success_message'] = "Fazenda excluída com sucesso!";
+                break;
             }
-            $tmp = $_FILES['arquivo_csv']['tmp_name'];
-            $fh = fopen($tmp, "r"); if(!$fh) throw new Exception("Não foi possível abrir o arquivo.");
-            $first = fgets($fh);
-            if ($first===false) throw new Exception("Arquivo vazio.");
-            $delim = detect_delim($first);
-            rewind($fh);
 
-            // Lê cabeçalho
-            $header = fgetcsv($fh, 0, $delim);
-            if (!$header) throw new Exception("Cabeçalho ausente.");
-            $norm = function($s){
-              $s = mb_strtolower(trim((string)$s),'UTF-8');
-              $s = strtr($s, ['á'=>'a','à'=>'a','â'=>'a','ã'=>'a','ä'=>'a','é'=>'e','ê'=>'e','ë'=>'e','í'=>'i','ï'=>'i','ó'=>'o','ô'=>'o','õ'=>'o','ö'=>'o','ú'=>'u','ü'=>'u','ç'=>'c']);
-              $s = preg_replace('/\s+/u',' ',$s);
-              return $s;
-            };
-            $hmap=[]; foreach($header as $i=>$h){ $hmap[$norm($h)] = $i; }
-
-            // tenta mapear nomes usuais
-            $ixInst  = $hmap['instancia']           ?? $hmap['unidade']        ?? null;
-            $ixCod   = $hmap['cd_upnivel1']         ?? $hmap['codigo']         ?? $hmap['codigo fazenda'] ?? null;
-            $ixNome  = $hmap['de_upnivel1']         ?? $hmap['nome']           ?? null;
-            $ixLoc   = $hmap['localizacao']         ?? $hmap['localização']    ?? null;
-            $ixTerra = $hmap['distancia_terra']     ?? $hmap['dist terra']     ?? null;
-            $ixAsf   = $hmap['distancia_asfalto']   ?? $hmap['dist asfalto']   ?? null;
-            $ixTot   = $hmap['distancia_total']     ?? $hmap['dist total']     ?? null;
-
-            if ($ixCod===null || $ixNome===null) throw new Exception("Colunas obrigatórias não encontradas (código/nome).");
-
-            $pdo->beginTransaction();
-
-            // prepara buscas de unidade; tenta por instancia, ou por nome/sigla
-            $stmtUniInst  = $pdo->prepare("SELECT id FROM unidades WHERE instancia = ? LIMIT 1");
-            $stmtUniNome  = $pdo->prepare("SELECT id FROM unidades WHERE nome = ? LIMIT 1");
-            $siglaExists  = (bool)$pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='unidades' AND COLUMN_NAME='sigla'")->fetchColumn();
-            $stmtUniSigla = $siglaExists ? $pdo->prepare("SELECT id FROM unidades WHERE sigla = ? LIMIT 1") : null;
-
-            // evita duplicados por código
-            $stmtHas = $pdo->prepare("SELECT id FROM fazendas WHERE codigo_fazenda=? LIMIT 1");
-            $stmtIns = $pdo->prepare("
-              INSERT INTO fazendas (nome, codigo_fazenda, unidade_id, localizacao, distancia_terra, distancia_asfalto, distancia_total)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            ");
-
-            $ins=0; $dup=0; $lin=0;
-            while (($row = fgetcsv($fh, 0, $delim)) !== false) {
-                $lin++;
-                $codigo = str_clean($row[$ixCod] ?? '');
-                $nome   = str_clean($row[$ixNome] ?? '');
-                if ($codigo==='' || $nome==='') { $dup++; continue; }
-
-                $unidade_id = null;
-                if ($ixInst!==null) {
-                  $inst = str_clean($row[$ixInst] ?? '');
-                  if ($inst!=='') {
-                    $stmtUniInst->execute([$inst]);
-                    $unidade_id = $stmtUniInst->fetchColumn() ?: null;
-                    if (!$unidade_id) { $stmtUniNome->execute([$inst]); $unidade_id = $stmtUniNome->fetchColumn() ?: null; }
-                    if (!$unidade_id && $stmtUniSigla) { $stmtUniSigla->execute([$inst]); $unidade_id = $stmtUniSigla->fetchColumn() ?: null; }
-                  }
+            case 'import_csv': {
+                if (!isset($_FILES['arquivo_csv']) || $_FILES['arquivo_csv']['error'] !== UPLOAD_ERR_OK) {
+                    throw new Exception("Erro no upload do arquivo.");
                 }
+                $tmp = $_FILES['arquivo_csv']['tmp_name'];
+                $fh = fopen($tmp, "r"); if(!$fh) throw new Exception("Não foi possível abrir o arquivo.");
+                $first = fgets($fh);
+                if ($first===false) throw new Exception("Arquivo vazio.");
+                $delim = detect_delim($first);
+                rewind($fh);
 
-                $localizacao  = $ixLoc!==null   ? str_clean($row[$ixLoc] ?? '') : '';
-                $dTerra       = $ixTerra!==null ? num_or_null($row[$ixTerra] ?? '') : null;
-                $dAsfalto     = $ixAsf!==null   ? num_or_null($row[$ixAsf] ?? '') : null;
-                $dTotal       = $ixTot!==null   ? num_or_null($row[$ixTot] ?? '') : null;
+                // Cabeçalho
+                $header = fgetcsv($fh, 0, $delim);
+                if (!$header) throw new Exception("Cabeçalho ausente.");
+                $norm = function($s){
+                  $s = mb_strtolower(trim((string)$s),'UTF-8');
+                  $s = strtr($s, ['á'=>'a','à'=>'a','â'=>'a','ã'=>'a','ä'=>'a','é'=>'e','ê'=>'e','ë'=>'e','í'=>'i','ï'=>'i','ó'=>'o','ô'=>'o','õ'=>'o','ö'=>'o','ú'=>'u','ü'=>'u','ç'=>'c']);
+                  $s = preg_replace('/\s+/u',' ',$s);
+                  return $s;
+                };
+                $hmap=[]; foreach($header as $i=>$h){ $hmap[$norm($h)] = $i; }
 
-                $stmtHas->execute([$codigo]);
-                if ($stmtHas->fetchColumn()) { $dup++; continue; }
+                $ixInst  = $hmap['instancia'] ?? $hmap['unidade'] ?? null;
+                $ixCod   = $hmap['cd_upnivel1'] ?? $hmap['codigo'] ?? $hmap['codigo fazenda'] ?? null;
+                $ixNome  = $hmap['de_upnivel1'] ?? $hmap['nome'] ?? null;
+                $ixLoc   = $hmap['localizacao'] ?? $hmap['localização'] ?? null;
+                $ixTerra = $hmap['distancia_terra'] ?? $hmap['dist terra'] ?? null;
+                $ixAsf   = $hmap['distancia_asfalto'] ?? $hmap['dist asfalto'] ?? null;
+                $ixTot   = $hmap['distancia_total'] ?? $hmap['dist total'] ?? null;
 
-                $stmtIns->execute([$nome, $codigo, $unidade_id, $localizacao, $dTerra, $dAsfalto, $dTotal]);
-                $ins++;
+                if ($ixCod===null || $ixNome===null) throw new Exception("Colunas obrigatórias não encontradas (código/nome).");
+
+                $pdo->beginTransaction();
+                $stmtUniInst  = $pdo->prepare("SELECT id FROM unidades WHERE instancia = ? LIMIT 1");
+                $stmtUniNome  = $pdo->prepare("SELECT id FROM unidades WHERE nome = ? LIMIT 1");
+                $siglaExists  = (bool)$pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='unidades' AND COLUMN_NAME='sigla'")->fetchColumn();
+                $stmtUniSigla = $siglaExists ? $pdo->prepare("SELECT id FROM unidades WHERE sigla = ? LIMIT 1") : null;
+
+                $stmtHas = $pdo->prepare("SELECT id FROM fazendas WHERE codigo_fazenda=? LIMIT 1");
+                $stmtIns = $pdo->prepare("
+                  INSERT INTO fazendas (nome, codigo_fazenda, unidade_id, localizacao, distancia_terra, distancia_asfalto, distancia_total)
+                  VALUES (?, ?, ?, ?, ?, ?, ?)
+                ");
+
+                $ins=0; $dup=0;
+                while (($row = fgetcsv($fh, 0, $delim)) !== false) {
+                    $codigo = str_clean($row[$ixCod] ?? '');
+                    $nome   = str_clean($row[$ixNome] ?? '');
+                    if ($codigo==='' || $nome==='') { $dup++; continue; }
+
+                    $unidade_id = null;
+                    if ($ixInst!==null) {
+                      $inst = str_clean($row[$ixInst] ?? '');
+                      if ($inst!=='') {
+                        $stmtUniInst->execute([$inst]);
+                        $unidade_id = $stmtUniInst->fetchColumn() ?: null;
+                        if (!$unidade_id) { $stmtUniNome->execute([$inst]); $unidade_id = $stmtUniNome->fetchColumn() ?: null; }
+                        if (!$unidade_id && $stmtUniSigla) { $stmtUniSigla->execute([$inst]); $unidade_id = $stmtUniSigla->fetchColumn() ?: null; }
+                      }
+                    }
+
+                    $localizacao  = $ixLoc!==null   ? str_clean($row[$ixLoc] ?? '') : '';
+                    $dTerra       = $ixTerra!==null ? num_or_null($row[$ixTerra] ?? '') : null;
+                    $dAsfalto     = $ixAsf!==null   ? num_or_null($row[$ixAsf] ?? '') : null;
+                    $dTotal       = $ixTot!==null   ? num_or_null($row[$ixTot] ?? '') : null;
+
+                    $stmtHas->execute([$codigo]);
+                    if ($stmtHas->fetchColumn()) { $dup++; continue; }
+
+                    $stmtIns->execute([$nome, $codigo, $unidade_id, $localizacao, $dTerra, $dAsfalto, $dTotal]);
+                    $ins++;
+                }
+                $pdo->commit();
+                fclose($fh);
+
+                $_SESSION['success_message'] = "Importação concluída! Inseridos: $ins • Ignorados/duplicados: $dup.";
+                break;
             }
-            $pdo->commit();
-            fclose($fh);
 
-            $_SESSION['success_message'] = "Importação concluída! Inseridos: $ins • Ignorados/duplicados: $dup.";
+            default:
+                throw new Exception('Ação inválida.');
         }
     } catch (Exception $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -166,6 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header("Location: /fazendas");
     exit();
 }
+
 
 /* ---------------------- Filtros + paginação (GET) ---------------------- */
 $q          = str_clean($_GET['q'] ?? '');

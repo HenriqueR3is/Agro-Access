@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
+require_once __DIR__ . '/../../../app/lib/Audit.php';
 
 $tipoSess = strtolower($_SESSION['usuario_tipo'] ?? '');
 $ADMIN_LIKE = ['admin','cia_admin','cia_dev'];
@@ -135,7 +136,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             $pdo->commit();
 
-            
+            // === AUDIT por ação ===
+            if ($action === 'add_user') {
+                Audit::log($pdo, [
+                'action'    => 'created',
+                'entity'    => 'usuarios',
+                'entity_id' => $user_id,
+                'meta'      => ['nome'=>$nome,'email'=>$email,'tipo'=>$tipo,'ativo'=>$ativo]
+                ]);
+            } else { // edit_user
+                Audit::log($pdo, [
+                'action'    => 'updated',
+                'entity'    => 'usuarios',
+                'entity_id' => $user_id,
+                'meta'      => [
+                    'nome'=>$nome,'email'=>$email,'tipo'=>$tipo,'ativo'=>$ativo,
+                    'senha_alterada'=> !empty($_POST['senha'])
+                ]
+                ]);
+            }
 
             if ($isAjax) $jsonOut(['success' => true, 'message' => 'Usuário salvo com sucesso!']);
             $_SESSION['success_message'] = "Usuário " . ($action === 'add_user' ? 'adicionado' : 'atualizado') . " com sucesso!";
@@ -151,12 +170,36 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 exit();
             }
 
+                $stU = $pdo->prepare("SELECT nome, email FROM usuarios WHERE id = :id");
+                $stU->execute([':id'=>$user_id]);
+                $uInfo = $stU->fetch(PDO::FETCH_ASSOC) ?: null;
+
+                $pdo->beginTransaction();
+                $pdo->prepare("DELETE FROM usuario_unidade  WHERE usuario_id = :id")->execute([':id' => $user_id]);
+                $pdo->prepare("DELETE FROM usuario_operacao WHERE usuario_id = :id")->execute([':id' => $user_id]);
+                $stmt = $pdo->prepare("DELETE FROM usuarios WHERE id = :id");
+                $stmt->execute([':id' => $user_id]);
+                $pdo->commit();
+
+                Audit::log($pdo, [
+                    'action'    => 'deleted',
+                    'entity'    => 'usuarios',
+                    'entity_id' => $user_id,
+                    'meta'      => $uInfo ? ['nome'=>$uInfo['nome'],'email'=>$uInfo['email']] : null
+                ]);
+
             $pdo->beginTransaction();
             $pdo->prepare("DELETE FROM usuario_unidade  WHERE usuario_id = :id")->execute([':id' => $user_id]);
             $pdo->prepare("DELETE FROM usuario_operacao WHERE usuario_id = :id")->execute([':id' => $user_id]);
             $stmt = $pdo->prepare("DELETE FROM usuarios WHERE id = :id");
             $stmt->execute([':id' => $user_id]);
             $pdo->commit();
+                    
+            Audit::log($pdo, [
+            'action'    => 'deleted',
+            'entity'    => 'usuarios',
+            'entity_id' => $user_id
+            ]);
 
             if ($isAjax) $jsonOut(['success' => true, 'message' => 'Usuário excluído com sucesso!']);
             $_SESSION['success_message'] = "Usuário excluído com sucesso!";

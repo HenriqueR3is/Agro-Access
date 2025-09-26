@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
+require_once __DIR__.'/../../../app/lib/Audit.php';
 
 $tipoSess = strtolower($_SESSION['usuario_tipo'] ?? '');
 $ADMIN_LIKE = ['admin','cia_admin','cia_dev'];
@@ -35,6 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([$nome, $modelo, $numero_identificacao]);
                     $_SESSION['message'] = "Implemento adicionado com sucesso!";
                 }
+                Audit::log($pdo, [
+                'action'=>'created','entity'=>'implementos','meta'=>[
+                    'nome'=>$nome,'modelo'=>$modelo,'numero_identificacao'=>$numero_identificacao
+                ]
+                ]);
                 break;
                 
             case 'edit_implemento':
@@ -54,6 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([$nome, $modelo, $numero_identificacao, $id]);
                     $_SESSION['message'] = "Implemento atualizado com sucesso!";
                 }
+                Audit::log($pdo, [
+                'action'=>'updated','entity'=>'implementos','entity_id'=>$id,
+                'meta'=>['nome'=>$nome,'modelo'=>$modelo,'numero_identificacao'=>$numero_identificacao]
+                ]);
                 break;
                 
             case 'delete_implemento':
@@ -70,6 +80,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([$id]);
                     $_SESSION['message'] = "Implemento excluído com sucesso!";
                 }
+                Audit::log($pdo, [
+                'action'=>'deleted','entity'=>'implementos','entity_id'=>$id
+                ]);
                 break;
                 
             case 'add':
@@ -86,6 +99,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$nome, $unidade_id, $operacao_id, $implemento_id, $ativo]);
 
                 $_SESSION['message'] = "Equipamento adicionado com sucesso!";
+                Audit::log($pdo, ['action'=>'created','entity'=>'equipamentos','entity_id'=>$novoId ?? null,
+                'meta'=>['nome'=>$nome,'unidade_id'=>$unidade_id,'operacao_id'=>$operacao_id,'implemento_id'=>$implemento_id,'ativo'=>$ativo]]);
                 break;
                 
             case 'edit':
@@ -108,6 +123,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$nome, $unidade_id, $operacao_id, $implemento_id, $ativo, $id]);
 
                 $_SESSION['message'] = "Equipamento atualizado com sucesso!";
+                Audit::log($pdo, ['action'=>'updated','entity'=>'equipamentos','entity_id'=>$id,
+                'meta'=>['nome'=>$nome,'unidade_id'=>$unidade_id,'operacao_id'=>$operacao_id,'implemento_id'=>$implemento_id,'ativo'=>$ativo]]);
                 break;
 
                 case 'toggle_status':
@@ -118,6 +135,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$status, $id]);
 
                 $_SESSION['message'] = $status ? "Equipamento ativado." : "Equipamento inativado.";
+                Audit::log($pdo, [
+                'action'=>'toggled','entity'=>'equipamentos','entity_id'=>$id,
+                'meta'=>['ativo'=>$status]
+                ]);
                 break;
                 
             case 'delete':
@@ -127,6 +148,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$id]);
                 
                 $_SESSION['message'] = "Equipamento excluído com sucesso!";
+                Audit::log($pdo, [
+                'action'=>'deleted','entity'=>'equipamentos','entity_id'=>$id
+                ]);
                 break;
         }
     } catch (PDOException $e) {

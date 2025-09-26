@@ -3,6 +3,7 @@ ob_start();
 
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
+    require_once __DIR__ . '/../app/controllers/AuthController.php';
 }
 
 if (!isset($_SESSION['usuario_id'])) {
@@ -117,7 +118,7 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                 </div>
                 <div class="has-submenu">👑 DEV Section <span class="arrow"></span></div>
                 <div class="submenu">
-                    <a href="audit_logs" data-cap="audit_logs:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'audit_logs.php' ? 'active' : ''; ?>">📃 Logs de Auditoria</a>
+                    <a href="/audit_logs" data-cap="audit:view" class="<?php echo basename($_SERVER['PHP_SELF'])=='audit_logs.php'?'active':''; ?>">📃 Logs de Auditoria</a>
                 </div>
             </div>
             
@@ -150,7 +151,7 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
   // Lista única de capabilities usadas nas telas/menus
   $ALL_CAPS = [
     'dashboard:view','admin:menu','admin:pages','users:crud', 'equip:crud',
-    'fazendas:crud', 'metas:view','metas:edit','admin_dashboard:view', 'apontamentos:view','user_dashboard:view'
+    'fazendas:crud', 'metas:view','metas:edit','admin_dashboard:view', 'apontamentos:view','user_dashboard:view', 'audit:view'
   ];
 
   $caps = [];
