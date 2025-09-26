@@ -11,6 +11,7 @@ if (!isset($_SESSION['usuario_id']) || !in_array($tipoSess, $ADMIN_LIKE, true)) 
 }
 
 require_once __DIR__ . '/../../../app/includes/header.php';
+require_once __DIR__.'/../../../app/lib/Audit.php';
 
 // Processar ações de implementos
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

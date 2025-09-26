@@ -567,7 +567,7 @@ a:hover {
     background-color: #34495e;
     color: #ecf0f1;
     overflow-y: auto;
-    padding-bottom: 20px;
+  /*   padding-bottom: 20px; */
     z-index: 999;
     
     /* Adiciona Flexbox para empurrar o footer para baixo */

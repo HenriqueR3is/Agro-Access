@@ -115,6 +115,10 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                     <a href="dashboard" class="<?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">💻 Dash CIA</a>
                     <a href="user_dashboard" data-cap="user_dashboard:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'user_dashboard.php' ? 'active' : ''; ?>">🧑‍🌾 Dash User</a>
                 </div>
+                <div class="has-submenu">👑 DEV Section <span class="arrow"></span></div>
+                <div class="submenu">
+                    <a href="audit_logs" data-cap="audit_logs:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'audit_logs.php' ? 'active' : ''; ?>">📃 Logs de Auditoria</a>
+                </div>
             </div>
             
             <div class="sidebar-profile-footer">
@@ -156,7 +160,7 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
     if ($role === 'cia_dev') {
       $caps = ['*']; // acesso total
     } elseif ($role === 'admin') {
-      $caps = ['dashboard:view','admin:menu','admin:pages','users:crud','fazendas:crud','equip:crud','comparativo:view','metas:view','metas:edit'];
+      $caps = ['dashboard:view','admin:menu','admin:pages','users:crud','fazendas:crud','equip:crud','comparativo:view','metas:view','metas:edit', 'apontamentos:view', 'audit:view'];
     } elseif ($role === 'cia_admin') {
       $caps = ['dashboard:view','admin:menu','users:view','fazendas:crud','equip:crud','comparativo:view','metas:view', 'apontamentos:view'];
     } elseif ($role === 'cia_user') {

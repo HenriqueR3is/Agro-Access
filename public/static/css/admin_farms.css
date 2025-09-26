@@ -63,7 +63,7 @@
 }
 
 /* ===== Layout geral ===== */
-.container { max-width: 1200px; margin: 0 auto; padding: 12px; }
+
 .page-header, .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 
 /* ===== Botões ===== */
@@ -163,3 +163,12 @@
   color: #eceff1;
 }
 
+        body {
+font-family: 'Poppins', sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+        }

@@ -8,6 +8,7 @@ if (!isset($_SESSION['usuario_id'])) {
 }
 
 require_once __DIR__ . '/../../../app/includes/header.php';
+require_once __DIR__.'/../../../app/lib/Audit.php';
 ?>
 
 <!DOCTYPE html>

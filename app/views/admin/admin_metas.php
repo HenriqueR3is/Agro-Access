@@ -12,6 +12,7 @@ if (!isset($_SESSION['usuario_id']) || !in_array($tipoSess, $ADMIN_LIKE, true)) 
 
 // Inclui o cabeçalho compartilhado
 require_once __DIR__ . '/../../../app/includes/header.php';
+require_once __DIR__.'/../../../app/lib/Audit.php';
 
 $feedback_message = '';
 if (isset($_SESSION['feedback_message'])) {

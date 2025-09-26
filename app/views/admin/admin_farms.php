@@ -12,6 +12,8 @@ if (!isset($_SESSION['usuario_id']) || !in_array($tipoSess, $ADMIN_LIKE, true)) 
 
 $FAZENDAS_BASE = '/fazendas';
 
+require_once __DIR__.'/../../../app/lib/Audit.php';
+
 /* ---------------------- Helpers ---------------------- */
 function str_clean($s){ return trim((string)$s); }
 function num_or_null($s){

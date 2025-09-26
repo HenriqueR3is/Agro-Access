@@ -12,6 +12,8 @@ if (!isset($_SESSION['usuario_id']) || !in_array($tipoSess, $ADMIN_LIKE, true)) 
     exit();
 }
 
+require_once __DIR__.'/../../../app/lib/Audit.php';
+
 if (isset($_GET['ajax_data'])) {
     header('Content-Type: application/json; charset=UTF-8');
     echo json_encode($data, JSON_UNESCAPED_UNICODE);

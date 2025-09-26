@@ -11,6 +11,8 @@ if (!in_array($role, $ADMIN_LIKE, true)) {
   exit();
 }
 
+require_once __DIR__.'/../../../app/lib/Audit.php';
+
 /**
  * Detecta delimitador com heurística simples usando a linha do cabeçalho
  */

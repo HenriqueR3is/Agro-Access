@@ -167,3 +167,157 @@ a.is-disabled-click { opacity:.7; }
   top: 28px;                    /* leve slide-down */
   transform: translateX(-50%) translateY(0);
 }
+/* ===============================================
+  AJUSTES PARA UM PERFIL MODERNO E COMPACTO (TOM AVERMELHADO)
+  =============================================== */
+
+/* O estilo do .sidebar deve conter display: flex e flex-direction: column */
+.sidebar {
+    background: linear-gradient(180deg, #6b0f1a, #8b1323); /* Degradê de vermelho escuro */
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 65px);
+    /* ... mantenha os outros estilos do sidebar ... */
+}
+
+/* O estilo do .sidebar-nav deve ter flex-grow: 1 para ocupar o espaço restante */
+.sidebar-nav {
+    flex-grow: 1;
+    /* ... mantenha os outros estilos do sidebar-nav ... */
+}
+
+/* Estilos para o bloco de perfil com visual compacto */
+.sidebar-profile-footer {
+    display: flex;
+    align-items: center;
+    gap: 15px; /* Aumentei o espaço para um visual mais clean */
+    padding: 18px; /* Aumentei o padding para um visual mais robusto */
+    border-top: 2px solid rgba(255, 255, 255, 0.15); /* Linha de separação mais visível */
+    background-color: #8b1323; /* Vermelho mais escuro para o bloco */
+    margin-top: auto;
+    box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.4); /* Sombra mais intensa */
+    transition: background-color 0.4s ease, box-shadow 0.4s ease;
+    position: relative; /* Para o efeito de brilho */
+    overflow: hidden; /* Para garantir que o brilho não vaze */
+}
+
+.sidebar-profile-footer:hover {
+    background-color: #a71d31; /* Fica um pouco mais claro no hover */
+    box-shadow: 0 -8px 25px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+}
+
+/* Efeito de brilho sutil ao passar o mouse */
+.sidebar-profile-footer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+    transition: left 0.5s ease;
+}
+
+.sidebar-profile-footer:hover::before {
+    left: 100%;
+}
+
+
+.profile-picture-footer {
+    width: 50px; /* Tamanho da foto um pouco maior */
+    height: 50px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 3px solid #e74c3c; /* Borda da foto em um vermelho vibrante */
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease, border-color 0.3s ease;
+    flex-shrink: 0;
+}
+
+.profile-picture-footer img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-picture-footer:hover {
+    transform: scale(1.1); /* Um pouco mais de zoom no hover */
+    border-color: #c0392b; /* Borda mais escura no hover */
+}
+
+.profile-info-footer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+    flex-grow: 1; /* Permite que o texto ocupe mais espaço */
+}
+
+.profile-name-footer {
+    font-size: 1rem; /* Nome um pouco maior */
+    font-weight: 700;
+    color: #fce4ec; /* Um rosa avermelhado claro para o nome */
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 3px;
+}
+
+.profile-role-footer {
+    font-size: 0.85rem; /* Cargo um pouco maior */
+    color: #ef9a9a; /* Um vermelho claro suave para o cargo */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Estilos para os badges - com um visual moderno e elegante */
+.badges-container-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Espaçamento entre os badges */
+    margin-top: 8px;
+    flex-wrap: wrap; /* Permite que os badges quebrem a linha se houver muitos */
+}
+
+.badge-icon {
+    font-size: 1.1rem; /* Ícones maiores */
+    color: #ffeb3b; /* Amarelo dourado para os ícones - destaque elegante */
+    text-shadow: 0 0 8px rgba(255, 235, 59, 0.6);
+    transition: transform 0.3s ease, text-shadow 0.3s ease, color 0.3s ease;
+    cursor: help;
+    padding: 3px;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.badge-icon:hover {
+    transform: translateY(-3px) scale(1.2); /* Sutil efeito de "flutuar" e zoom */
+    text-shadow: 0 0 12px rgba(255, 235, 59, 1);
+    color: #ffe082; /* Fica um pouco mais claro no hover */
+}
+
+/* Adicionando um pequeno indicador de hover aos badges */
+.badge-icon::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%) scaleX(0);
+    width: 80%;
+    height: 2px;
+    background-color: #ffeb3b;
+    transition: transform 0.3s ease;
+}
+
+.badge-icon:hover::after {
+    transform: translateX(-50%) scaleX(1);
+}
+
+/* Exemplo de uma imagem para o perfil (opcional) */
+/* .profile-picture-footer img {
+    content: url('sua-imagem-de-perfil.jpg'); 
+} */

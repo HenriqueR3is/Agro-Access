@@ -11,12 +11,13 @@
    ESTILOS GERAIS
    ============================== */
 body {
-    background: linear-gradient(135deg, #eef2f3, #d9e4ec);
     font-family: 'Poppins', sans-serif;
-    color: #2c3e50;
-    margin: 0;
-    padding: 0;
+    background-color: var(--bg-light);
+    color: var(--text-color);
+    line-height: 1.6;
     min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Títulos principais */
@@ -438,7 +439,7 @@ form button:hover {
 
 .signature-credit:hover .sig-name {
   color: #0d8d52;
-}    
+}
 
 .card {
     transition: transform 0.2s, box-shadow 0.2s;
@@ -519,6 +520,4 @@ form button:hover {
             text-align: center;
             padding: 20px;
         }
-
-.card-inativo { opacity:.8; filter: grayscale(10%); }
 

@@ -135,6 +135,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             $pdo->commit();
 
+            
+
             if ($isAjax) $jsonOut(['success' => true, 'message' => 'Usuário salvo com sucesso!']);
             $_SESSION['success_message'] = "Usuário " . ($action === 'add_user' ? 'adicionado' : 'atualizado') . " com sucesso!";
             header("Location: /admin_users");
