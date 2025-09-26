@@ -123,7 +123,7 @@
 .table-fazendas { width: 100%; border-collapse: collapse; }
 .table-fazendas th, .table-fazendas td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; }
 .table-fazendas thead th {
-  position: sticky; top: 0; z-index: 1; background: #263238; border-bottom: 1px solid #e5e7eb; text-align: left;
+  position: sticky; top: 0; z-index: 1; background: #1b5e20; border-bottom: 1px solid #e5e7eb; text-align: left;
 }
 .table-fazendas tbody tr:hover { background: #fafcff; }
 
@@ -172,3 +172,4 @@ font-family: 'Poppins', sans-serif;
     display: flex;
     flex-direction: column;
         }
+

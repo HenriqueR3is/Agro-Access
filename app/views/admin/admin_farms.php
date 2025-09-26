@@ -207,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $q          = str_clean($_GET['q'] ?? '');
 $unidade_id = isset($_GET['unidade_id']) && $_GET['unidade_id']!=='' ? (int)$_GET['unidade_id'] : null;
 $page       = positive_int($_GET['page'] ?? 1, 1);
-$per_page   = positive_int($_GET['per_page'] ?? 50, 50);
+$per_page   = positive_int($_GET['per_page'] ?? 25, 25);
 $per_page   = min($per_page, 200);
 $offset     = ($page-1)*$per_page;
 
