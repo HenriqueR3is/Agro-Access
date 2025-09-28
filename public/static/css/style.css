@@ -1,7 +1,3 @@
-
-
-
-
 /*==============================
   Importação de Fontes e Variáveis Globais
 ==============================*/
@@ -114,10 +110,6 @@ body {
     padding: 6px 12px;
     border-radius: 50px;
 }
-
-
-
-
 
 /*==============================
   Sidebar
@@ -372,11 +364,6 @@ table th {
         display: block;
     }
 }
-
-
-
-
-
 
 /* MODAL ESTILOS */
 .modal-overlay {
@@ -712,21 +699,24 @@ a:hover {
 
 /* O estilo do .sidebar-nav deve ter flex-grow: 1 para ocupar o espaço restante */
 .sidebar-nav {
-    flex-grow: 1;
-    /* ... mantenha os outros estilos do sidebar-nav ... */
+    flex: 1; /* ocupa o espaço disponível */
+    overflow-y: auto;   /* Scroll somente no eixo vertical */
+    overflow-x: hidden; /* Bloqueia scroll horizontal */
 }
 
-/* Estilos para o bloco de perfil com visual compacto */
+/* Footer fixo no final da sidebar */
 .sidebar-profile-footer {
+    flex-shrink: 0; /* não encolhe */
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 15px;
     border-top: 2px solid rgba(255, 255, 255, 0.1);
     background-color: #2e7d32;
-    margin-top: auto;
     box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.2);
     transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    position: relative; /* não precisa absolute/sticky */
+    z-index: 2; /* fica sempre acima do conteúdo rolável */
 }
 
 .sidebar-profile-footer:hover {

@@ -188,6 +188,7 @@ a.is-disabled-click { opacity:.7; }
 
 /* Estilos para o bloco de perfil com visual compacto */
 .sidebar-profile-footer {
+    margin-top: auto;
     display: flex;
     align-items: center;
     gap: 15px; /* Aumentei o espaço para um visual mais clean */
@@ -321,3 +322,33 @@ a.is-disabled-click { opacity:.7; }
 /* .profile-picture-footer img {
     content: url('sua-imagem-de-perfil.jpg'); 
 } */
+ 
+/* ===== Scrollbar customizado (Chrome, Edge, Safari) ===== */
+.sidebar::-webkit-scrollbar {
+    width: 5px; /* mais fininha e elegante */
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: #2e7d32; /* trilho verde escuro */
+    border-radius: 10px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.25); /* profundidade */
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #4caf50, #2e7d32); /* verde degradê */
+    border-radius: 10px;
+    border: 2px solid #2e7d32; /* dá aquele efeito "separado do fundo" */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); /* glow sutil */
+    transition: all 0.3s ease;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #66bb6a, #43a047); /* verde mais claro */
+    box-shadow: 0 0 8px rgba(102, 187, 106, 0.8); /* brilho no hover */
+}
+
+/* ===== Scrollbar no Firefox ===== */
+.sidebar {
+    scrollbar-width: thin; /* barra fina */
+    scrollbar-color: #43a047 #1b5e20; /* polegar e trilho */
+}
