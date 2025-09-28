@@ -1,4 +1,5 @@
 <?php
+
 date_default_timezone_set('America/Sao_Paulo');
 
 session_start();
@@ -175,38 +176,55 @@ $report_hours = ['02:00','04:00','06:00','08:00','10:00','12:00','14:00','16:00'
 // Salvar novo apontamento (salvando data_hora em BRT/local)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
     try {
-        $usuario_id    = (int)$_POST['usuario_id'];
-        $report_time   = $_POST['report_time'];          // "HH:MM"
-        $status        = $_POST['status'];               // ativo | parado
-        $fazenda_id    = (int)$_POST['fazenda_id'];
-        $equipamento_id= (int)$_POST['equipamento_id'];
-        $operacao_id   = (int)$_POST['operacao_id'];
-        $hectares      = ($status === 'ativo') ? (float)$_POST['hectares'] : 0;
-        $observacoes   = ($status === 'parado') ? ($_POST['observacoes'] ?? '') : '';
+        $usuario_id     = (int)$_POST['usuario_id'];
+        $report_time    = $_POST['report_time'];          // "HH:MM"
+        $status         = $_POST['status'];               // ativo | parado
+        $fazenda_id     = (int)$_POST['fazenda_id'];
+        $equipamento_id = (int)$_POST['equipamento_id'];
+        $operacao_id    = (int)$_POST['operacao_id'];
+        $hectares_input = isset($_POST['hectares']) ? (float)str_replace(',', '.', $_POST['hectares']) : 0;
+        $viagens_input  = isset($_POST['viagens'])  ? (int)$_POST['viagens'] : 0; // vem do hidden (ver JS/HTML abaixo)
+        $observacoes    = ($status === 'parado') ? ($_POST['observacoes'] ?? '') : '';
+
+        // Descobre se a operação é "Caçamba" pelo NOME vindo do BD
+        $stmtOp = $pdo->prepare("SELECT nome FROM tipos_operacao WHERE id = ?");
+        $stmtOp->execute([$operacao_id]);
+        $opNome = (string)$stmtOp->fetchColumn();
+
+        // normaliza para comparar (sem acento/caixa)
+        $norm = function($s){
+            $s = mb_strtolower($s, 'UTF-8');
+            $s = strtr($s, ['á'=>'a','à'=>'a','â'=>'a','ã'=>'a','ä'=>'a','é'=>'e','ê'=>'e','ë'=>'e','í'=>'i','ï'=>'i','ó'=>'o','ô'=>'o','õ'=>'o','ö'=>'o','ú'=>'u','ü'=>'u','ç'=>'c']);
+            return $s;
+        };
+        $isCacamba = str_contains($norm($opNome), 'cacamba'); // cobre "caçamba" e "cacamba"
 
         // Unidade da fazenda selecionada (garante consistência)
         $stmt_unidade = $pdo->prepare("SELECT unidade_id FROM fazendas WHERE id = ?");
         $stmt_unidade->execute([$fazenda_id]);
         $fazenda_data = $stmt_unidade->fetch(PDO::FETCH_ASSOC);
-        $unidade_id = $fazenda_data['unidade_id'] ?? $unidade_do_usuario;
+        $unidade_id   = $fazenda_data['unidade_id'] ?? $unidade_do_usuario;
 
-        // Usa a data do "hoje" em Brasília + hora selecionada (00:00 pertence ao mesmo dia)
+        // Data de hoje em BRT + hora selecionada
         $hoje_brt = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
-        $data_hora_local = (new DateTime($hoje_brt->format('Y-m-d') . ' ' . $report_time . ':00', new DateTimeZone('America/Sao_Paulo')))
-                           ->format('Y-m-d H:i:s');
+        $data_hora_local = (new DateTime($hoje_brt->format('Y-m-d') . ' ' . $report_time . ':00', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d H:i:s');
+
+        // define hectares/viagens de acordo com operação + status
+        $hectares = ($status === 'ativo' && !$isCacamba) ? $hectares_input : 0;
+        $viagens  = ($status === 'ativo' &&  $isCacamba) ? max(0, $viagens_input) : 0;
 
         $stmt = $pdo->prepare("
             INSERT INTO apontamentos
-            (usuario_id, unidade_id, equipamento_id, operacao_id, hectares, data_hora, hora_selecionada, observacoes, fazenda_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (usuario_id, unidade_id, equipamento_id, operacao_id, hectares, viagens, data_hora, hora_selecionada, observacoes, fazenda_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $usuario_id, $unidade_id, $equipamento_id, $operacao_id,
-            $hectares, $data_hora_local, $report_time, $observacoes, $fazenda_id
+            $hectares, $viagens, $data_hora_local, $report_time, $observacoes, $fazenda_id
         ]);
 
-        $_SESSION['feedback_message'] = "Apontamento salvo com sucesso para às " . substr($report_time,0,5) . "!";
-        header("Location: /user_dashboard");
+        $_SESSION['feedback_message'] = 'Apontamento salvo com sucesso para às ' . substr($report_time, 0, 5) . '!';
+        header('Location: /user_dashboard');
         exit;
 
     } catch (PDOException $e) {
@@ -307,80 +325,82 @@ $total_monthly_entries  = array_sum(array_map(fn($r)=>$r['total_entries'] ?? 0, 
         <section class="grid-container">
             <div class="card form-card">
                 <h3>Novo Apontamento</h3>
-                <form action="/user_dashboard" method="POST" id="entryForm">
-                    <input type="hidden" name="usuario_id" value="<?php echo (int)$usuario_id; ?>">
+                    <form action="/user_dashboard" method="POST" id="entryForm">
+                        <input type="hidden" name="usuario_id" value="<?php echo (int)$usuario_id; ?>">
 
-                    <div class="form-row">
-                        <div class="input-group">
+                        <!-- LINHA 1: OPERAÇÃO + EQUIPAMENTO -->
+                        <div class="form-row">
+                            <div class="input-group" style="width: 100%;">
+                            <label for="operation">Operação</label>
+                            <select id="operation" name="operacao_id" class="select-search" required>
+                                <option value="">Selecione a operação...</option>
+                                <?php foreach ($tipos_operacao as $op): ?>
+                                <option value="<?php echo (int)$op['id']; ?>" data-nome="<?php echo htmlspecialchars($op['nome']); ?>">
+                                    <?php echo htmlspecialchars($op['nome']); ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            </div>
+
+                            <div class="input-group">
+                            <label for="equipment">Equipamento</label>
+                            <select id="equipment" name="equipamento_id" class="select-search" required disabled>
+                                <option value="">Primeiro selecione uma operação</option>
+                            </select>
+                            </div>
+                        </div>
+
+                        <!-- LINHA 2: HORÁRIO + FAZENDA -->
+                        <div class="form-row">
+                            <div class="input-group">
+                            <label for="report_time">Horário</label>
+                            <select id="report_time" name="report_time" required disabled>
+                                <option value="">Selecione a operação</option>
+                            </select>
+                            </div>
+
+                            <div class="input-group">
                             <label for="fazenda_id">Fazenda</label>
                             <select id="fazenda_id" name="fazenda_id" class="select-search" required>
                                 <option value="">Selecione uma fazenda...</option>
                                 <?php foreach ($fazendas as $f): ?>
-                                    <option value="<?php echo (int)$f['id']; ?>">
-                                        <?php echo htmlspecialchars($f['nome']); ?> (<?php echo htmlspecialchars($f['codigo_fazenda']); ?>)
-                                    </option>
+                                <option value="<?php echo (int)$f['id']; ?>">
+                                    <?php echo htmlspecialchars($f['nome']); ?> (<?php echo htmlspecialchars($f['codigo_fazenda']); ?>)
+                                </option>
                                 <?php endforeach; ?>
                             </select>
+                            </div>
                         </div>
-                        <div class="input-group">
-                            <label for="report_time">Horário</label>
-                            <select id="report_time" name="report_time" required>
-                                <?php foreach ($report_hours as $hour): ?>
-                                    <option value="<?php echo $hour; ?>" <?php echo $hour === '08:00' ? 'selected' : ''; ?>>
-                                        <?php echo $hour; ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
 
-                    <div class="form-row">
-                        <div class="input-group">
+                        <!-- LINHA 3: STATUS -->
+                        <div class="form-row">
+                            <div class="input-group">
                             <label for="status">Status</label>
                             <select id="status" name="status" required>
                                 <option value="ativo" selected>Ativo</option>
                                 <option value="parado">Parado</option>
                             </select>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="form-row">
-                        <div class="input-group" style="width: 100%;">
-                            <label for="operation">Operação</label>
-                            <select id="operation" name="operacao_id" class="select-search" required>
-                                <option value="">Selecione a operação...</option>
-                                <?php foreach ($tipos_operacao as $op): ?>
-                                    <option value="<?php echo (int)$op['id']; ?>" data-nome="<?php echo htmlspecialchars($op['nome']); ?>">
-                                        <?php echo htmlspecialchars($op['nome']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label for="equipment">Equipamento</label>
-                            <select id="equipment" name="equipamento_id" class="select-search" required disabled>
-                                <option value="">Primeiro selecione uma operação</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div id="hectares-group" class="input-group">
-                            <label for="hectares">Hectares</label>
+                        <!-- LINHA 4: QUANTIDADE (hectares/viagens) -->
+                        <div class="form-row">
+                            <div class="input-group" id="hectares-group">
+                            <label for="hectares" id="qtyLabel">Hectares</label>
                             <input type="number" step="0.01" id="hectares" name="hectares" placeholder="Ex: 15.5" required>
+                            <input type="hidden" id="viagens" name="viagens" value="0">
+                            <small id="qtyHelp" class="form-text">Informe a área em hectares.</small>
+                            </div>
                         </div>
-                    </div>
 
-                    <div id="reason-group" class="input-group" style="display: none;">
-                        <label for="reason">Motivo da Parada</label>
-                        <textarea id="reason" name="observacoes" rows="3" placeholder="Descreva o motivo da parada..."></textarea>
-                    </div>
+                        <!-- MOTIVO PARADA -->
+                        <div id="reason-group" class="input-group" style="display:none;">
+                            <label for="reason">Motivo da Parada</label>
+                            <textarea id="reason" name="observacoes" rows="3" placeholder="Descreva o motivo da parada..."></textarea>
+                        </div>
 
-                    <button type="submit" class="btn-submit">Salvar Apontamento</button>
-                </form>
+                        <button type="submit" class="btn-submit">Salvar Apontamento</button>
+                    </form>
             </div>
 
             <div class="card list-card">
@@ -623,11 +643,80 @@ $(function () {
   $('#operation').on('change', function(){ carregarEquipamentosPorOperacao($(this).val()); });
 
   // ===== Status Ativo/Parado =====
-  $('#status').on('change', function () {
-    const parado = ($(this).val() === 'parado');
-    $('#hectares-group').toggle(!parado).find('input').prop('required', !parado).val(parado ? 0 : '');
-    $('#reason-group').toggle(parado).find('textarea').prop('required', parado).val('');
-  }).trigger('change');
+$('#status').on('change', function () {
+  const parado = ($(this).val() === 'parado');
+  $('#hectares-group').toggle(!parado);
+  $('#hectares').prop('required', !parado).val(parado ? 0 : '');
+  $('#viagens').val(parado ? 0 : $('#viagens').val());
+  $('#reason-group').toggle(parado).find('textarea').prop('required', parado).val('');
+}).trigger('change');
+
+// ===== Operação: alternar entre HECTARES (2/2h) e CAÇAMBA (06:00,14:00,22:00) =====
+(function(){
+  const $op   = $('#operation');
+  const $qtyLabel = $('#qtyLabel');
+  const $qtyHelp  = $('#qtyHelp');
+  const $hect     = $('#hectares');
+  const $viag     = $('#viagens');
+  const $time     = $('#report_time');
+
+  const TURNOS_CACAMBA = ['06:00','14:00','22:00'];
+  const SLOTS_2H       = ['02:00','04:00','06:00','08:00','10:00','12:00','14:00','16:00','18:00','20:00','22:00','00:00'];
+
+  function normalize(s){
+    s = (s||'').toString();
+    s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return s.toLowerCase();
+  }
+  function isCacambaNome(n){ return normalize(n).includes('cacamba'); }
+
+  function rebuildTimeOptions(list, selected){
+    $time.prop('disabled', false).empty();
+    list.forEach(h => $time.append(`<option value="${h}" ${h===selected?'selected':''}>${h}</option>`));
+  }
+
+  function applyOpUI(){
+    const nome = $('#operation option:selected').data('nome') || '';
+    const cacamba = isCacambaNome(nome);
+
+    if (!nome) {
+      $time.prop('disabled', true).html('<option value="">Selecione a operação</option>');
+      return;
+    }
+
+    if (cacamba) {
+      $qtyLabel.text('Viagens');
+      $qtyHelp.text('Quantas viagens no turno.');
+      $hect.attr({ step: '1', min: '0', placeholder: 'Ex: 8' }).val('');
+      rebuildTimeOptions(TURNOS_CACAMBA, '06:00');
+    } else {
+      $qtyLabel.text('Hectares');
+      $qtyHelp.text('Informe a área em hectares.');
+      $hect.attr({ step: '0.01', min: '0', placeholder: 'Ex: 15.5' }).val('');
+      rebuildTimeOptions(SLOTS_2H, '08:00');
+    }
+    $('#status').trigger('change');
+  }
+
+  // copiar p/ hidden viagens no submit se for Caçamba
+  $('#entryForm').on('submit', function(){
+    const nome = $('#operation option:selected').data('nome') || '';
+    const cacamba = isCacambaNome(nome);
+    if (cacamba) {
+      const val = parseInt($hect.val() || '0', 10);
+      $viag.val(isNaN(val) ? 0 : val);
+      $('#hectares').val('0');
+    } else {
+      $viag.val(0);
+    }
+  });
+
+  $op.on('change', applyOpUI);
+  // estado inicial
+  $('#report_time').prop('disabled', true).html('<option value="">Selecione a operação</option>');
+  // se quiser aplicar na carga (se vier pré-selecionada)
+  // applyOpUI();
+})();
 
   // ===== Donut diário (metas somadas) =====
   const totalDailyGoal = <?php echo json_encode($total_daily_goal); ?>;
@@ -661,19 +750,23 @@ $(function () {
           const horaTexto = entry.hora_selecionada
             ? String(entry.hora_selecionada).slice(0,5)
             : (entry.data_hora ? String(entry.data_hora).replace('T',' ').slice(11,16) : '--:--');
+        const isCacamba = (entry.operacao_nome && entry.operacao_nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('cacamba'));
+        const qtdTexto = isCacamba
+            ? `Viagens: ${entry.viagens ?? 0}`
+            : `Hectares: ${entry.hectares ?? 0}`;
 
-          list.append(`
+            list.append(`
             <li class="entry-item" data-entry-id="${entry.id}" data-entry='${entryJson}'>
-              <div class="entry-details">
+                <div class="entry-details">
                 <strong>${entry.equipamento_nome ?? ''}</strong>
                 <p>${entry.unidade_nome ?? ''} - ${entry.operacao_nome ?? ''}</p>
-                <small>Hectares: ${entry.hectares ?? 0} | Hora: ${horaTexto}</small>
-              </div>
-              <div class="entry-action">
+                <small>${qtdTexto} | Hora: ${horaTexto}</small>
+                </div>
+                <div class="entry-action">
                 <button class="open-modal-btn">Detalhes</button>
-              </div>
+                </div>
             </li>
-          `);
+            `);
         });
       } else {
         $('#no-entries-message').show();
@@ -694,25 +787,36 @@ $(function () {
     const hora = (hh_mm || '--:--');
     return `${d}/${m}/${y} ${hora}`;
   }
-  window.openModal = function (entry) {
-    $('#modal-id').val(entry.id);
+window.openModal = function (data) {
+  const entry = (typeof data === 'string') ? JSON.parse(data) : data;
+  const isCacamba = entry.operacao_nome &&
+    entry.operacao_nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('cacamba');
 
-    // Preferir hora_selecionada, e usar a data de data_hora (sem converter para UTC)
-    let dataISO = '';
-    if (entry.data_hora) {
-      const s = String(entry.data_hora).replace('T',' ');
-      dataISO = s.slice(0,10); // yyyy-mm-dd
-    }
-    const horaSel = entry.hora_selecionada ? String(entry.hora_selecionada).slice(0,5) : (entry.data_hora ? String(entry.data_hora).slice(11,16) : '--:--');
-    $('#modal-datetime').val(formatLocalDateTime(dataISO, horaSel));
-
-    $('#modal-farm').val(entry.unidade_nome || '');
-    $('#modal-equipment').val(entry.equipamento_nome || '');
-    $('#modal-operation').val(entry.operacao_nome || '');
+  $('#modal-operation').val(entry.operacao_nome || '');
+  if (isCacamba) {
+    $('#modal-hectares').prev('label').text('Viagens');
+    $('#modal-hectares').val(entry.viagens ?? 0);
+  } else {
+    $('#modal-hectares').prev('label').text('Hectares');
     $('#modal-hectares').val(entry.hectares ?? 0);
-    $('#modal-reason').val(entry.observacoes || '');
-    modal.show();
-  };
+  }
+
+  $('#modal-id').val(entry.id);
+
+  let dataISO = '';
+  if (entry.data_hora) {
+    const s = String(entry.data_hora).replace('T',' ');
+    dataISO = s.slice(0,10);
+  }
+  const horaSel = entry.hora_selecionada ? String(entry.hora_selecionada).slice(0,5)
+                : (entry.data_hora ? String(entry.data_hora).slice(11,16) : '--:--');
+
+  $('#modal-datetime').val(`${dataISO.split('-').reverse().join('/')} ${horaSel}`);
+  $('#modal-farm').val(entry.unidade_nome || '');
+  $('#modal-equipment').val(entry.equipamento_nome || '');
+  $('#modal-reason').val(entry.observacoes || '');
+  $('#editModal').show();
+};
   $('#recent-entries-list').on('click', '.open-modal-btn', function () {
     const entryJson = $(this).closest('.entry-item').data('entry');
     openModal(entryJson);
