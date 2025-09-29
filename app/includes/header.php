@@ -119,6 +119,8 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                 <div class="has-submenu">👑 DEV Section <span class="arrow"></span></div>
                 <div class="submenu">
                     <a href="/audit_logs" data-cap="audit:view" class="<?php echo basename($_SERVER['PHP_SELF'])=='audit_logs.php'?'active':''; ?>">📃 Logs de Auditoria</a>
+                    <a href="/aponta" data-cap="audit:view" class="<?php echo basename($_SERVER['PHP_SELF'])=='audit_logs.php'?'active':''; ?>">📃 APONTA PPT</a>
+                    <a href="/ctt" data-cap="audit:view" class="<?php echo basename($_SERVER['PHP_SELF'])=='audit_logs.php'?'active':''; ?>">📃 APONTA CTT</a>
                 </div>
             </div>
             

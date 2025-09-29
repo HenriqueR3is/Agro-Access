@@ -21,6 +21,7 @@ RewriteRule ^comparativo$ app/views/admin/admin_comparativo.php [L]
 RewriteRule ^apontamentos$ app/views/user/fetch_apontamentos.php [L]
 RewriteRule ^equipamentos$ app/views/user/get_equipamentos.php [L]
 RewriteRule ^get_fazendas$ app/views/user/get_fazendas.php [L]
+RewriteRule ^ctt$ app/views/user/ctt.php [L]
 RewriteRule ^get_fazenda_por_id$ app/views/admin/get_fazenda_por_id.php [L]
 RewriteRule ^fleet_actions$ app/views/admin/fleet_actions.php [L]
 RewriteRule ^salvafda$ app/views/admin/salvar_fazenda.php [L]
@@ -31,6 +32,7 @@ RewriteRule ^metas$ app/views/admin/admin_metas.php [L]
 RewriteRule ^audit_logs$ app/views/admin/audit_logs.php [L,QSA]
 
 RewriteRule ^aponta$ app/views/admin/admin_aponta.php [L]
+
 # ============================
 # Página 404 personalizada
 # ============================
