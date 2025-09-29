@@ -33,7 +33,7 @@
 .submenu {
     
     max-height: 0;
-    overflow: hidden;
+    overflow: clip;
     display: flex;
     flex-direction: column;
 
@@ -171,14 +171,7 @@ a.is-disabled-click { opacity:.7; }
   AJUSTES PARA UM PERFIL MODERNO E COMPACTO (TOM AVERMELHADO)
   =============================================== */
 
-/* O estilo do .sidebar deve conter display: flex e flex-direction: column */
-.sidebar {
-    background: linear-gradient(180deg, #6b0f1a, #8b1323); /* Degradê de vermelho escuro */
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 65px);
-    /* ... mantenha os outros estilos do sidebar ... */
-}
+
 
 /* O estilo do .sidebar-nav deve ter flex-grow: 1 para ocupar o espaço restante */
 .sidebar-nav {
@@ -188,7 +181,7 @@ a.is-disabled-click { opacity:.7; }
 
 /* Estilos para o bloco de perfil com visual compacto */
 .sidebar-profile-footer {
-    margin-top: auto;
+    margin-top: auto; /* garante que fique grudado no final */
     display: flex;
     align-items: center;
     gap: 15px; /* Aumentei o espaço para um visual mais clean */
@@ -322,7 +315,7 @@ a.is-disabled-click { opacity:.7; }
 /* .profile-picture-footer img {
     content: url('sua-imagem-de-perfil.jpg'); 
 } */
- 
+
 /* ===== Scrollbar customizado (Chrome, Edge, Safari) ===== */
 .sidebar::-webkit-scrollbar {
     width: 5px; /* mais fininha e elegante */
