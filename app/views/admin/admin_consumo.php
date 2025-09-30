@@ -140,6 +140,8 @@ for ($i=$first; $i<count($raw); $i++) {
   $eqRaw = trim($cells[$idxEq] ?? '');
   $op = trim($cells[$idxOp] ?? '');
 
+  $maybeSubtotal = ($op === '');
+
   // forward-fill por causa de merges do xlsx
   if ($un === '') $un = $lastUn;
   $eqCode = $eqRaw !== '' ? $parseEquipCode($eqRaw) : $lastEqCode;
@@ -154,7 +156,11 @@ for ($i=$first; $i<count($raw); $i++) {
   $cons = parse_decimal($cells[$idxCon] ?? '');
 
   // filtra linhas sem valor (títulos internos etc.)
-  if (($ha + $hr + $vel + $rpm + $cons) <= 0) { $lastUn=$un; $lastEqCode=$eqCode; continue; }
+  // ignora títulos internos, linhas sem valor e possíveis subtotais sem operador
+if (($ha + $hr + $vel + $rpm + $cons) <= 0 || $maybeSubtotal) {
+  $lastUn = $un; $lastEqCode = $eqCode; 
+  continue;
+}
 
   if ($idxDt !== null) {
     $d = trim($cells[$idxDt] ?? '');
@@ -246,12 +252,34 @@ foreach ($sumOp as $un=>$byEq) {
   }
 }
 
+// --- DEDUPE rápido ---
+if (!empty($operadores)) {
+  $seen = [];
+  foreach ($operadores as $row) {
+    $k = $row['unidade'].'|'.$row['frota'].'|'.$row['operador'];
+    $seen[$k] = $row; // último ganha
+  }
+  $operadores = array_values($seen);
+}
+
+// dedupe do resumo por unidade+equipamento
+if (!empty($resumo)) {
+  $seenR = [];
+  foreach ($resumo as $r) {
+    $k = $r['unidade'].'|'.$r['frota'];
+    // se já existir, mantém o de maior 'n' (melhor agregação); se não tiver, fica o último
+    if (!isset($seenR[$k])) $seenR[$k] = $r;
+  }
+  $resumo = array_values($seenR);
+}
+
 // ====================== view ======================
 require_once __DIR__ . '/../../../app/includes/header.php';
 ?>
 
 <link rel="stylesheet" href="/public/static/css/admin_consumo.css">
 
+<div id="export-area">
 <div class="container">
   <h2>Relatório – Consumo / Eficiência</h2>
 
@@ -373,6 +401,7 @@ require_once __DIR__ . '/../../../app/includes/header.php';
     <?php endforeach; ?>
   <?php endif; ?>
 </div>
+</div>
 
 <!-- Exportar PNG (usa html2canvas se disponível; fallback para print) -->
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -381,8 +410,12 @@ require_once __DIR__ . '/../../../app/includes/header.php';
     const btn = document.getElementById('btnExport');
     if(!btn) return;
     btn.addEventListener('click', function(){
-      const area = document.querySelector('.container'); // exporta a página da ferramenta
+      const area = document.getElementById('export-area') || document.querySelector('.container');
+
       if (window.html2canvas) {
+        const w = area.scrollWidth;
+        const h = area.scrollHeight;
+        
         html2canvas(area, {scale: 2, backgroundColor:'#ffffff'}).then(canvas => {
           const a = document.createElement('a');
           a.href = canvas.toDataURL('image/png');
