@@ -109,6 +109,7 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                 <div class="has-submenu">📊 Relatórios <span class="arrow"></span></div>
                 <div class="submenu">
                     <a href="comparativo" data-cap="comparativo:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_comparativo.php' ? 'active' : ''; ?>">📈 Comparativo de Produção</a>
+                    <a href="consumo" data-cap="consumo:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_consumo.php' ? 'active' : ''; ?>">⛽ Consumo, Vel. & RPM</a>
                     <a href="admin_dashboard" data-cap="apontamentos:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_dashboard.php' ? 'active' : ''; ?>">💻 Apontamentos</a>
                 </div>
                 <div class="has-submenu">📈 CIA Dashboards <span class="arrow"></span></div>
@@ -153,7 +154,7 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
   // Lista única de capabilities usadas nas telas/menus
   $ALL_CAPS = [
     'dashboard:view','admin:menu','admin:pages','users:crud', 'equip:crud',
-    'fazendas:crud', 'metas:view','metas:edit','admin_dashboard:view', 'apontamentos:view','user_dashboard:view', 'audit:view'
+    'fazendas:crud', 'metas:view','metas:edit','admin_dashboard:view', 'apontamentos:view','user_dashboard:view', 'audit:view', 'consumo:view'
   ];
 
   $caps = [];
@@ -163,11 +164,11 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
     if ($role === 'cia_dev') {
       $caps = ['*']; // acesso total
     } elseif ($role === 'admin') {
-      $caps = ['dashboard:view','admin:menu','admin:pages','users:crud','fazendas:crud','equip:crud','comparativo:view','metas:view','metas:edit', 'apontamentos:view', 'audit:view'];
+      $caps = ['dashboard:view','admin:menu','admin:pages','users:crud','fazendas:crud','equip:crud','comparativo:view','metas:view','metas:edit', 'apontamentos:view', 'audit:view', 'consumo:view'];
     } elseif ($role === 'cia_admin') {
-      $caps = ['dashboard:view','admin:menu','users:view','fazendas:crud','equip:crud','comparativo:view','metas:view', 'apontamentos:view'];
+      $caps = ['dashboard:view','admin:menu','users:view','fazendas:crud','equip:crud','comparativo:view','metas:view', 'apontamentos:view', 'consumo:view'];
     } elseif ($role === 'cia_user') {
-      $caps = ['dashboard:view','comparativo:view'];
+      $caps = ['dashboard:view','comparativo:view', 'consumo:view'];
     } elseif ($role === 'operador') {
       $caps = ['user_dashboard:view'];
     } else {

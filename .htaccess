@@ -16,6 +16,7 @@ RewriteRule ^admin_users$ app/views/admin/admin_users.php [L]
 RewriteRule ^admin_fleet$ app/views/admin/admin_fleet.php [L]
 RewriteRule ^fazendas$ app/views/admin/admin_farms.php [L]
 RewriteRule ^comparativo$ app/views/admin/admin_comparativo.php [L]
+RewriteRule ^consumo$ app/views/admin/admin_consumo.php [L]
 
 # Endpoints (APIs)
 RewriteRule ^apontamentos$ app/views/user/fetch_apontamentos.php [L]
