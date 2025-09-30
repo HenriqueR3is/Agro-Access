@@ -1,5 +1,5 @@
 <?php
-// admin_consumo.php
+
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
@@ -415,7 +415,7 @@ require_once __DIR__ . '/../../../app/includes/header.php';
       if (window.html2canvas) {
         const w = area.scrollWidth;
         const h = area.scrollHeight;
-        
+
         html2canvas(area, {scale: 2, backgroundColor:'#ffffff'}).then(canvas => {
           const a = document.createElement('a');
           a.href = canvas.toDataURL('image/png');
