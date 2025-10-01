@@ -140,7 +140,7 @@ body {
     list-style: none;
     display: flex;
     flex-direction: column;
-    padding: 1rem 0;
+
     text-decoration: none;
 }
 
@@ -606,7 +606,7 @@ a:hover {
     background: linear-gradient(180deg, #1b5e20, #2e7d32);
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 65px);
+
        overflow: hidden; /* evita que o footer role junto */
 }
 

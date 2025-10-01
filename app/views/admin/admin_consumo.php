@@ -14,6 +14,26 @@ function norm($s){
   $map = ['á'=>'a','à'=>'a','â'=>'a','ã'=>'a','ä'=>'a','é'=>'e','ê'=>'e','ë'=>'e','í'=>'i','ï'=>'i','ó'=>'o','ô'=>'o','õ'=>'o','ö'=>'o','ú'=>'u','ü'=>'u','ç'=>'c','º'=>'o','ª'=>'a'];
   return strtr($s, $map);
 }
+
+  function format_datetime_br($s, bool $isEnd = false): string {
+  $s = trim((string)$s);
+  if ($s === '') return '?';
+
+  // Tenta vários formatos comuns do SGPA
+  $formats = ['d/m/Y H:i:s','d/m/Y H:i','d/m/Y','Y-m-d H:i:s','Y-m-d H:i','Y-m-d'];
+  $dt = null;
+  foreach ($formats as $f) {
+    $tmp = DateTime::createFromFormat($f, $s);
+    if ($tmp) { $dt = $tmp; break; }
+  }
+  if (!$dt) return $s; // fallback: devolve como veio
+
+  // Se veio só data (sem hora), DateTime ficou em 00:00:00: ajusta para fim, se necessário
+  if ($isEnd) $dt->setTime(23, 59, 59);
+
+  return $dt->format('d/m/y H:i:s'); // dd/mm/yy hh:mm:ss
+}
+
 function detectar_delimitador(array $linhas, int $headerIndex = 0): string {
   $delims = ["\t", ";", ",", "|"];
   $scores = [];
@@ -278,6 +298,7 @@ require_once __DIR__ . '/../../../app/includes/header.php';
 ?>
 
 <link rel="stylesheet" href="/public/static/css/admin_consumo.css">
+    <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 
 <div id="export-area">
 <div class="container">
@@ -307,7 +328,13 @@ require_once __DIR__ . '/../../../app/includes/header.php';
       <div style="color:#b00020;margin-top:8px"><?= implode('<br>', array_map('htmlspecialchars',$errors)) ?></div>
     <?php endif; ?>
     <?php if ($periodo['inicio'] || $periodo['fim']): ?>
-      <div style="margin-top:8px"><span class="badge">Período: <?= htmlspecialchars($periodo['inicio'] ?: '?') ?> a <?= htmlspecialchars($periodo['fim'] ?: '?') ?></span></div>
+      <?php
+      $iniFmt = format_datetime_br($periodo['inicio'] ?? '', false);
+      $fimFmt = format_datetime_br($periodo['fim'] ?? '', true);
+      ?>
+      <div style="margin-top:8px">
+        <span class="badge">Período: <?= htmlspecialchars($iniFmt) ?> a <?= htmlspecialchars($fimFmt) ?></span>
+      </div>
     <?php endif; ?>
   </div>
 

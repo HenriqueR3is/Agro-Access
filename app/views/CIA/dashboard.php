@@ -40,7 +40,7 @@ require_once __DIR__.'/../../../app/lib/Audit.php';
     --shadow-dark: 0 8px 30px rgba(0, 0, 0, 0.15);
     --transition-speed: 0.3s;
     --border-radius: 8px;
-    --sidebar-width: 250px;
+    --sidebar-width: 260px;
     --header-height: 60px;
 }
 

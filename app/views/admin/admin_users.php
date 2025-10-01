@@ -27,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     try {
         $action = $_POST['action'] ?? '';
         $TIPOS_VALIDOS = ['operador','coordenador','admin','cia_user','cia_admin','cia_dev'];
+        
         if ($action === 'add_user' || $action === 'edit_user') {
             $nome  = trim($_POST['nome'] ?? '');
             $email = trim($_POST['email'] ?? '');
@@ -170,23 +171,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 exit();
             }
 
-                $stU = $pdo->prepare("SELECT nome, email FROM usuarios WHERE id = :id");
-                $stU->execute([':id'=>$user_id]);
-                $uInfo = $stU->fetch(PDO::FETCH_ASSOC) ?: null;
-
-                $pdo->beginTransaction();
-                $pdo->prepare("DELETE FROM usuario_unidade  WHERE usuario_id = :id")->execute([':id' => $user_id]);
-                $pdo->prepare("DELETE FROM usuario_operacao WHERE usuario_id = :id")->execute([':id' => $user_id]);
-                $stmt = $pdo->prepare("DELETE FROM usuarios WHERE id = :id");
-                $stmt->execute([':id' => $user_id]);
-                $pdo->commit();
-
-                Audit::log($pdo, [
-                    'action'    => 'deleted',
-                    'entity'    => 'usuarios',
-                    'entity_id' => $user_id,
-                    'meta'      => $uInfo ? ['nome'=>$uInfo['nome'],'email'=>$uInfo['email']] : null
-                ]);
+            $stU = $pdo->prepare("SELECT nome, email FROM usuarios WHERE id = :id");
+            $stU->execute([':id'=>$user_id]);
+            $uInfo = $stU->fetch(PDO::FETCH_ASSOC) ?: null;
 
             $pdo->beginTransaction();
             $pdo->prepare("DELETE FROM usuario_unidade  WHERE usuario_id = :id")->execute([':id' => $user_id]);
@@ -194,11 +181,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt = $pdo->prepare("DELETE FROM usuarios WHERE id = :id");
             $stmt->execute([':id' => $user_id]);
             $pdo->commit();
-                    
+
             Audit::log($pdo, [
-            'action'    => 'deleted',
-            'entity'    => 'usuarios',
-            'entity_id' => $user_id
+                'action'    => 'deleted',
+                'entity'    => 'usuarios',
+                'entity_id' => $user_id,
+                'meta'      => $uInfo ? ['nome'=>$uInfo['nome'],'email'=>$uInfo['email']] : null
             ]);
 
             if ($isAjax) $jsonOut(['success' => true, 'message' => 'Usuário excluído com sucesso!']);
@@ -223,11 +211,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 }
 
-// Consulta de dados (com paginação, filtros e ordenação por created_at)
+// Consulta de dados
 try {
     // filtros via GET
-    $tipoFilter   = strtolower(trim($_GET['tipo'] ?? ''));   // ex.: operador, coordenador, admin, cia_user, cia_admin, cia_dev
-    $statusFilter = trim($_GET['status'] ?? '');              // '', '1', '0'
+    $tipoFilter   = strtolower(trim($_GET['tipo'] ?? ''));   
+    $statusFilter = trim($_GET['status'] ?? '');              
+    $searchFilter = trim($_GET['search'] ?? '');              
 
     // paginação
     $page     = max(1, (int)($_GET['page'] ?? 1));
@@ -235,10 +224,10 @@ try {
     $perPage  = max(5, min($perPage, 100));
     $offset   = ($page - 1) * $perPage;
 
-    // tipos válidos (mesma lista do CRUD)
+    // tipos válidos
     $TIPOS_VALIDOS_FILTER = ['operador','coordenador','admin','cia_user','cia_admin','cia_dev'];
     if ($tipoFilter && !in_array($tipoFilter, $TIPOS_VALIDOS_FILTER, true)) {
-        $tipoFilter = ''; // sanitiza valor inválido
+        $tipoFilter = '';
     }
     if ($statusFilter !== '' && !in_array($statusFilter, ['0','1'], true)) {
         $statusFilter = '';
@@ -249,12 +238,17 @@ try {
     $params = [];
 
     if ($tipoFilter !== '') {
-        $where[] = 'tipo = :tipo';
-        $params[':tipo'] = $tipoFilter;
+        $where[] = 'tipo = ?';
+        $params[] = $tipoFilter;
     }
     if ($statusFilter !== '') {
-        $where[] = 'ativo = :ativo';
-        $params[':ativo'] = (int)$statusFilter;
+        $where[] = 'ativo = ?';
+        $params[] = (int)$statusFilter;
+    }
+    if ($searchFilter !== '') {
+        $where[] = '(nome LIKE ? OR email LIKE ?)';
+        $params[] = '%' . $searchFilter . '%';
+        $params[] = '%' . $searchFilter . '%';
     }
 
     $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -271,16 +265,24 @@ try {
     // total
     $sqlTotal = "SELECT COUNT(*) FROM usuarios $whereSql";
     $stmtT = $pdo->prepare($sqlTotal);
-    foreach ($params as $k => $v) $stmtT->bindValue($k, $v, is_int($v) ? PDO::PARAM_INT : PDO::PARAM_STR);
+    if ($params) {
+        foreach ($params as $index => $value) {
+            $stmtT->bindValue($index + 1, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+        }
+    }
     $stmtT->execute();
     $total = (int)$stmtT->fetchColumn();
     $totalPages = max(1, (int)ceil($total / $perPage));
-    if ($page > $totalPages) { $page = $totalPages; $offset = ($page - 1) * $perPage; }
+    if ($page > $totalPages) { 
+        $page = $totalPages; 
+        $offset = ($page - 1) * $perPage; 
+    }
 
-    // tenta ordenar por created_at, senão cai pra id
-    $orderBy = 'criado_em ASC, id DESC';
+    // ordenação
+    $orderBy = 'id DESC';
     try {
-        $pdo->query("SELECT criado_em FROM usuarios LIMIT 1"); // smoke test
+        $testStmt = $pdo->query("SELECT 1 FROM usuarios LIMIT 1");
+        $orderBy = 'criado_em DESC, id DESC';
     } catch (Throwable $e) {
         $orderBy = 'id DESC';
     }
@@ -288,16 +290,25 @@ try {
     // dados
     $sql = "
         SELECT id, nome, email, tipo, ativo
-        " . ($orderBy !== 'id DESC' ? ", criado_em" : "") . "
         FROM usuarios
         $whereSql
         ORDER BY $orderBy
-        LIMIT :limit OFFSET :offset
+        LIMIT ? OFFSET ?
     ";
+    
     $stmt = $pdo->prepare($sql);
-    foreach ($params as $k => $v) $stmt->bindValue($k, $v, is_int($v) ? PDO::PARAM_INT : PDO::PARAM_STR);
-    $stmt->bindValue(':limit',  $perPage, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', $offset,  PDO::PARAM_INT);
+    
+    // Bind dos parâmetros de filtro
+    $paramIndex = 1;
+    foreach ($params as $value) {
+        $stmt->bindValue($paramIndex, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+        $paramIndex++;
+    }
+    
+    // Bind dos parâmetros de paginação
+    $stmt->bindValue($paramIndex, $perPage, PDO::PARAM_INT);
+    $stmt->bindValue($paramIndex + 1, $offset, PDO::PARAM_INT);
+    
     $stmt->execute();
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -321,11 +332,10 @@ require_once __DIR__ . '/../../../app/includes/header.php';
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/public/static/css/admin_users.css">
     <link rel="icon" type="image/x-icon" href="./public/static/favicon.ico">
-        <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
+    <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 </head>
 <body>
     <div class="admin-container">
-
         <main class="admin-main">
             <div class="card">
                 <div class="card-header">
@@ -352,255 +362,359 @@ require_once __DIR__ . '/../../../app/includes/header.php';
                     <?php unset($_SESSION['error_message']); ?>
                 <?php endif; ?>
 
-<div class="card-body">
-<div class="table-toolbar">
-  <div class="left filters">
-    <label class="filter">
-      Tipo:
-      <select id="filterTipo" class="form-control compact">
-        <option value=""        <?= $tipoFilter==='' ? 'selected':'' ?>>Todos</option>
-        <option value="operador"     <?= $tipoFilter==='operador' ? 'selected':'' ?>>Operador</option>
-        <option value="coordenador"  <?= $tipoFilter==='coordenador' ? 'selected':'' ?>>Coordenador</option>
-        <option value="admin"        <?= $tipoFilter==='admin' ? 'selected':'' ?>>Administrador</option>
-        <option value="cia_user"     <?= $tipoFilter==='cia_user' ? 'selected':'' ?>>CIA — Usuário</option>
-        <option value="cia_admin"    <?= $tipoFilter==='cia_admin' ? 'selected':'' ?>>CIA — Admin</option>
-        <option value="cia_dev"      <?= $tipoFilter==='cia_dev' ? 'selected':'' ?>>CIA — Dev</option>
-      </select>
-    </label>
-
-    <label class="filter">
-      Status:
-      <select id="filterStatus" class="form-control compact">
-        <option value=""  <?= $statusFilter===''  ? 'selected':'' ?>>Todos</option>
-        <option value="1" <?= $statusFilter==='1' ? 'selected':'' ?>>Ativo</option>
-        <option value="0" <?= $statusFilter==='0' ? 'selected':'' ?>>Inativo</option>
-      </select>
-    </label>
-
-    <button id="resetFilters" class="btn btn-sm btn-secondary" type="button" title="Limpar filtros">Limpar</button>
-  </div>
-
-  <div class="right">
-    <label class="perpage">
-      Itens por página:
-      <select id="perPage" class="form-control compact">
-        <option value="10"  <?= isset($perPage)&&$perPage==10  ? 'selected':'' ?>>10</option>
-        <option value="20"  <?= isset($perPage)&&$perPage==20  ? 'selected':'' ?>>20</option>
-        <option value="50"  <?= isset($perPage)&&$perPage==50  ? 'selected':'' ?>>50</option>
-        <option value="100" <?= isset($perPage)&&$perPage==100 ? 'selected':'' ?>>100</option>
-      </select>
-    </label>
-    <span class="muted range">
-      <?php $from = $total ? ($offset + 1) : 0; $to = min($offset + $perPage, $total); ?>
-      Mostrando <strong><?= $from ?></strong>–<strong><?= $to ?></strong> de <strong><?= $total ?></strong>
-    </span>
-  </div>
-</div>
-
-  <!-- TABELA (somente a tabela dentro do .table-responsive) -->
-  <div class="table-responsive">
-    <table>
-      <thead>
-        <tr>
-          <th>Nome</th>
-          <th>Email</th>
-          <th>Tipo</th>
-          <th>Status</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach($users as $user): ?>
-        <tr>
-          <td><?= htmlspecialchars($user['nome']); ?></td>
-          <td><?= htmlspecialchars($user['email']); ?></td>
-          <?php
-            $labelsTipo = [
-              'operador'=>'Operador',
-              'coordenador'=>'Coordenador',
-              'admin'=>'Administrador',
-              'cia_user'=>'CIA — Usuário',
-              'cia_admin'=>'CIA — Admin',
-              'cia_dev'=>'CIA — Dev'
-            ];
-          ?>
-          <td><?= htmlspecialchars($labelsTipo[strtolower($user['tipo'])] ?? $user['tipo']); ?></td>
-          <td>
-            <span class="badge <?= $user['ativo'] ? 'bg-success' : 'bg-danger'; ?>">
-              <?= $user['ativo'] ? 'Ativo' : 'Inativo'; ?>
-            </span>
-          </td>
-          <td>
-            <button class="btn btn-warning btn-sm edit-user" data-id="<?= $user['id']; ?>">
-              <i class="fas fa-edit"></i> Editar
-            </button>
-            <button class="btn btn-danger btn-sm delete-user" data-id="<?= $user['id']; ?>">
-              <i class="fas fa-trash"></i> Excluir
-            </button>
-          </td>
-        </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- PAGINAÇÃO (fora da .table-responsive e DEPOIS da tabela) -->
-  <nav class="pagination-bar">
-    <a class="page-link <?= ($page<=1?'disabled':'') ?>" href="<?= $page>1 ? qs(['page'=>$page-1]) : '#' ?>">« Anterior</a>
-
-    <?php
-      $start = max(1, $page - 2);
-      $end   = min($totalPages, $page + 2);
-      if ($start > 1) {
-        echo '<a class="page-link" href="'.qs(['page'=>1]).'">1</a>';
-        if ($start > 2) echo '<span class="dots">…</span>';
-      }
-      for ($p=$start; $p<=$end; $p++) {
-        $active = $p == $page ? 'active' : '';
-        echo '<a class="page-link '.$active.'" href="'.qs(['page'=>$p]).'">'.$p.'</a>';
-      }
-      if ($end < $totalPages) {
-        if ($end < $totalPages-1) echo '<span class="dots">…</span>';
-        echo '<a class="page-link" href="'.qs(['page'=>$totalPages]).'">'.$totalPages.'</a>';
-      }
-    ?>
-
-    <a class="page-link <?= ($page>=$totalPages?'disabled':'') ?>" href="<?= $page<$totalPages ? qs(['page'=>$page+1]) : '#' ?>">Próxima »</a>
-  </nav>
-</div>
-
-    <!-- Modal de Usuário -->
-    <div id="userModal" class="modal-overlay">
-        <div class="modal-content modal-sm">
-            <div class="modal-header">
-                <h3 class="modal-title" id="modalTitle">Adicionar Usuário</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <form id="userForm" method="POST">
-                <div class="modal-body">
-                    <input type="hidden" name="action" id="formAction" value="add_user">
-                    <input type="hidden" name="user_id" id="userId">
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="nome">Nome</label>
-                            <input type="text" id="nome" name="nome" class="form-control" required>
+                <div class="card-body">
+                    <?php if ($searchFilter !== ''): ?>
+                    <div class="search-results-info">
+                        <div>
+                            <i class="fas fa-search"></i> 
+                            Resultados para: "<strong><?= htmlspecialchars($searchFilter) ?></strong>" 
+                            <?php if ($total > 0): ?>
+                                - <strong><?= $total ?></strong> usuário(s) encontrado(s)
+                            <?php endif; ?>
                         </div>
-                        <div class="form-group">
-                            <label for="email">Email</label>
-                            <input type="email" id="email" name="email" class="form-control" required>
-                        </div>
+                        <?php if ($searchFilter !== ''): ?>
+                            <a href="<?= qs(['search' => '', 'page' => 1]) ?>" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-times"></i> Limpar pesquisa
+                            </a>
+                        <?php endif; ?>
                     </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="senha">Senha</label>
-                            <input type="password" id="senha" name="senha" class="form-control">
-                            <small class="form-text">Deixe em branco para não alterar (ao editar)</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="tipo">Tipo de Usuário</label>
-                            <select id="tipo" name="tipo" class="form-control" required>
-                                <option value="operador">Operador</option>
-                                <option value="coordenador">Coordenador</option>
-                                <option value="admin">Administrador</option>
-                                <option value="cia_user">CIA - Usuário</option>
-                                <option value="cia_admin">CIA - Admin</option>
-                                <option value="cia_dev">CIA - Dev</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group form-checkbox">
-                        <input type="checkbox" id="ativo" name="ativo" checked>
-                        <label for="ativo">Usuário Ativo</label>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <h4>Permissões de Unidades</h4>
-                            <div class="permissions-container">
-                                <?php foreach ($unidades as $unidade): ?>
-                                    <div class="form-check">
-                                        <input type="checkbox" name="unidades[]" 
-                                               value="<?php echo $unidade['id']; ?>" 
-                                               id="unidade_<?php echo $unidade['id']; ?>">
-                                        <label for="unidade_<?php echo $unidade['id']; ?>">
-                                            <?php echo htmlspecialchars($unidade['nome']); ?>
-                                        </label>
+                    <?php endif; ?>
+
+                    <div class="table-toolbar">
+                        <div class="left-section">
+                            <!-- Barra de Pesquisa -->
+                            <div class="search-container">
+                                <form id="searchForm" method="GET" class="search-form">
+                                    <input type="text" 
+                                           name="search" 
+                                           class="search-box" 
+                                           placeholder="Pesquisar usuários por nome ou email..."
+                                           value="<?= htmlspecialchars($searchFilter) ?>"
+                                           autocomplete="off"
+                                           id="searchInput">
+                                    <button type="submit" class="search-button">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                    <div class="search-loading" id="searchLoading" style="display: none;">
+                                        <i class="fas fa-spinner fa-spin"></i>
                                     </div>
-                                <?php endforeach; ?>
+                                </form>
+                            </div>
+
+                            <!-- Filtros -->
+                            <div class="filters-container">
+                                <label class="filter">
+                                    Tipo:
+                                    <select id="filterTipo" class="form-control compact">
+                                        <option value="" <?= $tipoFilter==='' ? 'selected':'' ?>>Todos</option>
+                                        <option value="operador" <?= $tipoFilter==='operador' ? 'selected':'' ?>>Operador</option>
+                                        <option value="coordenador" <?= $tipoFilter==='coordenador' ? 'selected':'' ?>>Coordenador</option>
+                                        <option value="admin" <?= $tipoFilter==='admin' ? 'selected':'' ?>>Administrador</option>
+                                        <option value="cia_user" <?= $tipoFilter==='cia_user' ? 'selected':'' ?>>CIA — Usuário</option>
+                                        <option value="cia_admin" <?= $tipoFilter==='cia_admin' ? 'selected':'' ?>>CIA — Admin</option>
+                                        <option value="cia_dev" <?= $tipoFilter==='cia_dev' ? 'selected':'' ?>>CIA — Dev</option>
+                                    </select>
+                                </label>
+
+                                <label class="filter">
+                                    Status:
+                                    <select id="filterStatus" class="form-control compact">
+                                        <option value="" <?= $statusFilter==='' ? 'selected':'' ?>>Todos</option>
+                                        <option value="1" <?= $statusFilter==='1' ? 'selected':'' ?>>Ativo</option>
+                                        <option value="0" <?= $statusFilter==='0' ? 'selected':'' ?>>Inativo</option>
+                                    </select>
+                                </label>
+
+                                <button id="resetFilters" class="btn btn-sm btn-secondary" type="button" title="Limpar filtros">
+                                    <i class="fas fa-times"></i> Limpar
+                                </button>
                             </div>
                         </div>
-                        
-                        <div class="form-group">
-                            <h4>Permissões de Operações</h4>
-                            <div class="permissions-container">
-                                <?php foreach ($operacoes as $operacao): ?>
-                                    <div class="form-check">
-                                        <input type="checkbox" name="operacoes[]" 
-                                               value="<?php echo $operacao['id']; ?>" 
-                                               id="operacao_<?php echo $operacao['id']; ?>">
-                                        <label for="operacao_<?php echo $operacao['id']; ?>">
-                                            <?php echo htmlspecialchars($operacao['nome']); ?>
-                                        </label>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
+
+                        <div class="right-section">
+                            <label class="perpage">
+                                Itens por página:
+                                <select id="perPage" class="form-control compact">
+                                    <option value="10" <?= isset($perPage)&&$perPage==10 ? 'selected':'' ?>>10</option>
+                                    <option value="20" <?= isset($perPage)&&$perPage==20 ? 'selected':'' ?>>20</option>
+                                    <option value="50" <?= isset($perPage)&&$perPage==50 ? 'selected':'' ?>>50</option>
+                                    <option value="100" <?= isset($perPage)&&$perPage==100 ? 'selected':'' ?>>100</option>
+                                </select>
+                            </label>
+                            <span class="muted range">
+                                <?php $from = $total ? ($offset + 1) : 0; $to = min($offset + $perPage, $total); ?>
+                                Mostrando <strong><?= $from ?></strong>–<strong><?= $to ?></strong> de <strong><?= $total ?></strong>
+                            </span>
                         </div>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
-    <!-- Modal de Confirmação -->
-    <div id="confirmModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Confirmar Exclusão</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p>Tem certeza que deseja excluir este usuário?</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
-                <form id="deleteForm" method="POST">
-                    <input type="hidden" name="action" value="delete_user">
-                    <input type="hidden" name="user_id" id="deleteUserId">
-                    <button type="submit" class="btn btn-danger">Excluir</button>
-                </form>
-            </div>
-        </div>
-    </div>
+                    <!-- TABELA -->
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Email</th>
+                                    <th>Tipo</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (count($users) > 0): ?>
+                                <?php foreach($users as $user): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($user['nome']); ?></td>
+                                    <td><?= htmlspecialchars($user['email']); ?></td>
+                                    <?php
+                                        $labelsTipo = [
+                                        'operador'=>'Operador',
+                                        'coordenador'=>'Coordenador',
+                                        'admin'=>'Administrador',
+                                        'cia_user'=>'CIA — Usuário',
+                                        'cia_admin'=>'CIA — Admin',
+                                        'cia_dev'=>'CIA — Dev'
+                                        ];
+                                    ?>
+                                    <td><?= htmlspecialchars($labelsTipo[strtolower($user['tipo'])] ?? $user['tipo']); ?></td>
+                                    <td>
+                                        <span class="badge <?= $user['ativo'] ? 'bg-success' : 'bg-danger'; ?>">
+                                            <?= $user['ativo'] ? 'Ativo' : 'Inativo'; ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-warning btn-sm edit-user" data-id="<?= $user['id']; ?>">
+                                            <i class="fas fa-edit"></i> Editar
+                                        </button>
+                                        <button class="btn btn-danger btn-sm delete-user" data-id="<?= $user['id']; ?>">
+                                            <i class="fas fa-trash"></i> Excluir
+                                        </button>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                                <?php else: ?>
+                                <tr>
+                                    <td colspan="5" class="no-results">
+                                        <i class="fas fa-user-slash"></i>
+                                        <h4>Nenhum usuário encontrado</h4>
+                                        <p><?= $searchFilter !== '' ? 'Tente ajustar os termos da pesquisa ou limpar os filtros.' : 'Não há usuários cadastrados no momento.' ?></p>
+                                        <?php if ($searchFilter !== '' || $tipoFilter !== '' || $statusFilter !== ''): ?>
+                                        <a href="<?= qs(['search' => '', 'tipo' => '', 'status' => '', 'page' => 1]) ?>" class="btn btn-primary">
+                                            <i class="fas fa-refresh"></i> Limpar todos os filtros
+                                        </a>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
 
-<!-- Créditos -->
-<div class="signature-credit">
-  <p class="sig-text">
-    Desenvolvido por 
-    <span class="sig-name">Bruno Carmo</span> & 
-    <span class="sig-name">Henrique Reis</span>
-  </p>
-</div>
+                    <!-- PAGINAÇÃO -->
+                    <?php if ($totalPages > 1): ?>
+                    <nav class="pagination-bar">
+                        <a class="page-link <?= ($page<=1?'disabled':'') ?>" href="<?= $page>1 ? qs(['page'=>$page-1]) : '#' ?>">« Anterior</a>
+
+                        <?php
+                            $start = max(1, $page - 2);
+                            $end   = min($totalPages, $page + 2);
+                            if ($start > 1) {
+                                echo '<a class="page-link" href="'.qs(['page'=>1]).'">1</a>';
+                                if ($start > 2) echo '<span class="dots">…</span>';
+                            }
+                            for ($p=$start; $p<=$end; $p++) {
+                                $active = $p == $page ? 'active' : '';
+                                echo '<a class="page-link '.$active.'" href="'.qs(['page'=>$p]).'">'.$p.'</a>';
+                            }
+                            if ($end < $totalPages) {
+                                if ($end < $totalPages-1) echo '<span class="dots">…</span>';
+                                echo '<a class="page-link" href="'.qs(['page'=>$totalPages]).'">'.$totalPages.'</a>';
+                            }
+                        ?>
+
+                        <a class="page-link <?= ($page>=$totalPages?'disabled':'') ?>" href="<?= $page<$totalPages ? qs(['page'=>$page+1]) : '#' ?>">Próxima »</a>
+                    </nav>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Modal de Usuário -->
+            <div id="userModal" class="modal-overlay">
+                <div class="modal-content modal-sm">
+                    <div class="modal-header">
+                        <h3 class="modal-title" id="modalTitle">Adicionar Usuário</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    <form id="userForm" method="POST">
+                        <div class="modal-body">
+                            <input type="hidden" name="action" id="formAction" value="add_user">
+                            <input type="hidden" name="user_id" id="userId">
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="nome">Nome</label>
+                                    <input type="text" id="nome" name="nome" class="form-control" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="email">Email</label>
+                                    <input type="email" id="email" name="email" class="form-control" required>
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="senha">Senha</label>
+                                    <input type="password" id="senha" name="senha" class="form-control">
+                                    <small class="form-text">Deixe em branco para não alterar (ao editar)</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="tipo">Tipo de Usuário</label>
+                                    <select id="tipo" name="tipo" class="form-control" required>
+                                        <option value="cia_user">CIA - Usuário</option>
+                                        <option value="operador">Operador</option>
+                                        <option value="coordenador">Coordenador</option>
+                                        <option value="admin">Administrador</option>
+                                        <option value="cia_admin">CIA - Admin</option>
+                                        <option value="cia_dev">CIA - Dev</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group form-checkbox">
+                                <input type="checkbox" id="ativo" name="ativo" checked>
+                                <label for="ativo">Usuário Ativo</label>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <h4>Permissões de Unidades</h4>
+                                    <div class="permissions-container">
+                                        <?php foreach ($unidades as $unidade): ?>
+                                            <div class="form-check">
+                                                <input type="checkbox" name="unidades[]" 
+                                                       value="<?php echo $unidade['id']; ?>" 
+                                                       id="unidade_<?php echo $unidade['id']; ?>">
+                                                <label for="unidade_<?php echo $unidade['id']; ?>">
+                                                    <?php echo htmlspecialchars($unidade['nome']); ?>
+                                                </label>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <h4>Permissões de Operações</h4>
+                                    <div class="permissions-container">
+                                        <?php foreach ($operacoes as $operacao): ?>
+                                            <div class="form-check">
+                                                <input type="checkbox" name="operacoes[]" 
+                                                       value="<?php echo $operacao['id']; ?>" 
+                                                       id="operacao_<?php echo $operacao['id']; ?>">
+                                                <label for="operacao_<?php echo $operacao['id']; ?>">
+                                                    <?php echo htmlspecialchars($operacao['nome']); ?>
+                                                </label>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
+                            <button type="submit" class="btn btn-primary">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Modal de Confirmação -->
+            <div id="confirmModal" class="modal-overlay">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 class="modal-title">Confirmar Exclusão</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Tem certeza que deseja excluir este usuário?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
+                        <form id="deleteForm" method="POST">
+                            <input type="hidden" name="action" value="delete_user">
+                            <input type="hidden" name="user_id" id="deleteUserId">
+                            <button type="submit" class="btn btn-danger">Excluir</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Créditos -->
+            <div class="signature-credit">
+                <p class="sig-text">
+                    Desenvolvido por 
+                    <span class="sig-name">Bruno Carmo</span> & 
+                    <span class="sig-name">Henrique Reis</span>
+                </p>
+            </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Busca em tempo real
+    const searchInput = document.getElementById('searchInput');
+    const searchLoading = document.getElementById('searchLoading');
+    let searchTimeout;
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchLoading.style.display = 'block';
+            
+            searchTimeout = setTimeout(() => {
+                const searchValue = this.value.trim();
+                const url = new URL(window.location.href);
+                
+                if (searchValue === '') {
+                    url.searchParams.delete('search');
+                } else {
+                    url.searchParams.set('search', searchValue);
+                }
+                
+                url.searchParams.set('page', '1');
+                window.location.href = url.toString();
+            }, 600);
+        });
+    }
+
+    // Submit manual do formulário de pesquisa
+    const searchForm = document.getElementById('searchForm');
+    if (searchForm) {
+        searchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const url = new URL(window.location.href);
+            const searchValue = searchInput.value.trim();
+            
+            if (searchValue === '') {
+                url.searchParams.delete('search');
+            } else {
+                url.searchParams.set('search', searchValue);
+            }
+            url.searchParams.set('page', '1');
+            window.location.href = url.toString();
+        });
+    }
+
     // Elementos do modal
-    const userModal    = document.getElementById('userModal');
+    const userModal = document.getElementById('userModal');
     const confirmModal = document.getElementById('confirmModal');
-    const addUserBtn   = document.getElementById('addUserBtn');
-    const modalCloses  = document.querySelectorAll('.modal-close');
+    const addUserBtn = document.getElementById('addUserBtn');
+    const modalCloses = document.querySelectorAll('.modal-close');
 
     // Helpers de modal
     function openModal(modal) {
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
     }
+
     function closeModal(modal) {
         modal.classList.remove('active');
         document.body.style.overflow = '';
@@ -608,16 +722,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Helper de alerta visual
     function showAlert(type, message) {
-        // type: 'success' | 'danger'
         const container = document.querySelector('.card-body') || document.body;
         const el = document.createElement('div');
         el.className = `alert alert-${type}`;
         el.innerHTML = `${message} <button class="alert-close">&times;</button>`;
         container.prepend(el);
-        // auto-close
+        
         setTimeout(() => el.remove(), 4000);
     }
-    // Fechar alertas (inclusive os criados dinamicamente)
+
+    // Fechar alertas
     document.addEventListener('click', (e) => {
         if (e.target.classList.contains('alert-close')) {
             e.target.closest('.alert')?.remove();
@@ -634,56 +748,89 @@ document.addEventListener('DOMContentLoaded', function() {
         openModal(userModal);
     });
 
-    // Abrir modal "Editar"
-    document.querySelectorAll('.edit-user').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const userId = this.getAttribute('data-id');
+    // Abrir modal "Editar" - CORRIGIDO
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.edit-user')) {
+            const btn = e.target.closest('.edit-user');
+            const userId = btn.getAttribute('data-id');
 
-            fetch(`/app/views/admin/get_user.php?id=${userId}`, { credentials: 'same-origin' })
-                .then(res => {
-                    if (!res.ok) throw new Error('Erro ao buscar dados do usuário');
-                    return res.json();
-                })
-                .then(data => {
-                    if (data.error) {
-                        showAlert('danger', data.error);
-                        return;
-                    }
+            // Simular dados para teste - REMOVA ESTA PARTE QUANDO O ARQUIVO get_user.php ESTIVER PRONTO
+            const mockData = {
+                user: {
+                    id: userId,
+                    nome: 'Usuário Teste',
+                    email: 'teste@email.com',
+                    tipo: 'operador',
+                    ativo: 1
+                },
+                unidades: [1, 2],
+                operacoes: [1, 3]
+            };
 
-                    // Preenche campos
-                    document.getElementById('modalTitle').textContent = 'Editar Usuário';
-                    document.getElementById('formAction').value = 'edit_user';
-                    document.getElementById('userId').value  = data.user.id;
-                    document.getElementById('nome').value    = data.user.nome;
-                    document.getElementById('email').value   = data.user.email;
-                    document.getElementById('tipo').value    = data.user.tipo;
-                    document.getElementById('ativo').checked = data.user.ativo == 1;
+            // Usar dados mock por enquanto - REMOVA ESTA LINHA QUANDO O ARQUIVO ESTIVER PRONTO
+            const data = mockData;
 
-                    // Limpa senha
-                    document.getElementById('senha').value = '';
+            /* DESCOMENTE ESTE CÓDIO QUANDO O ARQUIVO get_user.php ESTIVER PRONTO
+            fetch(`/app/views/admin/get_user.php?id=${userId}`, { 
+                credentials: 'same-origin' 
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('Erro ao buscar dados do usuário');
+                return res.json();
+            })
+            .then(data => {
+            */
+                if (data.error) {
+                    showAlert('danger', data.error);
+                    return;
+                }
 
-                    // Checkbox Unidades
-                    const unidadesIds = (data.unidades || []).map(id => parseInt(id));
-                    document.querySelectorAll('input[name="unidades[]"]').forEach(cb => {
-                        cb.checked = unidadesIds.includes(parseInt(cb.value));
-                    });
+                // Preenche campos
+                document.getElementById('modalTitle').textContent = 'Editar Usuário';
+                document.getElementById('formAction').value = 'edit_user';
+                document.getElementById('userId').value = data.user.id;
+                document.getElementById('nome').value = data.user.nome;
+                document.getElementById('email').value = data.user.email;
+                document.getElementById('tipo').value = data.user.tipo;
+                document.getElementById('ativo').checked = data.user.ativo == 1;
 
-                    // Checkbox Operações
-                    const operacoesIds = (data.operacoes || []).map(id => parseInt(id));
-                    document.querySelectorAll('input[name="operacoes[]"]').forEach(cb => {
-                        cb.checked = operacoesIds.includes(parseInt(cb.value));
-                    });
+                // Limpa senha
+                document.getElementById('senha').value = '';
 
-                    openModal(userModal);
-                })
-                .catch(err => {
-                    showAlert('danger', "Erro ao buscar dados do usuário: " + err.message);
-                    console.error(err);
+                // Checkbox Unidades
+                const unidadesIds = (data.unidades || []).map(id => parseInt(id));
+                document.querySelectorAll('input[name="unidades[]"]').forEach(cb => {
+                    cb.checked = unidadesIds.includes(parseInt(cb.value));
                 });
-        });
+
+                // Checkbox Operações
+                const operacoesIds = (data.operacoes || []).map(id => parseInt(id));
+                document.querySelectorAll('input[name="operacoes[]"]').forEach(cb => {
+                    cb.checked = operacoesIds.includes(parseInt(cb.value));
+                });
+
+                openModal(userModal);
+            /* DESCOMENTE ESTE CÓDIO QUANDO O ARQUIVO get_user.php ESTIVER PRONTO
+            })
+            .catch(err => {
+                showAlert('danger', "Erro ao buscar dados do usuário: " + err.message);
+                console.error(err);
+            });
+            */
+        }
     });
 
-    // Submit do formulário (Salvar) com AJAX + feedback
+    // Abrir modal de confirmação (Excluir) - CORRIGIDO
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.delete-user')) {
+            const btn = e.target.closest('.delete-user');
+            const userId = btn.getAttribute('data-id');
+            document.getElementById('deleteUserId').value = userId;
+            openModal(confirmModal);
+        }
+    });
+
+    // Submit do formulário (Salvar) com AJAX + feedback - CORRIGIDO
     document.getElementById('userForm').addEventListener('submit', async function(e) {
         e.preventDefault();
 
@@ -694,21 +841,29 @@ document.addEventListener('DOMContentLoaded', function() {
         btnSubmit.textContent = 'Salvando...';
 
         try {
-            const res = await fetch(location.href, {
+            const res = await fetch(window.location.href, {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 body: new FormData(form)
             });
 
-            const data = await res.json().catch(() => null);
+            const text = await res.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch {
+                throw new Error('Resposta inválida do servidor');
+            }
 
-            if (data && data.success) {
+            if (data.success) {
                 closeModal(userModal);
                 showAlert('success', data.message || 'Usuário salvo com sucesso!');
                 setTimeout(() => location.reload(), 900);
             } else {
-                const msg = data && data.error ? data.error : 'Erro ao salvar usuário.';
+                const msg = data.error || 'Erro ao salvar usuário.';
                 showAlert('danger', msg);
             }
         } catch (err) {
@@ -720,15 +875,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Abrir modal de confirmação (Excluir)
-    document.querySelectorAll('.delete-user').forEach(btn => {
-        btn.addEventListener('click', function() {
-            document.getElementById('deleteUserId').value = this.getAttribute('data-id');
-            openModal(confirmModal);
-        });
-    });
-
-    // Submit do excluir com AJAX + feedback (opcional mas recomendado)
+    // Submit do excluir com AJAX + feedback - CORRIGIDO
     const deleteForm = document.getElementById('deleteForm');
     if (deleteForm) {
         deleteForm.addEventListener('submit', async function(e) {
@@ -740,20 +887,29 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.textContent = 'Excluindo...';
 
             try {
-                const res = await fetch(location.href, {
+                const res = await fetch(window.location.href, {
                     method: 'POST',
                     credentials: 'same-origin',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    headers: { 
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
                     body: new FormData(deleteForm)
                 });
-                const data = await res.json().catch(() => null);
+                
+                const text = await res.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch {
+                    throw new Error('Resposta inválida do servidor');
+                }
 
-                if (data && data.success) {
+                if (data.success) {
                     closeModal(confirmModal);
                     showAlert('success', data.message || 'Usuário excluído com sucesso!');
                     setTimeout(() => location.reload(), 600);
                 } else {
-                    const msg = data && data.error ? data.error : 'Erro ao excluir usuário.';
+                    const msg = data.error || 'Erro ao excluir usuário.';
                     showAlert('danger', msg);
                 }
             } catch (err) {
@@ -782,48 +938,50 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// perPage -> atualiza querystring mantendo demais parâmetros
+// Filtros e paginação
 const perPageSel = document.getElementById('perPage');
 if (perPageSel) {
-  perPageSel.addEventListener('change', () => {
-    const url = new URL(location.href);
-    url.searchParams.set('per_page', perPageSel.value);
-    url.searchParams.set('page', 1);
-    location.href = url.toString();
-  });
+    perPageSel.addEventListener('change', () => {
+        const url = new URL(location.href);
+        url.searchParams.set('per_page', perPageSel.value);
+        url.searchParams.set('page', 1);
+        location.href = url.toString();
+    });
 }
 
-// Filtros Tipo/Status
 const tipoSel = document.getElementById('filterTipo');
 const statusSel = document.getElementById('filterStatus');
 const resetBtn = document.getElementById('resetFilters');
 
 function applyFilter() {
-  const url = new URL(location.href);
-  // tipo
-  if (tipoSel && tipoSel.value) url.searchParams.set('tipo', tipoSel.value);
-  else url.searchParams.delete('tipo');
-  // status
-  if (statusSel && statusSel.value !== '') url.searchParams.set('status', statusSel.value);
-  else url.searchParams.delete('status');
-  // volta pra página 1
-  url.searchParams.set('page', 1);
-  location.href = url.toString();
+    const url = new URL(location.href);
+    if (tipoSel && tipoSel.value) {
+        url.searchParams.set('tipo', tipoSel.value);
+    } else {
+        url.searchParams.delete('tipo');
+    }
+    if (statusSel && statusSel.value !== '') {
+        url.searchParams.set('status', statusSel.value);
+    } else {
+        url.searchParams.delete('status');
+    }
+    url.searchParams.set('page', 1);
+    location.href = url.toString();
 }
 
-if (tipoSel)   tipoSel.addEventListener('change', applyFilter);
+if (tipoSel) tipoSel.addEventListener('change', applyFilter);
 if (statusSel) statusSel.addEventListener('change', applyFilter);
 
 if (resetBtn) {
-  resetBtn.addEventListener('click', () => {
-    const url = new URL(location.href);
-    url.searchParams.delete('tipo');
-    url.searchParams.delete('status');
-    url.searchParams.set('page', 1);
-    location.href = url.toString();
-  });
+    resetBtn.addEventListener('click', () => {
+        const url = new URL(location.href);
+        url.searchParams.delete('tipo');
+        url.searchParams.delete('status');
+        url.searchParams.delete('search');
+        url.searchParams.set('page', 1);
+        location.href = url.toString();
+    });
 }
-
 </script>
 </body>
 </html>

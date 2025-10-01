@@ -117,6 +117,13 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                     <a href="dashboard" class="<?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">💻 Dash CIA</a>
                     <a href="user_dashboard" data-cap="user_dashboard:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'user_dashboard.php' ? 'active' : ''; ?>">🧑‍🌾 Dash User</a>
                 </div>
+
+                <div class="has-submenu">🚜 CTT - Colheita <span class="arrow"></span></div>
+                <div class="submenu">
+                    <a href="/ctt" data-cap="audit:view" class="<?php echo basename($_SERVER['PHP_SELF'])=='audit_logs.php'?'active':''; ?>">📈 Aponta CTT</a>
+            </div>
+
+
                 <div class="has-submenu">👑 DEV Section <span class="arrow"></span></div>
                 <div class="submenu">
                     <a href="/audit_logs" data-cap="audit:view" class="<?php echo basename($_SERVER['PHP_SELF'])=='audit_logs.php'?'active':''; ?>">📃 Logs de Auditoria</a>

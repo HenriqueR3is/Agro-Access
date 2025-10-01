@@ -144,6 +144,24 @@ try {
         $fazendas = $pdo->query("SELECT id, nome, codigo_fazenda FROM fazendas ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    // Carrega equipamentos por operação
+    $equipamentos_por_operacao = [];
+    foreach ($tipos_operacao as $operacao) {
+        $op_id = (int)$operacao['id'];
+        try {
+            $stmt_equip = $pdo->prepare("
+                SELECT id, nome 
+                FROM equipamentos 
+                WHERE operacao_id = ? AND ativo = 1 
+                ORDER BY nome
+            ");
+            $stmt_equip->execute([$op_id]);
+            $equipamentos_por_operacao[$op_id] = $stmt_equip->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            $equipamentos_por_operacao[$op_id] = [];
+        }
+    }
+
     // Dados fake para a aba de comparativos (placeholder)
     $comparison_data = [];
     $current_date = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
@@ -166,6 +184,7 @@ try {
     $dados_por_operacao_diario = [];
     $dados_por_operacao_mensal = [];
     $fazendas = [];
+    $equipamentos_por_operacao = [];
     $comparison_data = [];
 }
 
@@ -175,38 +194,55 @@ $report_hours = ['02:00','04:00','06:00','08:00','10:00','12:00','14:00','16:00'
 // Salvar novo apontamento (salvando data_hora em BRT/local)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['usuario_id'])) {
     try {
-        $usuario_id    = (int)$_POST['usuario_id'];
-        $report_time   = $_POST['report_time'];          // "HH:MM"
-        $status        = $_POST['status'];               // ativo | parado
-        $fazenda_id    = (int)$_POST['fazenda_id'];
-        $equipamento_id= (int)$_POST['equipamento_id'];
-        $operacao_id   = (int)$_POST['operacao_id'];
-        $hectares      = ($status === 'ativo') ? (float)$_POST['hectares'] : 0;
-        $observacoes   = ($status === 'parado') ? ($_POST['observacoes'] ?? '') : '';
+        $usuario_id     = (int)$_POST['usuario_id'];
+        $report_time    = $_POST['report_time'];          // "HH:MM"
+        $status         = $_POST['status'];               // ativo | parado
+        $fazenda_id     = (int)$_POST['fazenda_id'];
+        $equipamento_id = (int)$_POST['equipamento_id'];
+        $operacao_id    = (int)$_POST['operacao_id'];
+        $hectares_input = isset($_POST['hectares']) ? (float)str_replace(',', '.', $_POST['hectares']) : 0;
+        $viagens_input  = isset($_POST['viagens'])  ? (int)$_POST['viagens'] : 0; // vem do hidden (ver JS/HTML abaixo)
+        $observacoes    = ($status === 'parado') ? ($_POST['observacoes'] ?? '') : '';
+
+        // Descobre se a operação é "Caçamba" pelo NOME vindo do BD
+        $stmtOp = $pdo->prepare("SELECT nome FROM tipos_operacao WHERE id = ?");
+        $stmtOp->execute([$operacao_id]);
+        $opNome = (string)$stmtOp->fetchColumn();
+
+        // normaliza para comparar (sem acento/caixa)
+        $norm = function($s){
+            $s = mb_strtolower($s, 'UTF-8');
+            $s = strtr($s, ['á'=>'a','à'=>'a','â'=>'a','ã'=>'a','ä'=>'a','é'=>'e','ê'=>'e','ë'=>'e','í'=>'i','ï'=>'i','ó'=>'o','ô'=>'o','õ'=>'o','ö'=>'o','ú'=>'u','ü'=>'u','ç'=>'c']);
+            return $s;
+        };
+        $isCacamba = str_contains($norm($opNome), 'cacamba'); // cobre "caçamba" e "cacamba"
 
         // Unidade da fazenda selecionada (garante consistência)
         $stmt_unidade = $pdo->prepare("SELECT unidade_id FROM fazendas WHERE id = ?");
         $stmt_unidade->execute([$fazenda_id]);
         $fazenda_data = $stmt_unidade->fetch(PDO::FETCH_ASSOC);
-        $unidade_id = $fazenda_data['unidade_id'] ?? $unidade_do_usuario;
+        $unidade_id   = $fazenda_data['unidade_id'] ?? $unidade_do_usuario;
 
-        // Usa a data do "hoje" em Brasília + hora selecionada (00:00 pertence ao mesmo dia)
+        // Data de hoje em BRT + hora selecionada
         $hoje_brt = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
-        $data_hora_local = (new DateTime($hoje_brt->format('Y-m-d') . ' ' . $report_time . ':00', new DateTimeZone('America/Sao_Paulo')))
-                           ->format('Y-m-d H:i:s');
+        $data_hora_local = (new DateTime($hoje_brt->format('Y-m-d') . ' ' . $report_time . ':00', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d H:i:s');
+
+        // define hectares/viagens de acordo com operação + status
+        $hectares = ($status === 'ativo' && !$isCacamba) ? $hectares_input : 0;
+        $viagens  = ($status === 'ativo' &&  $isCacamba) ? max(0, $viagens_input) : 0;
 
         $stmt = $pdo->prepare("
             INSERT INTO apontamentos
-            (usuario_id, unidade_id, equipamento_id, operacao_id, hectares, data_hora, hora_selecionada, observacoes, fazenda_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (usuario_id, unidade_id, equipamento_id, operacao_id, hectares, viagens, data_hora, hora_selecionada, observacoes, fazenda_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $usuario_id, $unidade_id, $equipamento_id, $operacao_id,
-            $hectares, $data_hora_local, $report_time, $observacoes, $fazenda_id
+            $hectares, $viagens, $data_hora_local, $report_time, $observacoes, $fazenda_id
         ]);
 
-        $_SESSION['feedback_message'] = "Apontamento salvo com sucesso para às " . substr($report_time,0,5) . "!";
-        header("Location: /user_dashboard");
+        $_SESSION['feedback_message'] = 'Apontamento salvo com sucesso para às ' . substr($report_time, 0, 5) . '!';
+        header('Location: /user_dashboard');
         exit;
 
     } catch (PDOException $e) {
@@ -229,536 +265,900 @@ $total_monthly_entries  = array_sum(array_map(fn($r)=>$r['total_entries'] ?? 0, 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - <?php echo htmlspecialchars($user_role); ?></title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <!-- Select2 -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link rel="icon" type="image/x-icon" href="/public/static/favicon.ico">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <link rel="stylesheet" href="/public/static/css/styleDash.css">
-    <link rel="stylesheet" href="/public/static/css/user_dashboard.css">
-</head>
+    <!-- CSS personalizado -->
+    <link rel="stylesheet" href="/public/static/css/ctt.css">
+    <style>
+        /* Estilos adicionais para melhorar a visualização */
+        .progress-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
 
-<body class="dashboard-body">
-<header class="main-header">
-    <div class="header-content">
-        <div class="logo">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M17.59 13.41a6 6 0 0 0-8.49-8.49L3 11v8h8l6.59-6.59zM19 12l-7-7l-2 2l7 7l2-2z"/></svg>
-            <span>Agro-Dash</span>
-        </div>
-        <div class="user-info">
-            <span>Olá, <strong><?php echo htmlspecialchars($username); ?></strong>! (<?php echo htmlspecialchars($user_role); ?>)</span>
-            <?php if ($user_role === 'admin' || $user_role === 'cia_dev'): ?>
-                <a href="/metas" class="admin-btn">Metas</a>
-                <a href="/dashboard" class="admin-btn">Back</a>
-            <?php endif; ?>
-            <a href="/" class="logout-btn">Sair</a>
+        .progress-stats .stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .progress-stats .stat:last-child {
+            border-bottom: none;
+        }
+
+        .progress-stats .label {
+            font-weight: 500;
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .progress-stats .value {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .progress-bar-striped {
+            background-image: linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent);
+            background-size: 1rem 1rem;
+        }
+
+        .progress-bar-animated {
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+
+        @keyframes progress-bar-stripes {
+            0% {
+                background-position: 1rem 0;
+            }
+            100% {
+                background-position: 0 0;
+            }
+        }
+
+        .progress-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .progress-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .operacao-name {
+            font-weight: 600;
+            flex: 1;
+            font-size: 0.9rem;
+        }
+
+        .operacao-progress {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+            background: rgba(0,0,0,0.05);
+        }
+
+        @media (max-width: 768px) {
+            .progress-stats .stat {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.25rem;
+            }
+            
+            .progress-section h6 {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.25rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="ctt-header">
+    <div class="container">
+        <div class="header-content">
+            <div class="header-brand">
+                <img src="/public/static/img/logousa.png" alt="CTT Logo" class="header-logo">
+                <i class="fas fa-chart-line"></i>
+                <h1>User Dashboard</h1>
+                <span class="badge bg-warning">v2.0</span>
+            </div>
+            <div class="header-info">
+                <div class="user-info">
+                    <i class="fas fa-user"></i>
+                    <span><?= htmlspecialchars($username) ?> (<?= htmlspecialchars($user_role) ?>)</span>
+                </div>
+                <div class="time-info" id="current-time">
+                    <i class="fas fa-clock"></i>
+                    <span>Carregando...</span>
+                </div>
+                <?php if ($user_role === 'admin' || $user_role === 'cia_dev'): ?>
+                    <div class="admin-actions">
+                        <a href="/metas" class="btn btn-sm btn-outline-light me-2">Metas</a>
+                        <a href="/dashboard" class="btn btn-sm btn-outline-light">Back</a>
+                    </div>
+                <?php endif; ?>
+                <a href="/" class="btn btn-sm btn-outline-light">
+                    <i class="fas fa-sign-out-alt"></i> Sair
+                </a>
+            </div>
         </div>
     </div>
 </header>
 
-<main class="container">
-    <div class="timezone-info">
-        <strong>Atenção</strong> Sistema em desenvolvimento — alguns pontos ainda podem mudar.
+<!-- Navegação em Abas -->
+<nav class="ctt-tabs">
+    <div class="container">
+        <div class="nav nav-tabs" id="nav-tab" role="tablist">
+            <button class="nav-link active" id="nav-dashboard-tab" data-bs-toggle="tab" data-bs-target="#nav-dashboard" type="button" role="tab">
+                <i class="fas fa-chart-line"></i> Dashboard
+            </button>
+            <button class="nav-link" id="nav-metas-tab" data-bs-toggle="tab" data-bs-target="#nav-metas" type="button" role="tab">
+                <i class="fas fa-bullseye"></i> Metas Detalhadas
+            </button>
+            <button class="nav-link" id="nav-comparison-tab" data-bs-toggle="tab" data-bs-target="#nav-comparison" type="button" role="tab">
+                <i class="fas fa-chart-bar"></i> Comparativos
+            </button>
+        </div>
     </div>
+</nav>
 
+<div class="container mt-4">
+    <!-- Mensagens de feedback -->
     <?php if ($feedback_message): ?>
-        <div class="alert-message <?php echo (stripos($feedback_message,'Erro') !== false ? 'error' : ''); ?>">
-            <?php echo htmlspecialchars($feedback_message); ?>
+        <div class="alert alert-<?php echo (stripos($feedback_message,'Erro') !== false ? 'danger' : 'success'); ?> alert-dismissible fade show" role="alert">
+            <i class="fas <?php echo (stripos($feedback_message,'Erro') !== false ? 'fa-exclamation-triangle' : 'fa-check-circle'); ?>"></i>
+            <?= $feedback_message ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     <?php endif; ?>
 
-    <div class="tab-navigation">
-        <button class="tab-button active" data-tab="dashboard">Dashboard</button>
-        <button class="tab-button" data-tab="goals">Metas Detalhadas</button>
-        <button class="tab-button" data-tab="comparison">Comparativos</button>
-    </div>
-
-    <!-- =============== DASHBOARD =============== -->
-    <div class="tab-content active" id="dashboard-tab">
-        <section class="grid-container">
-            <div class="card metric-card">
-                <h3>Progresso Diário</h3>
-                <div class="progress-chart">
-                    <canvas id="dailyProgressChart"></canvas>
-                    <div class="progress-text" id="dailyProgressText">0%</div>
-                </div>
-                <p><span id="dailyHectares"><?php echo number_format($total_daily_hectares, 2, ',', '.'); ?></span> ha de <span id="dailyGoal"><?php echo number_format($total_daily_goal, 0, ',', '.'); ?></span> ha</p>
-                <p><strong>Apontamentos hoje:</strong> <span id="dailyEntries"><?php echo (int)$total_daily_entries; ?></span></p>
-            </div>
-
-            <div class="card metric-card">
-                <h3>Progresso Mensal</h3>
-                <?php
-                $monthly_progress_percentage = ($total_monthly_goal > 0) ? min(100, ($total_monthly_hectares / $total_monthly_goal) * 100) : 0;
-                ?>
-                <div class="progress-bar-container">
-                    <div class="progress-bar" id="monthlyProgressBar" style="width: <?php echo $monthly_progress_percentage; ?>%"></div>
-                </div>
-                <p class="progress-bar-label">
-                    <span id="monthlyHectares"><?php echo number_format($total_monthly_hectares, 2, ',', '.'); ?></span> ha de
-                    <span id="monthlyGoal"><?php echo number_format($total_monthly_goal, 0, ',', '.'); ?></span> ha
-                    (<span id="monthlyProgress"><?php echo number_format($monthly_progress_percentage, 2, ',', '.'); ?></span>%)
-                </p>
-                <p><strong>Apontamentos no mês:</strong> <span id="monthlyEntries"><?php echo (int)$total_monthly_entries; ?></span></p>
-            </div>
-        </section>
-
-        <section class="grid-container">
-            <div class="card form-card">
-                <h3>Novo Apontamento</h3>
-                <form action="/user_dashboard" method="POST" id="entryForm">
-                    <input type="hidden" name="usuario_id" value="<?php echo (int)$usuario_id; ?>">
-
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label for="fazenda_id">Fazenda</label>
-                            <select id="fazenda_id" name="fazenda_id" class="select-search" required>
-                                <option value="">Selecione uma fazenda...</option>
-                                <?php foreach ($fazendas as $f): ?>
-                                    <option value="<?php echo (int)$f['id']; ?>">
-                                        <?php echo htmlspecialchars($f['nome']); ?> (<?php echo htmlspecialchars($f['codigo_fazenda']); ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+    <!-- Conteúdo das Abas -->
+    <div class="tab-content" id="nav-tabContent">
+        
+        <!-- ABA DASHBOARD -->
+        <div class="tab-pane fade show active" id="nav-dashboard" role="tabpanel">
+            <div class="row g-4">
+                <!-- Cards de Estatísticas -->
+                <div class="col-xl-3 col-md-6">
+                    <div class="ctt-card stat-card">
+                        <div class="card-icon bg-primary">
+                            <i class="fas fa-chart-bar"></i>
                         </div>
-                        <div class="input-group">
-                            <label for="report_time">Horário</label>
-                            <select id="report_time" name="report_time" required>
-                                <?php foreach ($report_hours as $hour): ?>
-                                    <option value="<?php echo $hour; ?>" <?php echo $hour === '08:00' ? 'selected' : ''; ?>>
-                                        <?php echo $hour; ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                        <div class="card-content">
+                            <h3><?= number_format($total_daily_hectares, 2, ',', '.') ?></h3>
+                            <p>Ha Hoje</p>
                         </div>
                     </div>
-
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label for="status">Status</label>
-                            <select id="status" name="status" required>
-                                <option value="ativo" selected>Ativo</option>
-                                <option value="parado">Parado</option>
-                            </select>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="ctt-card stat-card">
+                        <div class="card-icon bg-success">
+                            <i class="fas fa-bullseye"></i>
+                        </div>
+                        <div class="card-content">
+                            <h3><?= number_format($total_daily_goal, 0, ',', '.') ?></h3>
+                            <p>Meta Diária</p>
                         </div>
                     </div>
-
-                    <div class="form-row">
-                        <div class="input-group" style="width: 100%;">
-                            <label for="operation">Operação</label>
-                            <select id="operation" name="operacao_id" class="select-search" required>
-                                <option value="">Selecione a operação...</option>
-                                <?php foreach ($tipos_operacao as $op): ?>
-                                    <option value="<?php echo (int)$op['id']; ?>" data-nome="<?php echo htmlspecialchars($op['nome']); ?>">
-                                        <?php echo htmlspecialchars($op['nome']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="ctt-card stat-card">
+                        <div class="card-icon bg-warning">
+                            <i class="fas fa-calendar"></i>
+                        </div>
+                        <div class="card-content">
+                            <h3><?= number_format($total_monthly_hectares, 2, ',', '.') ?></h3>
+                            <p>Ha Mensal</p>
                         </div>
                     </div>
-
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label for="equipment">Equipamento</label>
-                            <select id="equipment" name="equipamento_id" class="select-search" required disabled>
-                                <option value="">Primeiro selecione uma operação</option>
-                            </select>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="ctt-card stat-card">
+                        <div class="card-icon bg-info">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <div class="card-content">
+                            <h3><?= $total_daily_entries ?></h3>
+                            <p>Apontamentos Hoje</p>
                         </div>
                     </div>
+                </div>
 
-                    <div class="form-row">
-                        <div id="hectares-group" class="input-group">
-                            <label for="hectares">Hectares</label>
-                            <input type="number" step="0.01" id="hectares" name="hectares" placeholder="Ex: 15.5" required>
+                <!-- Progresso Diário -->
+                <div class="col-xl-6">
+                    <div class="ctt-card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-chart-line"></i> Progresso Diário</h5>
                         </div>
-                    </div>
-
-                    <div id="reason-group" class="input-group" style="display: none;">
-                        <label for="reason">Motivo da Parada</label>
-                        <textarea id="reason" name="observacoes" rows="3" placeholder="Descreva o motivo da parada..."></textarea>
-                    </div>
-
-                    <button type="submit" class="btn-submit">Salvar Apontamento</button>
-                </form>
-            </div>
-
-            <div class="card list-card">
-                <div class="list-header">
-                    <h3>Últimos Lançamentos</h3>
-                    <div class="date-filter">
-                        <input type="date" id="filter-date" value="<?php echo date('Y-m-d'); ?>">
-                    </div>
-                </div>
-                <div id="no-entries-message" style="display: none; text-align: center; color: #777;">
-                    Nenhum apontamento encontrado para esta data.
-                </div>
-                <ul id="recent-entries-list"></ul>
-            </div>
-        </section>
-    </div>
-
-    <!-- =============== METAS DETALHADAS =============== -->
-    <div class="tab-content" id="goals-tab">
-        <div class="goals-container">
-            <?php foreach ($tipos_operacao as $operacao):
-                $op_id = (int)$operacao['id'];
-                $op_nome = $operacao['nome'];
-
-                $meta_diaria       = (float)($metas_por_operacao[$op_id]['meta_diaria'] ?? 0);
-                $meta_mensal       = (float)($metas_por_operacao[$op_id]['meta_mensal'] ?? 0);
-                $realizado_diario  = (float)($dados_por_operacao_diario[$op_id]['total_ha'] ?? 0);
-                $realizado_mensal  = (float)($dados_por_operacao_mensal[$op_id]['total_ha'] ?? 0);
-                $falta_diario      = max(0, $meta_diaria - $realizado_diario);
-                $falta_mensal      = max(0, $meta_mensal - $realizado_mensal);
-            ?>
-                <div class="card goal-card">
-                    <h4><?php echo htmlspecialchars($op_nome); ?></h4>
-                    <div class="goal-details">
-                        <p><strong>Meta Diária:</strong> <?php echo number_format($meta_diaria, 2, ',', '.'); ?> ha</p>
-                        <p><strong>Realizado Hoje:</strong> <?php echo number_format($realizado_diario, 2, ',', '.'); ?> ha</p>
-                        <p><strong>Falta:</strong> <?php echo number_format($falta_diario, 2, ',', '.'); ?> ha</p>
-                        <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
-                        <p><strong>Meta Mensal:</strong> <?php echo number_format($meta_mensal, 2, ',', '.'); ?> ha</p>
-                        <p><strong>Realizado no Mês:</strong> <?php echo number_format($realizado_mensal, 2, ',', '.'); ?> ha</p>
-                        <p><strong>Falta:</strong> <?php echo number_format($falta_mensal, 2, ',', '.'); ?> ha</p>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        </div>
-    </div>
-
-    <!-- =============== COMPARATIVOS =============== -->
-    <div class="tab-content" id="comparison-tab">
-        <div class="chart-container">
-            <div class="chart-header">
-                <h3 class="chart-title">Comparativo de Hectares - Solinftec vs Manual</h3>
-                <div class="chart-filter">
-                    <select id="comparison-period">
-                        <option value="7">Últimos 7 dias</option>
-                        <option value="15">Últimos 15 dias</option>
-                        <option value="30">Últimos 30 dias</option>
-                    </select>
-                </div>
-            </div>
-            <div class="chart-canvas-container">
-                <canvas id="comparisonChart"></canvas>
-            </div>
-        </div>
-
-        <div class="card">
-            <h3>Dados Detalhados</h3>
-            <div class="table-responsive">
-                <table class="comparison-table">
-                    <thead>
-                    <tr>
-                        <th>Data</th>
-                        <th>Hectares Solinftec</th>
-                        <th>Hectares Manual</th>
-                        <th>Diferença</th>
-                        <th>Variação</th>
-                    </tr>
-                    </thead>
-                    <tbody id="comparison-table-body">
-                    <?php if (!empty($comparison_data)): ?>
-                        <?php foreach ($comparison_data as $data): ?>
+                        <div class="card-body">
                             <?php
-                            $ha_solinftec = (float)($data['ha_solinftec'] ?? 0);
-                            $ha_manual    = (float)($data['ha_manual'] ?? 0);
-                            $diferenca    = $ha_solinftec - $ha_manual;
-                            $variacao     = $ha_solinftec > 0 ? (($diferenca / $ha_solinftec) * 100) : 0;
+                            $daily_progress_percentage = ($total_daily_goal > 0) ? min(100, ($total_daily_hectares / $total_daily_goal) * 100) : 0;
                             ?>
-                            <tr>
-                                <td><?php echo date('d/m/Y', strtotime($data['data'])); ?></td>
-                                <td><?php echo number_format($ha_solinftec, 2, ',', '.'); ?></td>
-                                <td><?php echo number_format($ha_manual, 2, ',', '.'); ?></td>
-                                <td class="<?php echo $diferenca >= 0 ? 'difference-positive' : 'difference-negative'; ?>">
-                                    <?php echo number_format($diferenca, 2, ',', '.'); ?>
-                                </td>
-                                <td class="<?php echo $diferenca >= 0 ? 'difference-positive' : 'difference-negative'; ?>">
-                                    <?php echo number_format($variacao, 2, ',', '.'); ?>%
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr><td colspan="5" style="text-align: center;">Nenhum dado disponível para comparação</td></tr>
-                    <?php endif; ?>
-                    </tbody>
-                </table>
+                            <div class="progress mb-3" style="height: 25px;">
+                                <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar" 
+                                     style="width: <?= $daily_progress_percentage ?>%">
+                                    <?= number_format($daily_progress_percentage, 2, ',', '.') ?>%
+                                </div>
+                            </div>
+                            <div class="progress-stats">
+                                <div class="stat">
+                                    <span class="label">Realizado:</span>
+                                    <span class="value"><?= number_format($total_daily_hectares, 2, ',', '.') ?> ha</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="label">Meta:</span>
+                                    <span class="value"><?= number_format($total_daily_goal, 0, ',', '.') ?> ha</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="label">Apontamentos:</span>
+                                    <span class="value"><?= (int)$total_daily_entries ?></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progresso Mensal -->
+                <div class="col-xl-6">
+                    <div class="ctt-card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-chart-line"></i> Progresso Mensal</h5>
+                        </div>
+                        <div class="card-body">
+                            <?php
+                            $monthly_progress_percentage = ($total_monthly_goal > 0) ? min(100, ($total_monthly_hectares / $total_monthly_goal) * 100) : 0;
+                            ?>
+                            <div class="progress mb-3" style="height: 25px;">
+                                <div class="progress-bar bg-info progress-bar-striped progress-bar-animated" role="progressbar" 
+                                     style="width: <?= $monthly_progress_percentage ?>%">
+                                    <?= number_format($monthly_progress_percentage, 2, ',', '.') ?>%
+                                </div>
+                            </div>
+                            <div class="progress-stats">
+                                <div class="stat">
+                                    <span class="label">Realizado:</span>
+                                    <span class="value"><?= number_format($total_monthly_hectares, 2, ',', '.') ?> ha</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="label">Meta:</span>
+                                    <span class="value"><?= number_format($total_monthly_goal, 0, ',', '.') ?> ha</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="label">Apontamentos:</span>
+                                    <span class="value"><?= (int)$total_monthly_entries ?></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráficos de Produtividade -->
+                <div class="col-xl-8">
+                    <div class="ctt-card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-chart-bar"></i> Produtividade por Operação</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="operacaoChart" height="250"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status das Operações -->
+                <div class="col-xl-4">
+                    <div class="ctt-card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-tachometer-alt"></i> Status das Operações</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-list">
+                                <?php foreach ($tipos_operacao as $operacao): 
+                                    $op_id = (int)$operacao['id'];
+                                    $realizado_diario = (float)($dados_por_operacao_diario[$op_id]['total_ha'] ?? 0);
+                                    $meta_diaria = (float)($metas_por_operacao[$op_id]['meta_diaria'] ?? 0);
+                                    $progresso = ($meta_diaria > 0) ? min(100, ($realizado_diario / $meta_diaria) * 100) : 0;
+                                    $status_class = $progresso >= 80 ? 'bg-success' : ($progresso >= 50 ? 'bg-warning' : 'bg-danger');
+                                ?>
+                                <div class="status-item">
+                                    <div class="status-indicator <?= $status_class ?>"></div>
+                                    <span class="operacao-name"><?= htmlspecialchars($operacao['nome']) ?></span>
+                                    <span class="operacao-progress"><?= number_format($progresso, 1) ?>%</span>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Formulário de Apontamento -->
+                <div class="col-xl-8">
+                    <div class="ctt-card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-plus-circle"></i> Novo Apontamento</h5>
+                        </div>
+                        <form action="/user_dashboard" method="POST" class="card-body" id="entryForm">
+                            <input type="hidden" name="usuario_id" value="<?= (int)$usuario_id ?>">
+
+                            <div class="row g-3">
+                                <!-- LINHA 1: OPERAÇÃO + EQUIPAMENTO -->
+                                <div class="col-md-6">
+                                    <label class="form-label">Operação *</label>
+                                    <select id="operation" name="operacao_id" class="form-select select-search" required>
+                                        <option value="">Selecione a operação...</option>
+                                        <?php foreach ($tipos_operacao as $op): ?>
+                                        <option value="<?= (int)$op['id'] ?>" 
+                                                data-nome="<?= htmlspecialchars($op['nome']) ?>"
+                                                data-equipamentos='<?= json_encode($equipamentos_por_operacao[(int)$op['id']] ?? []) ?>'>
+                                            <?= htmlspecialchars($op['nome']) ?>
+                                        </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label">Equipamento *</label>
+                                    <select id="equipment" name="equipamento_id" class="form-select select-search" required disabled>
+                                        <option value="">Selecione primeiro a operação</option>
+                                    </select>
+                                </div>
+
+                                <!-- LINHA 2: HORÁRIO + FAZENDA -->
+                                <div class="col-md-6">
+                                    <label class="form-label">Horário *</label>
+                                    <select id="report_time" name="report_time" class="form-select" required disabled>
+                                        <option value="">Selecione a operação</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label">Fazenda *</label>
+                                    <select id="fazenda_id" name="fazenda_id" class="form-select select-search" required>
+                                        <option value="">Selecione uma fazenda...</option>
+                                        <?php foreach ($fazendas as $f): ?>
+                                        <option value="<?= (int)$f['id'] ?>">
+                                            <?= htmlspecialchars($f['nome']) ?> (<?= htmlspecialchars($f['codigo_fazenda']) ?>)
+                                        </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <!-- LINHA 3: STATUS -->
+                                <div class="col-md-6">
+                                    <label class="form-label">Status *</label>
+                                    <select id="status" name="status" class="form-select" required>
+                                        <option value="ativo" selected>Ativo</option>
+                                        <option value="parado">Parado</option>
+                                    </select>
+                                </div>
+
+                                <!-- LINHA 4: QUANTIDADE (hectares/viagens) -->
+                                <div class="col-md-6" id="hectares-group">
+                                    <label class="form-label" id="qtyLabel">Hectares *</label>
+                                    <input type="number" step="0.01" id="hectares" name="hectares" class="form-control" placeholder="Ex: 15.5" required>
+                                    <input type="hidden" id="viagens" name="viagens" value="0">
+                                    <div class="form-text" id="qtyHelp">Informe a área em hectares.</div>
+                                </div>
+
+                                <!-- MOTIVO PARADA -->
+                                <div class="col-12" id="reason-group" style="display:none;">
+                                    <label class="form-label">Motivo da Parada</label>
+                                    <textarea id="reason" name="observacoes" class="form-control" rows="3" placeholder="Descreva o motivo da parada..."></textarea>
+                                </div>
+
+                                <div class="col-12 text-end">
+                                    <button type="submit" class="btn btn-primary btn-lg">
+                                        <i class="fas fa-paper-plane"></i> Salvar Apontamento
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Últimos Lançamentos -->
+                <div class="col-xl-4">
+                    <div class="ctt-card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-history"></i> Últimos Lançamentos</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="date-filter mb-3">
+                                <input type="date" id="filter-date" class="form-control" value="<?= date('Y-m-d') ?>">
+                            </div>
+                            <div id="no-entries-message" style="display: none; text-align: center; color: #777;">
+                                Nenhum apontamento encontrado para esta data.
+                            </div>
+                            <ul id="recent-entries-list" class="status-list"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA METAS DETALHADAS -->
+        <div class="tab-pane fade" id="nav-metas" role="tabpanel">
+            <div class="row g-4">
+                <?php foreach ($tipos_operacao as $operacao):
+                    $op_id = (int)$operacao['id'];
+                    $op_nome = $operacao['nome'];
+
+                    $meta_diaria       = (float)($metas_por_operacao[$op_id]['meta_diaria'] ?? 0);
+                    $meta_mensal       = (float)($metas_por_operacao[$op_id]['meta_mensal'] ?? 0);
+                    $realizado_diario  = (float)($dados_por_operacao_diario[$op_id]['total_ha'] ?? 0);
+                    $realizado_mensal  = (float)($dados_por_operacao_mensal[$op_id]['total_ha'] ?? 0);
+                    $falta_diario      = max(0, $meta_diaria - $realizado_diario);
+                    $falta_mensal      = max(0, $meta_mensal - $realizado_mensal);
+                    
+                    $progresso_diario = ($meta_diaria > 0) ? min(100, ($realizado_diario / $meta_diaria) * 100) : 0;
+                    $progresso_mensal = ($meta_mensal > 0) ? min(100, ($realizado_mensal / $meta_mensal) * 100) : 0;
+                ?>
+                <div class="col-xl-6 col-lg-6">
+                    <div class="ctt-card frente-card">
+                        <div class="card-header">
+                            <h6><?= htmlspecialchars($op_nome) ?></h6>
+                        </div>
+                        <div class="card-body">
+                            <!-- Progresso Diário -->
+                            <div class="progress-section">
+                                <h6 class="mb-3">
+                                    <i class="fas fa-sun text-warning"></i> Progresso Diário
+                                    <span class="badge bg-<?= $progresso_diario >= 100 ? 'success' : ($progresso_diario >= 80 ? 'warning' : 'danger') ?> float-end">
+                                        <?= number_format($progresso_diario, 1) ?>%
+                                    </span>
+                                </h6>
+                                <div class="progress mb-3" style="height: 20px;">
+                                    <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar" 
+                                         style="width: <?= $progresso_diario ?>%">
+                                        <?= number_format($realizado_diario, 1) ?> ha
+                                    </div>
+                                </div>
+                                <div class="frente-stats">
+                                    <div class="stat">
+                                        <span class="label">Meta:</span>
+                                        <span class="value"><?= number_format($meta_diaria, 2, ',', '.') ?> ha</span>
+                                    </div>
+                                    <div class="stat">
+                                        <span class="label">Realizado:</span>
+                                        <span class="value text-success"><?= number_format($realizado_diario, 2, ',', '.') ?> ha</span>
+                                    </div>
+                                    <div class="stat">
+                                        <span class="label">Falta:</span>
+                                        <span class="value text-warning"><?= number_format($falta_diario, 2, ',', '.') ?> ha</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <hr class="my-4">
+                            
+                            <!-- Progresso Mensal -->
+                            <div class="progress-section">
+                                <h6 class="mb-3">
+                                    <i class="fas fa-calendar text-info"></i> Progresso Mensal
+                                    <span class="badge bg-<?= $progresso_mensal >= 100 ? 'success' : ($progresso_mensal >= 80 ? 'warning' : 'danger') ?> float-end">
+                                        <?= number_format($progresso_mensal, 1) ?>%
+                                    </span>
+                                </h6>
+                                <div class="progress mb-3" style="height: 20px;">
+                                    <div class="progress-bar bg-info progress-bar-striped progress-bar-animated" role="progressbar" 
+                                         style="width: <?= $progresso_mensal ?>%">
+                                        <?= number_format($realizado_mensal, 1) ?> ha
+                                    </div>
+                                </div>
+                                <div class="frente-stats">
+                                    <div class="stat">
+                                        <span class="label">Meta:</span>
+                                        <span class="value"><?= number_format($meta_mensal, 2, ',', '.') ?> ha</span>
+                                    </div>
+                                    <div class="stat">
+                                        <span class="label">Realizado:</span>
+                                        <span class="value text-success"><?= number_format($realizado_mensal, 2, ',', '.') ?> ha</span>
+                                    </div>
+                                    <div class="stat">
+                                        <span class="label">Falta:</span>
+                                        <span class="value text-warning"><?= number_format($falta_mensal, 2, ',', '.') ?> ha</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <!-- ABA COMPARATIVOS -->
+        <div class="tab-pane fade" id="nav-comparison" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-12">
+                    <div class="ctt-card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-chart-bar"></i> Comparativo de Hectares - Solinftec vs Manual</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-filter mb-3">
+                                <select id="comparison-period" class="form-select" style="max-width: 200px;">
+                                    <option value="7">Últimos 7 dias</option>
+                                    <option value="15">Últimos 15 dias</option>
+                                    <option value="30">Últimos 30 dias</option>
+                                </select>
+                            </div>
+                            <div class="chart-canvas-container">
+                                <canvas id="comparisonChart" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="ctt-card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-table"></i> Dados Detalhados</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Data</th>
+                                            <th>Hectares Solinftec</th>
+                                            <th>Hectares Manual</th>
+                                            <th>Diferença</th>
+                                            <th>Variação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="comparison-table-body">
+                                    <?php if (!empty($comparison_data)): ?>
+                                        <?php foreach ($comparison_data as $data): ?>
+                                            <?php
+                                            $ha_solinftec = (float)($data['ha_solinftec'] ?? 0);
+                                            $ha_manual    = (float)($data['ha_manual'] ?? 0);
+                                            $diff         = $ha_solinftec - $ha_manual;
+                                            $variation    = ($ha_manual > 0) ? ($diff / $ha_manual) * 100 : 0;
+                                            ?>
+                                            <tr>
+                                                <td><?= date('d/m/Y', strtotime($data['data'])) ?></td>
+                                                <td><?= number_format($ha_solinftec, 2, ',', '.') ?></td>
+                                                <td><?= number_format($ha_manual, 2, ',', '.') ?></td>
+                                                <td class="<?= $diff >= 0 ? 'text-success' : 'text-danger' ?>">
+                                                    <?= number_format($diff, 2, ',', '.') ?>
+                                                </td>
+                                                <td class="<?= $variation >= 0 ? 'text-success' : 'text-danger' ?>">
+                                                    <?= number_format($variation, 1, ',', '.') ?>%
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <tr>
+                                            <td colspan="5" class="text-center">Nenhum dado disponível</td>
+                                        </tr>
+                                    <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-</main>
+</div>
 
-<div id="editModal" class="modal">
-    <div class="modal-content">
-        <span class="close-btn">&times;</span>
-        <h3>Detalhes do Apontamento</h3>
-        <form id="editForm">
-            <input type="hidden" id="edit-id" name="id">
-            <div class="form-row">
-                <div class="input-group">
-                    <label>ID do Apontamento</label>
-                    <input type="text" id="modal-id" readonly>
-                </div>
+<!-- Footer -->
+<footer class="ctt-footer">
+    <div class="container">
+        <div class="footer-content">
+            <div class="footer-info">
+                <span>CTT Agrícola - Sistema de Apontamentos</span>
+                <span class="separator">|</span>
+                <span>Unidade: <?= htmlspecialchars($unidade_do_usuario_nome) ?></span>
             </div>
-            <div class="form-row">
-                <div class="input-group">
-                    <label>Data/Hora (Brasília)</label>
-                    <input type="text" id="modal-datetime" readonly>
-                </div>
+            <div class="footer-version">
+                <span>v2.0 - <?= date('Y') ?></span>
             </div>
-            <div class="form-row">
-                <div class="input-group">
-                    <label>Fazenda</label>
-                    <input type="text" id="modal-farm" readonly>
-                </div>
-                <div class="input-group">
-                    <label>Equipamento</label>
-                    <input type="text" id="modal-equipment" readonly>
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="input-group">
-                    <label>Operação</label>
-                    <input type="text" id="modal-operation" readonly>
-                </div>
-                <div class="input-group">
-                    <label>Hectares</label>
-                    <input type="text" id="modal-hectares" readonly>
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="input-group">
-                    <label>Observações</label>
-                    <textarea id="modal-reason" rows="3" readonly></textarea>
-                </div>
-            </div>
-            <p>O recurso de edição está em desenvolvimento.</p>
-        </form>
+        </div>
     </div>
-</div>
+</footer>
 
-<!-- Créditos -->
-<div class="signature-credit">
-  <p class="sig-text">
-    Desenvolvido por 
-    <span class="sig-name">Bruno Carmo</span> & 
-    <span class="sig-name">Henrique Reis</span>
-  </p>
-</div>
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-$(function () {
-  // ===== Relógio Brasília (informativo) =====
-  function updateBrasiliaTime() {
+// Inicialização do Select2
+$(document).ready(function() {
+    $('.select-search').select2({
+        theme: 'bootstrap-5',
+        width: '100%'
+    });
+});
+
+// Atualização do relógio em tempo real
+function updateClock() {
     const now = new Date();
-    const brasiliaOffset = -3 * 60; // UTC-3
-    const localOffset = now.getTimezoneOffset();
-    const brasiliaTime = new Date(now.getTime() + (localOffset - brasiliaOffset) * 60000);
+    const options = { 
+        timeZone: 'America/Sao_Paulo',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    };
+    const formatter = new Intl.DateTimeFormat('pt-BR', options);
+    document.getElementById('current-time').querySelector('span').textContent = formatter.format(now);
+}
+setInterval(updateClock, 1000);
+updateClock();
 
-    const fmt = new Intl.DateTimeFormat('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      day: '2-digit', month: '2-digit', year: 'numeric'
-    });
-    $('#current-time').text(`Horário atual: ${fmt.format(brasiliaTime)} (Brasília)`);
-  }
-  setInterval(updateBrasiliaTime, 1000); updateBrasiliaTime();
+// Lógica do formulário de apontamento
+document.addEventListener('DOMContentLoaded', function() {
+    const operationSelect = document.getElementById('operation');
+    const equipmentSelect = document.getElementById('equipment');
+    const reportTimeSelect = document.getElementById('report_time');
+    const statusSelect = document.getElementById('status');
+    const hectaresGroup = document.getElementById('hectares-group');
+    const reasonGroup = document.getElementById('reason-group');
+    const qtyLabel = document.getElementById('qtyLabel');
+    const qtyHelp = document.getElementById('qtyHelp');
+    const hectaresInput = document.getElementById('hectares');
+    const viagensInput = document.getElementById('viagens');
 
-  // ===== Select2 =====
-  $('.select-search').select2({ placeholder: "Clique ou digite para pesquisar...", allowClear: true, width: '100%' });
+    // Horários disponíveis
+    const reportHours = <?= json_encode($report_hours) ?>;
 
-  // ===== Fazendas da unidade do usuário =====
-  function carregarFazendasDoUsuario() {
-    const $fazenda = $('#fazenda_id');
-    $fazenda.prop('disabled', true).html('<option value="">Carregando fazendas...</option>').trigger('change');
+    // Carrega equipamentos quando operação é selecionada
+    operationSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        const operationName = selectedOption?.getAttribute('data-nome') || '';
+        
+        // Limpa e desabilita selects dependentes
+        equipmentSelect.innerHTML = '<option value="">Selecione o equipamento...</option>';
+        equipmentSelect.disabled = true;
+        reportTimeSelect.innerHTML = '<option value="">Selecione horário...</option>';
+        reportTimeSelect.disabled = true;
 
-    fetch('/get_fazendas', { credentials: 'same-origin' })
-      .then(r => { if (!r.ok) throw new Error('Falha ao carregar fazendas'); return r.json(); })
-      .then(json => {
-        if (!json.success) throw new Error(json.error || 'Erro ao carregar fazendas');
-        const fazendas = json.fazendas || [];
-        $fazenda.empty();
-        if (!fazendas.length) {
-          $fazenda.append('<option value="">Nenhuma fazenda disponível</option>').prop('disabled', true).trigger('change');
-          return;
+        if (!this.value) {
+            return;
         }
-        $fazenda.append('<option value="">Selecione uma fazenda...</option>');
-        fazendas.forEach(f => $fazenda.append(new Option(`${f.nome} (${f.codigo_fazenda || 's/ código'})`, f.id)));
-        $fazenda.prop('disabled', false).trigger('change');
-      })
-      .catch(() => {
-        $fazenda.html('<option value="">Erro ao carregar fazendas</option>').prop('disabled', true).trigger('change');
-      });
-  }
-  carregarFazendasDoUsuario();
 
-  // ===== Equipamentos por operação =====
-  function carregarEquipamentosPorOperacao(operacaoId) {
-    const $equip = $('#equipment');
-    if (!operacaoId) {
-      $equip.html('<option value="">Primeiro selecione uma operação</option>').prop('disabled', true).trigger('change');
-      return;
-    }
-    $equip.prop('disabled', false).html('<option value="">Carregando equipamentos...</option>').trigger('change');
+        // Carrega equipamentos do data attribute
+        const equipamentosData = selectedOption.getAttribute('data-equipamentos');
+        const equipamentos = equipamentosData ? JSON.parse(equipamentosData) : [];
+        
+        if (equipamentos.length > 0) {
+            equipamentos.forEach(equip => {
+                const option = document.createElement('option');
+                option.value = equip.id;
+                option.textContent = equip.nome;
+                equipmentSelect.appendChild(option);
+            });
+            equipmentSelect.disabled = false;
+        } else {
+            equipmentSelect.innerHTML = '<option value="">Nenhum equipamento disponível</option>';
+        }
 
-    $.ajax({
-      url: '/equipamentos',
-      type: 'GET',
-      data: { operacao_id: operacaoId },
-      dataType: 'json'
-    }).done(function (response) {
-      if (response.success) {
-        $equip.html('<option value="">Selecione um equipamento...</option>');
-        (response.equipamentos || []).forEach(e => $equip.append(`<option value="${e.id}">${e.nome}</option>`));
-        $equip.prop('disabled', false).trigger('change');
-      } else {
-        $equip.html('<option value="">Erro ao carregar equipamentos</option>').prop('disabled', true).trigger('change');
-      }
-    }).fail(function () {
-      $equip.html('<option value="">Erro ao carregar equipamentos</option>').prop('disabled', true).trigger('change');
-    });
-  }
-  $('#operation').on('change', function(){ carregarEquipamentosPorOperacao($(this).val()); });
-
-  // ===== Status Ativo/Parado =====
-  $('#status').on('change', function () {
-    const parado = ($(this).val() === 'parado');
-    $('#hectares-group').toggle(!parado).find('input').prop('required', !parado).val(parado ? 0 : '');
-    $('#reason-group').toggle(parado).find('textarea').prop('required', parado).val('');
-  }).trigger('change');
-
-  // ===== Donut diário (metas somadas) =====
-  const totalDailyGoal = <?php echo json_encode($total_daily_goal); ?>;
-  const totalDailyHectares = <?php echo json_encode($total_daily_hectares); ?>;
-  const dailyPct = (totalDailyGoal > 0) ? Math.min(100, (totalDailyHectares / totalDailyGoal) * 100) : 0;
-
-  const dailyCtx = document.getElementById('dailyProgressChart').getContext('2d');
-  new Chart(dailyCtx, {
-    type: 'doughnut',
-    data: { datasets: [{ data: [totalDailyHectares, Math.max(0, totalDailyGoal - totalDailyHectares)], backgroundColor: ['#00796b', '#e0e0e0'], borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '80%', plugins: { legend: { display: false }, tooltip: { enabled: false } } }
-  });
-  $('#dailyProgressText').text(`${Math.round(dailyPct)}%`);
-
-  // ===== Últimos lançamentos (com histórico por data) =====
-  function fetchApontamentos(date) {
-    const userId = <?php echo json_encode($_SESSION['usuario_id']); ?>;
-    $('#recent-entries-list').html('<div style="text-align:center;">Carregando...</div>');
-    $('#no-entries-message').hide();
-
-    $.ajax({
-      url: '/apontamentos',
-      type: 'GET',
-      data: { date: date, usuario_id: userId },
-      dataType: 'json'
-    }).done(function (response) {
-      const list = $('#recent-entries-list').empty();
-      if (Array.isArray(response) && response.length) {
-        response.forEach(entry => {
-          const entryJson = JSON.stringify(entry);
-          const horaTexto = entry.hora_selecionada
-            ? String(entry.hora_selecionada).slice(0,5)
-            : (entry.data_hora ? String(entry.data_hora).replace('T',' ').slice(11,16) : '--:--');
-
-          list.append(`
-            <li class="entry-item" data-entry-id="${entry.id}" data-entry='${entryJson}'>
-              <div class="entry-details">
-                <strong>${entry.equipamento_nome ?? ''}</strong>
-                <p>${entry.unidade_nome ?? ''} - ${entry.operacao_nome ?? ''}</p>
-                <small>Hectares: ${entry.hectares ?? 0} | Hora: ${horaTexto}</small>
-              </div>
-              <div class="entry-action">
-                <button class="open-modal-btn">Detalhes</button>
-              </div>
-            </li>
-          `);
+        // Preenche horários
+        reportTimeSelect.innerHTML = '';
+        reportHours.forEach(hour => {
+            reportTimeSelect.innerHTML += `<option value="${hour}">${hour}</option>`;
         });
-      } else {
-        $('#no-entries-message').show();
-      }
-    }).fail(function () {
-      $('#recent-entries-list').html('<div style="text-align:center;color:red;">Erro ao carregar os apontamentos.</div>');
+        reportTimeSelect.disabled = false;
+
+        // Verifica se é operação de caçamba
+        const isCacamba = operationName.toLowerCase().includes('caçamba') || 
+                          operationName.toLowerCase().includes('cacamba');
+        
+        // Atualiza labels e placeholders
+        if (isCacamba) {
+            qtyLabel.textContent = 'Número de Viagens *';
+            hectaresInput.placeholder = 'Ex: 8';
+            qtyHelp.textContent = 'Informe o número de viagens realizadas.';
+            hectaresInput.type = 'number';
+            hectaresInput.step = '1';
+            hectaresInput.min = '0';
+            viagensInput.value = '0';
+        } else {
+            qtyLabel.textContent = 'Hectares *';
+            hectaresInput.placeholder = 'Ex: 15.5';
+            qtyHelp.textContent = 'Informe a área em hectares.';
+            hectaresInput.type = 'number';
+            hectaresInput.step = '0.01';
+            hectaresInput.min = '0';
+            viagensInput.value = '0';
+        }
     });
-  }
-  $('#filter-date').on('change', function(){ fetchApontamentos($(this).val()); });
-  fetchApontamentos($('#filter-date').val());
 
-  // ===== Modal Detalhes (sem “+3h”) =====
-  const modal = $('#editModal'); const closeBtn = $('.close-btn');
-  function formatLocalDateTime(yyyy_mm_dd, hh_mm) {
-    // yyyy-mm-dd + HH:MM (local) -> dd/mm/yyyy HH:MM
-    if (!yyyy_mm_dd) return '--/--/---- --:--';
-    const [y,m,d] = yyyy_mm_dd.split('-');
-    const hora = (hh_mm || '--:--');
-    return `${d}/${m}/${y} ${hora}`;
-  }
-  window.openModal = function (entry) {
-    $('#modal-id').val(entry.id);
-
-    // Preferir hora_selecionada, e usar a data de data_hora (sem converter para UTC)
-    let dataISO = '';
-    if (entry.data_hora) {
-      const s = String(entry.data_hora).replace('T',' ');
-      dataISO = s.slice(0,10); // yyyy-mm-dd
-    }
-    const horaSel = entry.hora_selecionada ? String(entry.hora_selecionada).slice(0,5) : (entry.data_hora ? String(entry.data_hora).slice(11,16) : '--:--');
-    $('#modal-datetime').val(formatLocalDateTime(dataISO, horaSel));
-
-    $('#modal-farm').val(entry.unidade_nome || '');
-    $('#modal-equipment').val(entry.equipamento_nome || '');
-    $('#modal-operation').val(entry.operacao_nome || '');
-    $('#modal-hectares').val(entry.hectares ?? 0);
-    $('#modal-reason').val(entry.observacoes || '');
-    modal.show();
-  };
-  $('#recent-entries-list').on('click', '.open-modal-btn', function () {
-    const entryJson = $(this).closest('.entry-item').data('entry');
-    openModal(entryJson);
-  });
-  closeBtn.on('click', () => modal.hide());
-  $(window).on('click', (e) => { if ($(e.target).is(modal)) modal.hide(); });
-
-  // ===== Abas =====
-  $('.tab-button').on('click', function () {
-    $('.tab-button').removeClass('active'); $('.tab-content').removeClass('active');
-    $(this).addClass('active'); const tabId = $(this).data('tab'); $(`#${tabId}-tab`).addClass('active');
-    if (tabId === 'comparison') updateComparisonChart();
-  });
-
-  // ===== Comparativo (fake) =====
-  const comparisonData = <?php echo json_encode($comparison_data); ?>;
-  function updateComparisonChart() {
-    renderComparisonChart(comparisonData);
-  }
-  function renderComparisonChart(data) {
-    const ctx = document.getElementById('comparisonChart').getContext('2d');
-    if (window.comparisonChartInstance) window.comparisonChartInstance.destroy();
-
-    const labels = data.map(item => {
-      const d = new Date(item.data);
-      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    // Mostra/oculta motivo da parada
+    statusSelect.addEventListener('change', function() {
+        if (this.value === 'parado') {
+            reasonGroup.style.display = 'block';
+            hectaresGroup.style.display = 'none';
+            hectaresInput.required = false;
+        } else {
+            reasonGroup.style.display = 'none';
+            hectaresGroup.style.display = 'block';
+            hectaresInput.required = true;
+        }
     });
-    const manualData   = data.map(item => parseFloat(item.ha_manual)    || 0);
-    const solinftecData= data.map(item => parseFloat(item.ha_solinftec) || 0);
 
-    window.comparisonChartInstance = new Chart(ctx, {
-      type: 'bar',
-      data: { labels, datasets: [
-        { label: 'Hectares Solinftec', data: solinftecData, backgroundColor: 'rgba(0,121,107,0.7)', borderColor: 'rgba(0,121,107,1)', borderWidth: 1 },
-        { label: 'Hectares Manual',    data: manualData,    backgroundColor: 'rgba(255,152,0,0.7)', borderColor: 'rgba(255,152,0,1)', borderWidth: 1 }
-      ]},
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true, title: { display: true, text: 'Hectares' } }, x: { title: { display: true, text: 'Data' } } },
-        plugins: { legend: { position: 'top' }, title: { display: true, text: 'Comparativo de Hectares - Solinftec vs Manual' } }
-      }
+    // Atualiza viagens quando hectares muda (para caçambas)
+    hectaresInput.addEventListener('input', function() {
+        const operationName = operationSelect.options[operationSelect.selectedIndex]?.getAttribute('data-nome') || '';
+        const isCacamba = operationName.toLowerCase().includes('caçamba') || 
+                          operationName.toLowerCase().includes('cacamba');
+        
+        if (isCacamba) {
+            viagensInput.value = this.value;
+        }
     });
-  }
-  $('#comparison-period').on('change', updateComparisonChart);
-  updateComparisonChart();
+
+    // Processa o formulário para caçambas
+    document.getElementById('entryForm').addEventListener('submit', function(e) {
+        const operationName = operationSelect.options[operationSelect.selectedIndex]?.getAttribute('data-nome') || '';
+        const isCacamba = operationName.toLowerCase().includes('caçamba') || 
+                          operationName.toLowerCase().includes('cacamba');
+        
+        if (isCacamba && statusSelect.value === 'ativo') {
+            // Para caçambas ativas, move o valor de hectares para viagens
+            viagensInput.value = hectaresInput.value;
+            hectaresInput.value = '0';
+        }
+    });
+
+    // Gráfico de Produtividade por Operação
+    const operacaoCtx = document.getElementById('operacaoChart').getContext('2d');
+    const operacaoChart = new Chart(operacaoCtx, {
+        type: 'bar',
+        data: {
+            labels: <?= json_encode(array_column($tipos_operacao, 'nome')) ?>,
+            datasets: [
+                {
+                    label: 'Meta Diária',
+                    data: <?= json_encode(array_map(function($op) use ($metas_por_operacao) {
+                        $op_id = (int)$op['id'];
+                        return $metas_por_operacao[$op_id]['meta_diaria'] ?? 0;
+                    }, $tipos_operacao)) ?>,
+                    backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Realizado Hoje',
+                    data: <?= json_encode(array_map(function($op) use ($dados_por_operacao_diario) {
+                        $op_id = (int)$op['id'];
+                        return $dados_por_operacao_diario[$op_id]['total_ha'] ?? 0;
+                    }, $tipos_operacao)) ?>,
+                    backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Hectares'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Operações'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Produtividade por Operação - Diário'
+                }
+            }
+        }
+    });
+
+    // Gráfico de Comparativo
+    const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+    const comparisonChart = new Chart(comparisonCtx, {
+        type: 'line',
+        data: {
+            labels: <?= json_encode(array_map(fn($d) => date('d/m', strtotime($d['data'])), $comparison_data)) ?>,
+            datasets: [
+                {
+                    label: 'Solinftec',
+                    data: <?= json_encode(array_column($comparison_data, 'ha_solinftec')) ?>,
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6
+                },
+                {
+                    label: 'Manual',
+                    data: <?= json_encode(array_column($comparison_data, 'ha_manual')) ?>,
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: 'rgba(255, 99, 132, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Hectares'
+                    },
+                    grid: {
+                        color: 'rgba(0,0,0,0.1)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Data'
+                    },
+                    grid: {
+                        color: 'rgba(0,0,0,0.1)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'Comparativo de Hectares - Solinftec vs Manual',
+                    font: {
+                        size: 16
+                    }
+                }
+            }
+        }
+    });
+
+    // Filtro de período para comparativo
+    document.getElementById('comparison-period').addEventListener('change', function() {
+        alert('Funcionalidade de filtro por período será implementada em breve!');
+    });
 });
 </script>
+
 </body>
 </html>

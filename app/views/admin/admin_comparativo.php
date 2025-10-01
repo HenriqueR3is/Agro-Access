@@ -604,7 +604,7 @@ try {
 ?>
 
 <link rel="stylesheet" href="/public/static/css/admin_comparativo.css">
-
+<link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 <div class="container">
     <div class="page-header"><h2>Conciliação de Produção</h2></div>
 
