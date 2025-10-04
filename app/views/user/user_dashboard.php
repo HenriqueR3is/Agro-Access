@@ -654,9 +654,7 @@ $total_monthly_entries  = array_sum(array_map(function($r) { return $r['total_en
             <button class="nav-link" id="nav-metas-tab" data-bs-toggle="tab" data-bs-target="#nav-metas" type="button" role="tab">
                 <i class="fas fa-bullseye"></i> <span class="mobile-hidden">Metas Detalhadas</span>
             </button>
-            <button class="nav-link" id="nav-comparison-tab" data-bs-toggle="tab" data-bs-target="#nav-comparison" type="button" role="tab">
-                <i class="fas fa-chart-bar"></i> <span class="mobile-hidden">Comparativos</span>
-            </button>
+
         </div>
     </div>
 </nav>

@@ -29,7 +29,7 @@ RewriteRule ^salvafda$ app/views/admin/salvar_fazenda.php [L]
 RewriteRule ^importar_fazendas$ app/views/admin/importar_fazendas_csv.php [L]
 
 RewriteRule ^metas$ app/views/admin/admin_metas.php [L]
-
+RewriteRule ^visaogeral$ app/views/admin/admin_rela.php [L]
 RewriteRule ^audit_logs$ app/views/admin/audit_logs.php [L,QSA]
 
 RewriteRule ^aponta$ app/views/admin/admin_aponta.php [L]

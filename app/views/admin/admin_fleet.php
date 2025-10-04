@@ -178,7 +178,8 @@ $iconePorOperacao = [
     1 => 'fa-tractor text-success',      // ACOP
     2 => 'fa-seedling text-primary',     // PLANTIO
     3 => 'fa-person-digging text-warning', // SUBSOLAGEM
-    4 => 'fa-tractor text-danger'    // VINHAÇA
+    4 => 'fa-tractor text-danger',    // VINHAÇA
+    5 => 'fa-truck text-secondary'
 ];
 
 // Query principal já trazendo o nome da operação

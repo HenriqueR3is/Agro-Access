@@ -242,7 +242,7 @@ form button:hover {
 /* Implemento badge */
 .implemento-badge {
     display: inline-block;
-    background: linear-gradient(135deg, #3498db, #2980b9);
+
     color: white;
     padding: 4px 10px;
     border-radius: 12px;
@@ -258,6 +258,7 @@ form button:hover {
 .fa-wine-bottle.text-danger { color: #e74c3c !important; }
 .fa-seedling.text-primary { color: #2980b9 !important; }
 .fa-tractor.text-secondary { color: #7f8c8d !important; }
+.fa-truck.text-secondary { color: #2359cf !important; }
 
 /* ==============================
    BOTÕES NOS CARDS
@@ -492,7 +493,7 @@ form button:hover {
 
 /* Estilo para diferentes tipos de operação */
 .fa-tractor.text-success { color: #198754 !important; }
-.fa-seedling.text-primary { color: #0d6efd !important; }
+.fa-seedling.text-primary { color: #179127 !important; }
 .fa-person-digging.text-warning { color: #ffc107 !important; }
 .fa-wine-bottle.text-danger { color: #dc3545 !important; }
 
