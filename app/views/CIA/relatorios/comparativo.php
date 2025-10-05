@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once __DIR__ . '/../../../config/db/conexao.php';
+require_once __DIR__ . '/../../../../config/db/conexao.php';
 
 if (!isset($_SESSION['usuario_id'])) { header('Location: /login'); exit(); }
 
@@ -11,7 +11,7 @@ if (!in_array($role, $ADMIN_LIKE, true)) {
   exit();
 }
 
-require_once __DIR__.'/../../../app/lib/Audit.php';
+require_once __DIR__.'/../../../../app/lib/Audit.php';
 
 /**
  * Detecta delimitador com heurística simples usando a linha do cabeçalho
@@ -390,7 +390,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['arquivo_csv'])) {
 }
 
 // após o POST/redirect -> inclui header e renderiza a página
-require_once __DIR__ . '/../../../app/includes/header.php';
+require_once __DIR__ . '/../../../../app/includes/header.php';
 ?>
 
 <link rel="stylesheet" href="/public/static/css/admin.css">
@@ -603,7 +603,7 @@ try {
 }
 ?>
 
-<link rel="stylesheet" href="/public/static/css/admin_comparativo.css">
+<link rel="stylesheet" href="/public/static/css/comparativo.css">
 <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 <div class="container">
     <div class="page-header"><h2>Conciliação de Produção</h2></div>

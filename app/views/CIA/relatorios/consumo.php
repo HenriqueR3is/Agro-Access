@@ -1,7 +1,7 @@
 <?php
 
 session_start();
-require_once __DIR__ . '/../../../config/db/conexao.php';
+require_once __DIR__ . '/../../../../config/db/conexao.php';
 
 if (!isset($_SESSION['usuario_id'])) { header('Location: /login'); exit(); }
 $role = strtolower($_SESSION['usuario_tipo'] ?? '');
@@ -294,10 +294,10 @@ if (!empty($resumo)) {
 }
 
 // ====================== view ======================
-require_once __DIR__ . '/../../../app/includes/header.php';
+require_once __DIR__ . '/../../../../app/includes/header.php';
 ?>
 
-<link rel="stylesheet" href="/public/static/css/admin_consumo.css">
+<link rel="stylesheet" href="/public/static/css/consumo.css">
     <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 
 <div id="export-area">
@@ -456,4 +456,4 @@ require_once __DIR__ . '/../../../app/includes/header.php';
   })();
 </script>
 
-<?php require_once __DIR__ . '/../../../app/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/../../../../app/includes/footer.php'; ?>
