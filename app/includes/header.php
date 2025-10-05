@@ -110,6 +110,7 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                 <div class="submenu">
                     <a href="comparativo" data-cap="comparativo:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'comparativo.php' ? 'active' : ''; ?>">📈 Comparativo de Produção</a>
                     <a href="consumo" data-cap="consumo:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_consumo.php' ? 'active' : ''; ?>">⛽ Consumo, Vel. & RPM</a>
+                    <a href="horasoperacionais" data-cap="consumo:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_consumo.php' ? 'active' : ''; ?>">⏱ Horas Operacionais</a>
                     <a href="admin_dashboard" data-cap="apontamentos:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_dashboard.php' ? 'active' : ''; ?>">💻 Apontamentos</a>
                     <a href="visaogeral" data-cap="visaogeral:view" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_rela.php' ? 'active' : ''; ?>">👁‍🗨 Visão Geral</a>
                 </div>
