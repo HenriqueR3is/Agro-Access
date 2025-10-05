@@ -3,6 +3,21 @@ session_start();
 require_once __DIR__ . '/../../../../config/db/conexao.php';
 
 if (!isset($_SESSION['usuario_id'])) { header('Location: /login'); exit(); }
+
+$role = strtolower($_SESSION['usuario_tipo'] ?? '');
+$ADMIN_LIKE = ['admin','cia_admin','cia_dev','cia_user'];
+if (!in_array($role, $ADMIN_LIKE, true)) { header('Location: /'); exit(); }
+
+/* ===== Debug controlado ===== */
+define('APP_DEBUG', false); // produção: false
+$IS_CIA_DEV  = ($role === 'cia_dev');
+$DEBUG_XLSX  = (APP_DEBUG && $IS_CIA_DEV && isset($_GET['debug']) && $_GET['debug'] === '1');
+if ($DEBUG_XLSX) {
+  ini_set('display_errors', '1');
+  error_reporting(E_ALL);
+}
+
+if (!isset($_SESSION['usuario_id'])) { header('Location: /login'); exit(); }
 $role = strtolower($_SESSION['usuario_tipo'] ?? '');
 $ADMIN_LIKE = ['admin','cia_admin','cia_dev','cia_user'];
 if (!in_array($role, $ADMIN_LIKE, true)) { header('Location: /'); exit(); }
@@ -80,6 +95,79 @@ function excel_serial_to_seconds($v) {
   $f = (float)str_replace(',', '.', (string)$v);
   if (!is_numeric($f)) return null;
   return (int)round($f * 86400);
+}
+
+function debug_xlsx_report($path) {
+  $lines = [];
+  $lines[] = '=== XLSX DEBUG REPORT ===';
+  $lines[] = 'file_exists: ' . (file_exists($path) ? '1' : '0') . ' | size: ' . (@filesize($path) ?: 0);
+  $lines[] = 'ext.zip: ' . (extension_loaded('zip') ? '1' : '0') . ' | ext.simplexml: ' . (extension_loaded('simplexml') ? '1' : '0');
+  if (!class_exists('ZipArchive')) { $lines[] = 'ERRO: ZipArchive não disponível.'; return implode("\n", $lines); }
+
+  $zip = new ZipArchive();
+  $open = $zip->open($path);
+  $lines[] = 'zip->open: ' . var_export($open === true, true);
+  if ($open !== true) { $lines[] = 'Zip open code: ' . var_export($open, true); return implode("\n", $lines); }
+
+  $names = [];
+  for ($i=0; $i<$zip->numFiles; $i++) $names[] = $zip->getNameIndex($i);
+  $lines[] = 'has xl/workbook.xml: ' . (in_array('xl/workbook.xml', $names, true) ? '1' : '0');
+  $lines[] = 'has xl/_rels/workbook.xml.rels: ' . (in_array('xl/_rels/workbook.xml.rels', $names, true) ? '1' : '0');
+  $lines[] = 'worksheets sample: ' . (implode(', ', array_slice(array_values(array_filter($names, fn($n)=>stripos($n,'worksheets/')!==false)),0,5)) ?: '(none)');
+
+  $wbXml = $zip->getFromName('xl/workbook.xml');
+  if ($wbXml === false) { $lines[] = 'ERRO: workbook.xml não encontrado.'; $zip->close(); return implode("\n", $lines); }
+  libxml_use_internal_errors(true);
+  $wb = simplexml_load_string($wbXml);
+  if (!$wb) {
+    $lines[] = 'ERRO: simplexml falhou em workbook.xml';
+    foreach (libxml_get_errors() as $e) { $lines[] = 'libxml: ' . trim($e->message); }
+    libxml_clear_errors();
+    $zip->close();
+    return implode("\n", $lines);
+  }
+  $ns = $wb->getNamespaces(true);
+  $lines[] = 'workbook ns: ' . implode(',', array_keys($ns));
+  $sheetsCount = isset($wb->sheets->sheet) ? count($wb->sheets->sheet) : 0;
+  $lines[] = 'sheets count: ' . $sheetsCount;
+
+  $rid = '';
+  if ($sheetsCount > 0) {
+    $chosen = null;
+    foreach ($wb->sheets->sheet as $sh) { $state = (string)$sh['state']; if ($state!=='hidden' && $state!=='veryHidden') { $chosen=$sh; break; } }
+    if (!$chosen) $chosen = $wb->sheets->sheet[0];
+    $attrsR = $chosen->attributes($ns['r'] ?? null);
+    if ($attrsR && isset($attrsR['id'])) $rid = (string)$attrsR['id'];
+    if ($rid === '' && isset($chosen['id'])) $rid = (string)$chosen['id'];
+    $lines[] = 'sheet name: ' . (string)$chosen['name'] . ' | rid: ' . $rid;
+  }
+
+  $relsXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
+  if ($relsXml === false) { $lines[]='ERRO: workbook.xml.rels não encontrado.'; $zip->close(); return implode("\n", $lines); }
+  $rx = simplexml_load_string($relsXml);
+  if (!$rx) { $lines[]='ERRO: simplexml falhou em workbook.xml.rels'; $zip->close(); return implode("\n", $lines); }
+
+  $target = null;
+  foreach ($rx->Relationship as $rel) if ((string)$rel['Id'] === $rid) { $target = (string)$rel['Target']; break; }
+  $lines[] = 'resolved target: ' . var_export($target, true);
+  if ($target) {
+    $sheetPath = (strpos($target, 'xl/') === 0) ? $target : ('xl/' . ltrim($target, '/'));
+    $exists = in_array($sheetPath, $names, true);
+    $lines[] = 'sheet path: ' . $sheetPath . ' | exists: ' . ($exists ? '1' : '0');
+    if ($exists) {
+      $sheetXml = $zip->getFromName($sheetPath);
+      $lines[] = 'sheetXml bytes: ' . ($sheetXml !== false ? strlen($sheetXml) : 0);
+      if ($sheetXml !== false) {
+        $sx = simplexml_load_string($sheetXml);
+        $lines[] = 'sheet simplexml ok: ' . ($sx ? '1':'0');
+      }
+    }
+  }
+  $zip->close();
+
+  $log = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'xlsx_debug_' . date('Ymd_His') . '.log';
+  @file_put_contents($log, implode("\n", $lines));
+  return implode("\n", $lines) . "\nlogfile: " . $log;
 }
 
 /* ========= XLSX "simples" (sem libs) ========= */
@@ -281,6 +369,20 @@ try {
 
 /* ========= Import ========= */
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo'])) {
+    // ===== Plano B: se vier CSV emulado do navegador, parseia e ignora $_FILES =====
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['force_csv']) && $_POST['force_csv'] === '1' && isset($_POST['csv_emulado'])) {
+    $csv = (string)$_POST['csv_emulado'];
+    $linhas = preg_split("/\r\n|\n|\r/", $csv, -1, PREG_SPLIT_NO_EMPTY);
+    if (!$linhas) {
+        $errors[] = "Falha na conversão do XLSX no navegador (CSV vazio).";
+    } else {
+        $rows = [];
+        foreach ($linhas as $i => $line) {
+        // SheetJS gerou CSV com vírgula; se mudar FS no JS, ajuste aqui
+        $rows[] = str_getcsv($line, ',');
+        }
+      }
+    }
   if ($_FILES['arquivo']['error'] !== UPLOAD_ERR_OK) {
     $errors[] = "Erro no upload (código: ".$_FILES['arquivo']['error'].").";
   } else {
@@ -307,8 +409,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo'])) {
         }
       }
     } elseif ($ext === 'xlsx') {
-    $rows = read_xlsx_smart($tmp);
-    if ($rows === null) $errors[] = "Não consegui ler este XLSX. Tente reexportar ou salve como CSV.";
+        if (!is_uploaded_file($tmp) || @filesize($tmp) === 0) {
+            $errors[] = "Upload vazio. Cheque upload_max_filesize / post_max_size no PHP.";
+        } else {
+            $rows = read_xlsx_smart($tmp);
+            if ($rows === null) {
+            $msg = "Não consegui ler este XLSX.";
+            if ($DEBUG_XLSX) { $msg .= "\n\n" . debug_xlsx_report($tmp); }
+            $errors[] = $msg;
+            }
+        }
     } elseif ($ext === 'xls') {
     // tenta HTML disfarçado de .xls
     $rows = read_xls_html($tmp);
@@ -493,6 +603,12 @@ if ($missing) {
 /* ========= View ========= */
 require_once __DIR__ . '/../../../../app/includes/header.php';
 ?>
+
+<script>
+  // Exposto pelo servidor para o plano B
+  window.SERVER_HAS_ZIP = <?= extension_loaded('zip') ? 'true' : 'false' ?>;
+</script>
+
 <link rel="stylesheet" href="/public/static/css/consumo.css">
 <link rel="stylesheet" href="/public/static/css/horas_operacionais.css">
 
@@ -503,7 +619,9 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     <form method="post" enctype="multipart/form-data" class="row" action="<?= htmlspecialchars($_SERVER['REQUEST_URI']) ?>">
       <div>
         <label><strong>Arquivo (CSV ou XLSX)</strong></label><br>
-        <input type="file" name="arquivo" accept=".csv,.xlsx,.xls" required>
+        <input type="file" name="arquivo" accept=".csv,.xlsx,.xls,.xlsm" required>
+        <input type="hidden" name="csv_emulado" id="csv_emulado" value="">
+        <input type="hidden" name="force_csv"   id="force_csv"   value="0">
         <small class="hint">Se vier em XLS (antigo), salve como CSV ou XLSX.</small>
       </div>
       <div>
@@ -517,7 +635,20 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       </div>
     </form>
     <?php if ($errors): ?>
-      <div style="color:#b00020;margin-top:8px"><?= implode('<br>', array_map('htmlspecialchars',$errors)) ?></div>
+  <div style="color:#b00020;margin-top:8px">
+    <pre style="white-space:pre-wrap"><?= htmlspecialchars(implode("\n\n", $errors)) ?></pre>
+  </div>
+    <?php endif; ?>
+    <?php if (!empty($DEBUG_XLSX)): ?>
+    <details class="card" style="margin-top:8px"><summary>Debug do ambiente</summary>
+        <pre style="white-space:pre-wrap"><?php
+        echo "upload_max_filesize=" . ini_get('upload_max_filesize') . "\n";
+        echo "post_max_size=" . ini_get('post_max_size') . "\n";
+        echo "file_uploads=" . ini_get('file_uploads') . "\n";
+        echo "Zip ext=" . (extension_loaded('zip')?'ON':'OFF') . "\n";
+        echo "SimpleXML ext=" . (extension_loaded('simplexml')?'ON':'OFF') . "\n";
+        ?></pre>
+    </details>
     <?php endif; ?>
     <?php if ($periodo['inicio'] || $periodo['fim']): ?>
       <div style="margin-top:8px"><span class="badge">Janela detectada: <?= htmlspecialchars($periodo['inicio'] ?: '?') ?> – <?= htmlspecialchars($periodo['fim'] ?: '?') ?></span></div>
@@ -568,6 +699,50 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     <div class="card"><em>Importe um arquivo e clique em “Processar”.</em></div>
   <?php endif; ?>
 </div>
+
+<!-- SheetJS para conversão client-side (plano B) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<script>
+(function(){
+  const form      = document.querySelector('form.row');
+  const fileInput = form?.querySelector('input[type="file"][name="arquivo"]');
+  const csvField  = document.getElementById('csv_emulado');
+  const forceFld  = document.getElementById('force_csv');
+
+  if (!form || !fileInput || !csvField || !forceFld) return;
+
+  form.addEventListener('submit', async function(e){
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return; // sem arquivo
+
+    const name = f.name.toLowerCase();
+    const isXlsxLike = name.endsWith('.xlsx') || name.endsWith('.xlsm') || name.endsWith('.xls');
+
+    // Só converte no cliente SE o servidor não tiver Zip (quando teria erro de XLSX)
+    if (!isXlsxLike || (window.SERVER_HAS_ZIP === true)) return;
+
+    e.preventDefault(); // intercepta
+    try {
+      const buf = await f.arrayBuffer();
+      const wb  = XLSX.read(buf, { type: 'array' });
+      const sh  = wb.SheetNames[0];
+      const ws  = wb.Sheets[sh];
+
+      // CSV com vírgula e \n (coerente com parse do PHP)
+      const csv = XLSX.utils.sheet_to_csv(ws, { FS: ',', RS: '\n' });
+
+      csvField.value = csv;
+      forceFld.value = '1';
+
+      // Submete sem o arquivo pesado
+      form.submit();
+    } catch(err) {
+      alert('Falha ao converter XLSX no navegador: ' + (err && err.message ? err.message : err));
+    }
+  }, { passive: false });
+})();
+</script>
 
 <script>
 document.getElementById('btnPrint')?.addEventListener('click', ()=> window.print());
