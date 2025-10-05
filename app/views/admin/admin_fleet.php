@@ -86,58 +86,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
                 
             case 'add':
-                $nome = $_POST['nome'];
-                $unidade_id = $_POST['unidade_id'];
-                $operacao_id = $_POST['operacao_id'];
+                $nome          = $_POST['nome'];
+                $unidade_id    = $_POST['unidade_id'] ?: null;
+                $operacao_id   = $_POST['operacao_id'] !== '' ? $_POST['operacao_id'] : null; // opcional (CTT)
+                $frente_id     = $_POST['frente_id']   !== '' ? $_POST['frente_id']   : null; // NOVO
                 $implemento_id = $_POST['implemento_id'] ?? null;
-                $ativo        = isset($_POST['ativo']) ? 1 : 0;
-                
-                $stmt = $pdo->prepare("
-                    INSERT INTO equipamentos (nome, unidade_id, operacao_id, implemento_id, ativo)
-                    VALUES (?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([$nome, $unidade_id, $operacao_id, $implemento_id, $ativo]);
+                $ativo         = isset($_POST['ativo']) ? 1 : 0;
 
-                $_SESSION['message'] = "Equipamento adicionado com sucesso!";
-                Audit::log($pdo, ['action'=>'created','entity'=>'equipamentos','entity_id'=>$novoId ?? null,
-                'meta'=>['nome'=>$nome,'unidade_id'=>$unidade_id,'operacao_id'=>$operacao_id,'implemento_id'=>$implemento_id,'ativo'=>$ativo]]);
+                $stmt = $pdo->prepare("
+                    INSERT INTO equipamentos (nome, unidade_id, operacao_id, implemento_id, frente_id, ativo)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$nome, $unidade_id, $operacao_id, $implemento_id, $frente_id, $ativo]);
+                $novoId = $pdo->lastInsertId();
+
+                $_SESSION['message'] = 'Equipamento adicionado com sucesso!';
+                Audit::log($pdo, [
+                'action'=>'created','entity'=>'equipamentos','entity_id'=>$novoId,
+                'meta'=>[
+                    'nome'=>$nome,'unidade_id'=>$unidade_id,'operacao_id'=>$operacao_id,
+                    'implemento_id'=>$implemento_id,'frente_id'=>$frente_id,'ativo'=>$ativo
+                ]
+                ]);
                 break;
                 
             case 'edit':
-                $id = $_GET['id'] ?? 0;
-                $nome = $_POST['nome'];
-                $unidade_id = $_POST['unidade_id'];
-                $operacao_id = $_POST['operacao_id'];
+                $id            = $_GET['id'] ?? 0;
+                $nome          = $_POST['nome'];
+                $unidade_id    = $_POST['unidade_id'] ?: null;
+                $operacao_id   = $_POST['operacao_id'] !== '' ? $_POST['operacao_id'] : null; // opcional
+                $frente_id     = $_POST['frente_id']   !== '' ? $_POST['frente_id']   : null; // NOVO
                 $implemento_id = $_POST['implemento_id'] ?? null;
                 $ativo         = isset($_POST['ativo']) ? 1 : 0;
-                
+
                 $stmt = $pdo->prepare("
                     UPDATE equipamentos
                     SET nome = ?,
                         unidade_id = ?,
                         operacao_id = ?,
                         implemento_id = ?,
+                        frente_id = ?,
                         ativo = ?
                     WHERE id = ?
                 ");
-                $stmt->execute([$nome, $unidade_id, $operacao_id, $implemento_id, $ativo, $id]);
+                $stmt->execute([$nome, $unidade_id, $operacao_id, $implemento_id, $frente_id, $ativo, $id]);
 
-                $_SESSION['message'] = "Equipamento atualizado com sucesso!";
-                Audit::log($pdo, ['action'=>'updated','entity'=>'equipamentos','entity_id'=>$id,
-                'meta'=>['nome'=>$nome,'unidade_id'=>$unidade_id,'operacao_id'=>$operacao_id,'implemento_id'=>$implemento_id,'ativo'=>$ativo]]);
-                break;
-
-                case 'toggle_status':
-                $id     = $_GET['id'] ?? 0;
-                $status = isset($_POST['status']) && $_POST['status'] == '1' ? 1 : 0;
-
-                $stmt = $pdo->prepare("UPDATE equipamentos SET ativo = ? WHERE id = ?");
-                $stmt->execute([$status, $id]);
-
-                $_SESSION['message'] = $status ? "Equipamento ativado." : "Equipamento inativado.";
+                $_SESSION['message'] = 'Equipamento atualizado com sucesso!';
                 Audit::log($pdo, [
-                'action'=>'toggled','entity'=>'equipamentos','entity_id'=>$id,
-                'meta'=>['ativo'=>$status]
+                'action'=>'updated','entity'=>'equipamentos','entity_id'=>$id,
+                'meta'=>[
+                    'nome'=>$nome,'unidade_id'=>$unidade_id,'operacao_id'=>$operacao_id,
+                    'implemento_id'=>$implemento_id,'frente_id'=>$frente_id,'ativo'=>$ativo
+                ]
                 ]);
                 break;
                 
@@ -165,10 +165,13 @@ header("Location: /admin_fleet");
 $unidades = $pdo->query("SELECT id, nome FROM unidades ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
 $operacoes = $pdo->query("SELECT id, nome FROM tipos_operacao ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 $implementos = $pdo->query("SELECT id, nome, modelo, numero_identificacao FROM implementos ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
+$frentes = $pdo->query("SELECT id, codigo, nome, unidade_id FROM frentes
+ORDER BY (codigo REGEXP '^[0-9]+$') DESC, CAST(codigo AS UNSIGNED), codigo, nome")->fetchAll(PDO::FETCH_ASSOC);
 
 // Filtros (GET)
 $filtro_unidade     = $_GET['unidade']      ?? '';
 $filtro_operacao_id = $_GET['operacao_id']  ?? '';
+$filtro_frente = $_GET['frente'] ?? '';
 $filtro_implemento  = $_GET['implemento']   ?? '';
 $filtro_status = isset($_GET['status']) ? $_GET['status'] : '';
 $visualizacao       = $_GET['visualizacao'] ?? 'cards'; // cards ou lista
@@ -184,16 +187,19 @@ $iconePorOperacao = [
 
 // Query principal já trazendo o nome da operação
 $sql = "SELECT 
-            e.*,
-            u.nome AS unidade_nome,
-            i.nome AS implemento_nome,
-            i.modelo AS implemento_modelo,
-            i.numero_identificacao,
-            t.nome AS operacao_nome
+          e.*,
+          u.nome AS unidade_nome,
+          i.nome AS implemento_nome,
+          i.modelo AS implemento_modelo,
+          i.numero_identificacao,
+          t.nome AS operacao_nome,
+          f.codigo AS frente_codigo,
+          f.nome   AS frente_nome
         FROM equipamentos e
-        LEFT JOIN unidades u       ON e.unidade_id   = u.id
-        LEFT JOIN implementos i    ON e.implemento_id = i.id
-        LEFT JOIN tipos_operacao t  ON e.operacao_id  = t.id
+        LEFT JOIN unidades u        ON e.unidade_id   = u.id
+        LEFT JOIN implementos i     ON e.implemento_id = i.id
+        LEFT JOIN tipos_operacao t   ON e.operacao_id  = t.id
+        LEFT JOIN frentes f          ON e.frente_id    = f.id
         WHERE 1=1";
 
 $params = [];
@@ -212,6 +218,10 @@ if ($filtro_implemento) {
 if ($filtro_status !== '' && ($filtro_status === '0' || $filtro_status === '1')) {
     $sql .= " AND e.ativo = :ativo";
     $params[':ativo'] = (int)$filtro_status;
+}
+if ($filtro_frente) {
+    $sql .= " AND e.frente_id = :frente_id";
+    $params[':frente_id'] = $filtro_frente;
 }
 
 $stmt = $pdo->prepare($sql);
@@ -286,6 +296,17 @@ $equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina)
                             <option value="<?= $op['id'] ?>" <?= (string)$filtro_operacao_id === (string)$op['id'] ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($op['nome']) ?>
                             </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <select name="frente" class="form-select filtro-select" id="filtroFrente">
+                        <option value="">Todas as Frentes (CTT)</option>
+                        <?php foreach ($frentes as $fr): ?>
+                        <option value="<?= $fr['id'] ?>" <?= (string)$filtro_frente === (string)$fr['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($fr['codigo']) ?> — <?= htmlspecialchars($fr['nome']) ?>
+                        </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -367,7 +388,8 @@ $equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina)
                             <h5 class="card-title"><?= htmlspecialchars($eq['nome']) ?></h5>
                             <p class="card-text"><strong>Unidade:</strong> <?= htmlspecialchars($eq['unidade_nome'] ?? 'Não vinculada') ?></p>
                             <p class="card-text"><strong>Operação:</strong> <?= htmlspecialchars($eq['operacao_nome'] ?? 'N/A') ?></p>
-                            
+                            <p class="card-text"><strong>Frente:</strong>
+                            <?= $eq['frente_codigo'] ? htmlspecialchars($eq['frente_codigo'].' — '.($eq['frente_nome'] ?? '')) : '<span class="text-muted">N/A</span>' ?></p>
                             <?php if (!empty($eq['implemento_nome'])): ?>
                                 <p class="card-text">
                                     <strong>Implemento:</strong> <?= htmlspecialchars($eq['implemento_nome']) ?>
@@ -427,13 +449,25 @@ $equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina)
                                 </div>
                                 
                                 <div class="mb-3">
-                                    <label class="form-label">Operação</label>
-                                    <select name="operacao_id" class="form-select" required>
-                                        <option value="">Selecione a Operação</option>
+                                    <label class="form-label">Operação (deixe em branco para CTT)</label>
+                                    <select name="operacao_id" class="form-select">
+                                        <option value="">— Sem operação (CTT) —</option>
                                         <?php foreach ($operacoes as $op): ?>
-                                            <option value="<?= $op['id'] ?>" <?= (string)$eq['operacao_id'] === (string)$op['id'] ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars($op['nome']) ?>
-                                            </option>
+                                        <option value="<?= $op['id'] ?>" <?= (string)$eq['operacao_id'] === (string)$op['id'] ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($op['nome']) ?>
+                                        </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Frente (CTT)</label>
+                                    <select name="frente_id" class="form-select">
+                                        <option value="">— Sem frente —</option>
+                                        <?php foreach ($frentes as $fr): ?>
+                                        <option value="<?= $fr['id'] ?>" <?= (string)$eq['frente_id'] === (string)$fr['id'] ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($fr['codigo']) ?> — <?= htmlspecialchars($fr['nome']) ?>
+                                        </option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
@@ -500,6 +534,7 @@ $equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina)
                                     <th>Nome</th>
                                     <th>Unidade</th>
                                     <th>Operação</th>
+                                    <th>Frente</th>
                                     <th>Implemento</th>
                                     <th>Ações</th>
                                 </tr>
@@ -513,6 +548,13 @@ $equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina)
                                     <td><?= htmlspecialchars($eq['nome']) ?></td>
                                     <td><?= htmlspecialchars($eq['unidade_nome'] ?? 'N/A') ?></td>
                                     <td><?= htmlspecialchars($eq['operacao_nome'] ?? 'N/A') ?></td>
+                                    <td>
+                                        <?php if (!empty($eq['frente_codigo'])): ?>
+                                            <?= htmlspecialchars($eq['frente_codigo']) ?> — <?= htmlspecialchars($eq['frente_nome'] ?? '') ?>
+                                        <?php else: ?>
+                                            <span class="text-muted">N/A</span>
+                                        <?php endif; ?>
+                                        </td>
                                     <td>
                                         <?php if (!empty($eq['implemento_nome'])): ?>
                                             <?= htmlspecialchars($eq['implemento_nome']) ?> 
@@ -599,13 +641,26 @@ $equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina)
                 </div>
                 
                 <div class="mb-3">
-                    <label class="form-label">Operação</label>
-                    <select name="operacao_id" class="form-select" required>
-                        <option value="">Selecione a Operação</option>
+                    <label class="form-label">Operação (deixe em branco para CTT)</label>
+                    <select name="operacao_id" class="form-select">
+                        <option value="">— Sem operação (CTT) —</option>
                         <?php foreach ($operacoes as $op): ?>
                             <option value="<?= $op['id'] ?>"><?= htmlspecialchars($op['nome']) ?></option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Frente (CTT)</label>
+                    <select name="frente_id" class="form-select">
+                        <option value="">— Sem frente —</option>
+                        <?php foreach ($frentes as $fr): ?>
+                            <option value="<?= $fr['id'] ?>">
+                            <?= htmlspecialchars($fr['codigo']) ?> — <?= htmlspecialchars($fr['nome']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small class="text-muted">Para CTT selecione a frente; para PPT pode deixar em branco.</small>
                 </div>
                 
                 <div class="mb-3">
@@ -808,6 +863,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const filtroForm = document.getElementById('filtroForm');
     const filtroUnidade = document.getElementById('filtroUnidade');
     const filtroOperacao = document.getElementById('filtroOperacao');
+    const filtroFrente = document.getElementById('filtroFrente');
     const filtroImplemento = document.getElementById('filtroImplemento');
     const filtroStatus = document.getElementById('filtroStatus');
     const loadingElement = document.getElementById('loading');
@@ -821,12 +877,17 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Coletar valores dos filtros
         const filtros = {
-            unidade: filtroUnidade.value,
-            operacao_id: filtroOperacao.value,
-            implemento: filtroImplemento.value,
-            status: filtroStatus.value,
-            visualizacao: '<?= $visualizacao ?>'
+        unidade: filtroUnidade.value,
+        operacao_id: filtroOperacao.value,
+        implemento: filtroImplemento.value,
+        frente: filtroFrente.value,
+        status: filtroStatus.value,
+        visualizacao: '<?= $visualizacao ?>'
         };
+        // ...
+        [filtroUnidade, filtroOperacao, filtroImplemento, filtroFrente, filtroStatus].forEach(select => {
+        select.addEventListener('change', aplicarFiltros);
+        });
         
         // Criar URL de busca
         const params = new URLSearchParams();
@@ -877,7 +938,6 @@ document.addEventListener('DOMContentLoaded', function() {
         aplicarFiltros();
     });
 });
-
 
 </script>
 

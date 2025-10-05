@@ -73,21 +73,29 @@ function parse_equip_code(string $s): string {
   return $only ?: $s;
 }
 
-/* ========= XLSX "simples" (sem libs) =========
-   Lê somente a primeira planilha (xl/worksheets/sheet1.xml)
-   e sharedStrings. Bom o bastante para export padrão.
-*/
-// Tenta ler a 1ª planilha de um XLSX real (Zip + XML), incluindo inline strings
+// Converte número serial do Excel (dias) para segundos (24h = 86400)
+function excel_serial_to_seconds($v) {
+  if ($v === '' || $v === null) return null;
+  // troque vírgula por ponto se vier "0,5"
+  $f = (float)str_replace(',', '.', (string)$v);
+  if (!is_numeric($f)) return null;
+  return (int)round($f * 86400);
+}
+
+/* ========= XLSX "simples" (sem libs) ========= */
+// Lê a primeira planilha VISÍVEL de um .xlsx (Zip + XML) sem libs externas
 function read_xlsx_smart($path) {
   if (!class_exists('ZipArchive')) return null;
+
   $zip = new ZipArchive();
   if ($zip->open($path) !== true) return null;
 
-  // sharedStrings
+  // 1) sharedStrings (para células 's')
   $shared = [];
   if (($xmlSS = $zip->getFromName('xl/sharedStrings.xml')) !== false) {
     $sx = @simplexml_load_string($xmlSS);
     if ($sx) {
+      // há casos com rich text (<si><r><t>…)
       foreach ($sx->si as $si) {
         $txt = '';
         if (isset($si->t)) $txt .= (string)$si->t;
@@ -97,42 +105,89 @@ function read_xlsx_smart($path) {
     }
   }
 
-  // descobre o path da 1ª worksheet via workbook + rels
+  // 2) workbook + rels => encontra a 1ª sheet visível e resolve o path correto
   $workbook = $zip->getFromName('xl/workbook.xml');
   if ($workbook === false) { $zip->close(); return null; }
   $wb = @simplexml_load_string($workbook);
-  if (!$wb || !isset($wb->sheets->sheet[0])) { $zip->close(); return null; }
-  $rid = (string)$wb->sheets->sheet[0]['id']; // ex: rId1
+  if (!$wb) { $zip->close(); return null; }
+
+  // pega sheet visível (state != 'hidden'/'veryHidden')
+  $ns = $wb->getNamespaces(true);
+  $chosenSheet = null;
+  foreach ($wb->sheets->sheet as $sh) {
+    $state = (string)$sh['state'];
+    if ($state === 'hidden' || $state === 'veryHidden') continue;
+    $chosenSheet = $sh; break; // primeira visível
+  }
+  if (!$chosenSheet) { $zip->close(); return null; }
+
+  // atributo namespaced r:id (ESSENCIAL)
+  $rid = '';
+  if (isset($ns['r'])) {
+    $attrs = $chosenSheet->attributes($ns['r']);
+    if (isset($attrs['id'])) $rid = (string)$attrs['id'];
+  }
+  // fallback (se vier sem ns por alguma razão exótica)
+  if ($rid === '' && isset($chosenSheet['id'])) $rid = (string)$chosenSheet['id'];
+  if ($rid === '') { $zip->close(); return null; }
 
   $rels = $zip->getFromName('xl/_rels/workbook.xml.rels');
   if ($rels === false) { $zip->close(); return null; }
   $rx = @simplexml_load_string($rels);
   if (!$rx) { $zip->close(); return null; }
 
-  $sheetPath = null;
+  $target = null;
   foreach ($rx->Relationship as $rel) {
-    if ((string)$rel['Id'] === $rid) { $sheetPath = 'xl/'.(string)$rel['Target']; break; }
+    if ((string)$rel['Id'] === $rid) { $target = (string)$rel['Target']; break; }
   }
-  if (!$sheetPath) { $zip->close(); return null; }
+  if (!$target) { $zip->close(); return null; }
+
+  // normaliza o caminho
+  if (strpos($target, 'xl/') === 0) {
+    $sheetPath = $target; // já vem com xl/
+  } else {
+    $sheetPath = 'xl/' . ltrim($target, '/');
+  }
 
   $sheetXml = $zip->getFromName($sheetPath);
   if ($sheetXml === false) { $zip->close(); return null; }
   $sx = @simplexml_load_string($sheetXml);
   if (!$sx) { $zip->close(); return null; }
 
+  // 3) percorre as linhas/células
   $rows = [];
-  foreach ($sx->sheetData->row as $row) {
+  // Atenção: alguns arquivos trazem namespace padrão em <worksheet>.
+  // Em geral SimpleXML acessa por nome local, mas, se precisar, use $sx->children() com o ns.
+  $sheetData = $sx->sheetData ?? $sx->children()->sheetData ?? null;
+  if (!$sheetData) { $zip->close(); return null; }
+
+  foreach ($sheetData->row as $row) {
     $r = [];
     foreach ($row->c as $c) {
-      $t = (string)$c['t']; // 's' (shared), 'inlineStr', 'str', ''(num)
+      $t = (string)$c['t']; // 's', 'inlineStr', 'str', 'b', 'd' ou vazio (num)
       $val = '';
+
       if ($t === 's') {
-        $idx = (int)$c->v;
+        // shared string
+        $idx = isset($c->v) ? (int)$c->v : 0;
         $val = $shared[$idx] ?? '';
-      } elseif ($t === 'inlineStr' && isset($c->is)) {
-        $val = (string)$c->is->t;
-        if (isset($c->is->r)) { foreach ($c->is->r as $rnode) { $val .= (string)$rnode->t; } }
+      } elseif ($t === 'inlineStr') {
+        // texto embutido
+        if (isset($c->is->t)) {
+          $val = (string)$c->is->t;
+        } elseif (isset($c->is->r)) {
+          foreach ($c->is->r as $rnode) { $val .= (string)$rnode->t; }
+        } else {
+          $val = '';
+        }
+      } elseif ($t === 'b') {
+        // boolean
+        $val = isset($c->v) ? ((string)$c->v === '1' ? 'TRUE' : 'FALSE') : '';
+      } elseif ($t === 'str') {
+        // string “plain” (resultado de fórmula em texto)
+        $val = isset($c->v) ? (string)$c->v : '';
       } else {
+        // número / data / etc. (sem formato aplicado)
         $val = isset($c->v) ? (string)$c->v : '';
       }
 
@@ -141,7 +196,8 @@ function read_xlsx_smart($path) {
       if (preg_match('/^([A-Z]+)/', $ref, $m)) {
         $letters = $m[1];
         $col = 0;
-        for ($i=0; $i<strlen($letters); $i++) $col = $col*26 + (ord($letters[$i]) - 64);
+        $len = strlen($letters);
+        for ($i=0; $i<$len; $i++) $col = $col*26 + (ord($letters[$i]) - 64);
         $r[$col-1] = $val;
       } else {
         $r[] = $val;
@@ -154,6 +210,7 @@ function read_xlsx_smart($path) {
       $rows[] = $full;
     }
   }
+
   $zip->close();
   return $rows;
 }
@@ -184,25 +241,42 @@ function read_xls_html($path) {
 
 /* ========= Estado ========= */
 $errors = [];
-$jornadaHoras = isset($_POST['jornada']) ? max(1, (int)$_POST['jornada']) : 12; // default 12h
+$jornadaHoras = isset($_POST['jornada']) ? max(1, (int)$_POST['jornada']) : 24; // default 24h
 $periodo = ['inicio'=>null,'fim'=>null];
 $cards = []; // [unidade][frente] => linhas
 // linha = [equipamento, operador, operacao, minutos, perc]
 // base da %: 24h (86.400 s)
 $PERC_BASE_SEC = 24 * 3600;
 
-// opcional: descobrir a frente pelo código do equipamento, se a tabela existir
-$stmtFindFrente = null;
+// ========= Pré-carrega mapa de Frente por Equipamento (única query) =========
+// chave do mapa: CÓDIGO NUMÉRICO do equipamento (ex.: "13020040")
+$frMap = [];            // ex.: ['13020040' => ['codigo'=>'161','nome'=>'Frente 161']]
+$frLabelByCode = [];    // ex.: ['161' => 'Frente 161'] (pra exibir no badge)
+
 try {
-  $stmtFindFrente = $pdo->prepare("
-    SELECT f.codigo
-    FROM frente_equipamentos fe
-    JOIN frentes f ON f.id = fe.frente_id
-    WHERE fe.equipamento_code = ? AND fe.ativo = 1
-    LIMIT 1
+  $q = $pdo->query("
+    SELECT e.nome AS equip_nome, f.codigo AS frente_codigo, f.nome AS frente_nome
+      FROM equipamentos e
+      JOIN frentes f ON f.id = e.frente_id
+     WHERE e.ativo = 1
+       AND e.frente_id IS NOT NULL
   ");
-} catch (Exception $e) {
-  $stmtFindFrente = null; // segue sem frente se a tabela não existir
+  $rowsFr = $q->fetchAll(PDO::FETCH_ASSOC);
+  foreach ($rowsFr as $r) {
+    // extrai o número do equipamento que você cadastra em e.nome (ex.: '13020040 Colhedora' -> '13020040')
+    $eqCode = preg_replace('/\D+/', '', (string)$r['equip_nome']);
+    if ($eqCode !== '') {
+      $frMap[$eqCode] = [
+        'codigo' => (string)$r['frente_codigo'],
+        'nome'   => (string)$r['frente_nome'],
+      ];
+      if ($r['frente_codigo'] !== '' && $r['frente_nome'] !== '') {
+        $frLabelByCode[(string)$r['frente_codigo']] = (string)$r['frente_nome'];
+      }
+    }
+  }
+} catch (Throwable $e) {
+  // se der erro, seguimos sem frente (não quebra a página)
 }
 
 /* ========= Import ========= */
@@ -301,18 +375,25 @@ if ($missing) {
         // duração em SEGUNDOS
         $durSec = 0;
         if ($idxSeg !== null) {
-            $secsRaw = (string)($cells[$idxSeg] ?? '0');
-            $durSec  = (int)preg_replace('/\D+/', '', $secsRaw);
+        // coluna "Segundos" é numérica, pode vir como '1605' (string)
+        $secsRaw = (string)($cells[$idxSeg] ?? '0');
+        // remove não-dígitos só por segurança
+        $secsNum = preg_replace('/[^\d\-\.]/', '', $secsRaw);
+        $durSec  = (int)round((float)$secsNum);
         } elseif ($idxHoras !== null) {
-            $durSec = parse_hhmmss_to_seconds((string)($cells[$idxHoras] ?? '')) ?? 0;
+        $horasRaw = (string)($cells[$idxHoras] ?? '');
+        $tmp      = parse_hhmmss_to_seconds($horasRaw);
+        if ($tmp === null) {
+            // pode estar em formato serial do Excel
+            $tmp = excel_serial_to_seconds($horasRaw);
+        }
+        $durSec = $tmp ?? 0;
         }
 
-        // frente via banco (se possível)
+        // frente via mapa pré-carregado
         $fr = '—';
-        if ($stmtFindFrente && $eq !== '') {
-            $stmtFindFrente->execute([$eq]);
-            $got = $stmtFindFrente->fetchColumn();
-            if ($got) $fr = (string)$got;
+        if ($eq !== '' && isset($frMap[$eq])) {
+        $fr = $frMap[$eq]['codigo']; // chave de agrupamento: código da frente
         }
 
         // chave da operação: "cod|desc" (mantém o código para ordenação depois)
@@ -428,7 +509,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       <div>
         <label>Jornada (h)</label><br>
         <input type="number" name="jornada" step="1" min="1" value="<?= htmlspecialchars($jornadaHoras) ?>" style="width:90px">
-        <small class="hint">Usado para calcular % do dia (ex.: 12h).</small>
+        <small class="hint">Usado para calcular % do dia (ex.: 24h).</small>
       </div>
       <div class="actions" style="align-self:flex-end">
         <button type="submit">Processar</button>
@@ -451,7 +532,12 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       </div>
       <?php $firstFr = true; foreach ($byFrente as $fr=>$linhas): ?>
         <div class="card <?= $firstFr ? '' : 'print-break' ?>">
-          <div class="subbadge">Frente: <?= htmlspecialchars($fr) ?></div>
+            <div class="subbadge">
+                Frente: <?= htmlspecialchars($fr) ?>
+                <?php if ($fr !== '—' && isset($frLabelByCode[$fr])): ?>
+                    — <?= htmlspecialchars($frLabelByCode[$fr]) ?>
+                <?php endif; ?>
+            </div>
           <div class="meta">Jornada considerada: <?= (int)$jornadaHoras ?>h • Linhas: <?= count($linhas) ?></div>
           <table class="table">
             <thead>
