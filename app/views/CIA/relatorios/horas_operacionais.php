@@ -3,7 +3,6 @@ session_start();
 require_once __DIR__ . '/../../../../config/db/conexao.php';
 
 if (!isset($_SESSION['usuario_id'])) { header('Location: /login'); exit(); }
-
 $role = strtolower($_SESSION['usuario_tipo'] ?? '');
 $ADMIN_LIKE = ['admin','cia_admin','cia_dev','cia_user'];
 if (!in_array($role, $ADMIN_LIKE, true)) { header('Location: /'); exit(); }
@@ -16,11 +15,6 @@ if ($DEBUG_XLSX) {
   ini_set('display_errors', '1');
   error_reporting(E_ALL);
 }
-
-if (!isset($_SESSION['usuario_id'])) { header('Location: /login'); exit(); }
-$role = strtolower($_SESSION['usuario_tipo'] ?? '');
-$ADMIN_LIKE = ['admin','cia_admin','cia_dev','cia_user'];
-if (!in_array($role, $ADMIN_LIKE, true)) { header('Location: /'); exit(); }
 
 /* ========= Helpers gerais ========= */
 function norm($s){
@@ -334,7 +328,7 @@ $periodo = ['inicio'=>null,'fim'=>null];
 $cards = []; // [unidade][frente] => linhas
 // linha = [equipamento, operador, operacao, minutos, perc]
 // base da %: 24h (86.400 s)
-$PERC_BASE_SEC = 24 * 3600;
+$PERC_BASE_SEC = max(1, (int)$jornadaHoras) * 3600;
 
 // ========= Pré-carrega mapa de Frente por Equipamento (única query) =========
 // chave do mapa: CÓDIGO NUMÉRICO do equipamento (ex.: "13020040")
@@ -369,235 +363,216 @@ try {
 
 /* ========= Import ========= */
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo'])) {
-    // ===== Plano B: se vier CSV emulado do navegador, parseia e ignora $_FILES =====
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['force_csv']) && $_POST['force_csv'] === '1' && isset($_POST['csv_emulado'])) {
-    $csv = (string)$_POST['csv_emulado'];
-    $linhas = preg_split("/\r\n|\n|\r/", $csv, -1, PREG_SPLIT_NO_EMPTY);
-    if (!$linhas) {
-        $errors[] = "Falha na conversão do XLSX no navegador (CSV vazio).";
-    } else {
-        $rows = [];
-        foreach ($linhas as $i => $line) {
-        // SheetJS gerou CSV com vírgula; se mudar FS no JS, ajuste aqui
-        $rows[] = str_getcsv($line, ',');
-        }
-      }
-    }
-  if ($_FILES['arquivo']['error'] !== UPLOAD_ERR_OK) {
-    $errors[] = "Erro no upload (código: ".$_FILES['arquivo']['error'].").";
-  } else {
-    $tmp = $_FILES['arquivo']['tmp_name'];
-    $ext = strtolower(pathinfo($_FILES['arquivo']['name'], PATHINFO_EXTENSION));
-
     $rows = null;
-    $ext = strtolower(pathinfo($_FILES['arquivo']['name'], PATHINFO_EXTENSION));
+    $usingPlanB = false;
 
-    if ($ext === 'csv') {
-      $raw = file($tmp, FILE_IGNORE_NEW_LINES);
-      if ($raw === false || count($raw)===0) { $errors[]="Arquivo vazio."; }
-      else {
-        // acha cabeçalho
-        $headerIndex = encontrar_indice_cabecalho($raw);
-        $delim = detectar_delimitador($raw, $headerIndex);
-        $rows = [];
-        foreach ($raw as $i=>$line) {
-          $cells = str_getcsv($line, $delim);
-          if ($i===$headerIndex) {
-            $cells = array_map('trim_bom', $cells);
-          }
-          $rows[] = $cells;
-        }
-      }
-    } elseif ($ext === 'xlsx') {
-        if (!is_uploaded_file($tmp) || @filesize($tmp) === 0) {
-            $errors[] = "Upload vazio. Cheque upload_max_filesize / post_max_size no PHP.";
+    // ===== Plano B: CSV emulado pelo navegador (SheetJS) =====
+    if (isset($_POST['force_csv']) && $_POST['force_csv'] === '1' && isset($_POST['csv_emulado'])) {
+        $csv = (string)$_POST['csv_emulado'];
+        $linhas = preg_split("/\r\n|\n|\r/", $csv, -1, PREG_SPLIT_NO_EMPTY);
+        if (!$linhas) {
+            $errors[] = "Falha na conversão do XLSX no navegador (CSV vazio).";
         } else {
-            $rows = read_xlsx_smart($tmp);
-            if ($rows === null) {
-            $msg = "Não consegui ler este XLSX.";
-            if ($DEBUG_XLSX) { $msg .= "\n\n" . debug_xlsx_report($tmp); }
-            $errors[] = $msg;
+            $rows = [];
+            foreach ($linhas as $line) {
+                $rows[] = str_getcsv($line, ','); // CSV gerado com vírgula
             }
+            $usingPlanB = true;
         }
-    } elseif ($ext === 'xls') {
-    // tenta HTML disfarçado de .xls
-    $rows = read_xls_html($tmp);
-    if ($rows === null) $errors[] = "XLS (binário) não é suportado sem biblioteca. Exporte como XLSX ou CSV.";
-    } else {
-    $errors[] = "Formato não suportado. Use CSV, XLSX ou XLS (HTML).";
     }
 
-    if ($rows && empty($errors)) {
-    /* ========== MAPA DE COLUNAS (XLSX “Horas operacionais” SGPA) ========== */
-    // Tenta achar a linha de cabeçalho nas 6 primeiras
-    // Header
-$headerIndex = 0;
-for ($i=0; $i<min(6, count($rows)); $i++) {
-  $line = implode(' ', $rows[$i] ?? []);
-  if (preg_match('/unidade|frota|funcion|opera|segundos|horas/i', $line)) { $headerIndex = $i; break; }
-}
-$headers     = array_map(fn($x)=>trim_bom((string)$x), $rows[$headerIndex]);
-$headersNorm = array_map('norm', $headers);
+    // ===== Parse normal no servidor (CSV/XLSX/XLSM/XLS-HTML) =====
+    if (!$usingPlanB) {
+        if ($_FILES['arquivo']['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = "Erro no upload (código: ".$_FILES['arquivo']['error'].").";
+        } else {
+            $tmp = $_FILES['arquivo']['tmp_name'];
+            $ext = strtolower(pathinfo($_FILES['arquivo']['name'], PATHINFO_EXTENSION));
 
-// Mapeamento (conforme o SGPA)
-$idxUn        = idx_by_keywords($headersNorm, [[ 'unidade' ]]);
-$idxFrota     = idx_by_keywords($headersNorm, [[ 'frota' ]]);                     // código do equipamento
-$idxOpCode    = idx_by_keywords($headersNorm, [[ 'codigo','funcion' ], ['código','funcion']]);
-$idxOpName    = idx_by_keywords($headersNorm, [[ 'descricao','funcion' ], ['descrição','funcion']]); // operador nome
-$idxOperCode  = idx_by_keywords($headersNorm, [[ 'codigo','operacao' ], ['código','opera']]);
-$idxOperDesc  = idx_by_keywords($headersNorm, [[ 'descricao','operacao' ], ['descrição','opera']]);  // operação desc
-$idxSeg       = idx_by_keywords($headersNorm, [[ 'segundos' ]]);   // preferido
-$idxHoras     = idx_by_keywords($headersNorm, [[ 'horas' ]]);      // HH:MM:SS fallback
-$idxData      = idx_by_keywords($headersNorm, [[ 'data' ]]);       // opcional
-
-$needed = [
-  'Unidade'          => $idxUn,
-  'Frota'            => $idxFrota,
-  'Operador Nome'    => $idxOpName,
-  'Operação (desc)'  => $idxOperDesc,
-];
-
-$missing = array_keys(array_filter($needed, fn($v)=>$v===null));
-if ($missing) {
-  $errors[] = "Colunas obrigatórias não encontradas: ".implode(', ', $missing).". Ajuste o arquivo.";
-} else {
-    $first = $headerIndex + 1;
-
-        $agg   = []; // unidade > frente > equip > operador(nome) > operacao(code|desc) => segundos
-        $dates = [];
-
-        for ($i=$first; $i<count($rows); $i++) {
-        $cells = $rows[$i];
-        if (!$cells || !array_filter($cells)) continue;
-
-        $un        = trim((string)($cells[$idxUn]       ?? ''));
-        $frota     = trim((string)($cells[$idxFrota]    ?? ''));
-        $eq        = parse_equip_code($frota); // código numérico da frota/equip
-
-        $opCode    = $idxOpCode   !== null ? trim((string)($cells[$idxOpCode]   ?? '')) : '';
-        $opName    = $idxOpName   !== null ? trim((string)($cells[$idxOpName]   ?? '')) : '';
-        $operCode  = $idxOperCode !== null ? trim((string)($cells[$idxOperCode] ?? '')) : '';
-        $operDesc  = $idxOperDesc !== null ? trim((string)($cells[$idxOperDesc] ?? '')) : '';
-
-        if ($un==='' && $eq==='' && $opName==='') continue;
-        if (preg_match('/total/i', $opName)) continue;
-
-        // duração em SEGUNDOS
-        $durSec = 0;
-        if ($idxSeg !== null) {
-        // coluna "Segundos" é numérica, pode vir como '1605' (string)
-        $secsRaw = (string)($cells[$idxSeg] ?? '0');
-        // remove não-dígitos só por segurança
-        $secsNum = preg_replace('/[^\d\-\.]/', '', $secsRaw);
-        $durSec  = (int)round((float)$secsNum);
-        } elseif ($idxHoras !== null) {
-        $horasRaw = (string)($cells[$idxHoras] ?? '');
-        $tmp      = parse_hhmmss_to_seconds($horasRaw);
-        if ($tmp === null) {
-            // pode estar em formato serial do Excel
-            $tmp = excel_serial_to_seconds($horasRaw);
-        }
-        $durSec = $tmp ?? 0;
-        }
-
-        // frente via mapa pré-carregado
-        $fr = '—';
-        if ($eq !== '' && isset($frMap[$eq])) {
-        $fr = $frMap[$eq]['codigo']; // chave de agrupamento: código da frente
-        }
-
-        // chave da operação: "cod|desc" (mantém o código para ordenação depois)
-        $opKey = ($operCode !== '' ? $operCode : '-') . '|' . ($operDesc !== '' ? $operDesc : '-');
-
-        // agrega
-        $opKeyOper = ($opCode !== '' ? $opCode : '') . ' | ' . $opName;
-        $agg[$un][$fr][$eq][$opKeyOper][$opKey] = ($agg[$un][$fr][$eq][$opKeyOper][$opKey] ?? 0) + $durSec;
-
-        // período (datas)
-        if ($idxData !== null) {
-            $d = trim((string)($cells[$idxData] ?? ''));
-            if ($d !== '') $dates[] = $d;
-        }
-        }
-
-        // Monta cards (por Frente dentro de cada Unidade)
-        foreach ($agg as $unidade=>$byFrente) {
-        foreach ($byFrente as $frente=>$byEq) {
-            $linhas = [];
-            foreach ($byEq as $equip=>$byOperador) {
-                foreach ($byOperador as $opKeyOper=>$byProc) {
-                    [$opCodStored, $opNameStored] = explode('|', $opKeyOper, 2);
-                    foreach ($byProc as $opKey=>$secs) {
-                        [$operCod,$operDesc] = explode('|',$opKey,2);
-                        $perc = $PERC_BASE_SEC > 0 ? ($secs / $PERC_BASE_SEC) * 100.0 : 0;
-                        $linhas[] = [
-                        'equipamento'  => $equip,
-                        'operador'     => $opNameStored,
-                        'operador_cod' => $opCodStored,
-                        'operacao'     => $operDesc ?: '-',
-                        'operacao_cod' => $operCod ?: '',
-                        'segundos'     => (int)$secs,
-                        'perc'         => $perc
-                        ];
+            if ($ext === 'csv') {
+                $raw = file($tmp, FILE_IGNORE_NEW_LINES);
+                if ($raw === false || count($raw)===0) { $errors[]="Arquivo vazio."; }
+                else {
+                    $headerIndex = encontrar_indice_cabecalho($raw);
+                    $delim = detectar_delimitador($raw, $headerIndex);
+                    $rows = [];
+                    foreach ($raw as $i=>$line) {
+                        $cells = str_getcsv($line, $delim);
+                        if ($i===$headerIndex) $cells = array_map('trim_bom', $cells);
+                        $rows[] = $cells;
                     }
                 }
+            } elseif ($ext === 'xlsx' || $ext === 'xlsm') {
+                if (!is_uploaded_file($tmp) || @filesize($tmp) === 0) {
+                    $errors[] = "Upload vazio. Cheque upload_max_filesize / post_max_size no PHP.";
+                } else {
+                    $rows = read_xlsx_smart($tmp);
+                    if ($rows === null) {
+                        $msg = "Não consegui ler este XLSX.";
+                        if ($DEBUG_XLSX) { $msg .= "\n\n" . debug_xlsx_report($tmp); }
+                        $errors[] = $msg;
+                    }
+                }
+            } elseif ($ext === 'xls') {
+                $rows = read_xls_html($tmp);
+                if ($rows === null) $errors[] = "XLS (binário) não é suportado sem biblioteca. Exporte como XLSX ou CSV.";
+            } else {
+                $errors[] = "Formato não suportado. Use CSV, XLSX, XLSM ou XLS (HTML).";
+            }
+        }
+    }
+
+    // ======= DAQUI PRA BAIXO: PROCESSA $rows (vale tanto pro Plano B quanto pro servidor) =======
+    if ($rows && empty($errors)) {
+        /* ========== MAPA DE COLUNAS (XLSX “Horas operacionais” SGPA) ========== */
+        $headerIndex = 0;
+        for ($i=0; $i<min(6, count($rows)); $i++) {
+            $line = implode(' ', $rows[$i] ?? []);
+            if (preg_match('/unidade|frota|funcion|opera|segundos|horas/i', $line)) { $headerIndex = $i; break; }
+        }
+        $headers     = array_map(fn($x)=>trim_bom((string)$x), $rows[$headerIndex]);
+        $headersNorm = array_map('norm', $headers);
+
+        $idxUn        = idx_by_keywords($headersNorm, [[ 'unidade' ]]);
+        $idxFrota     = idx_by_keywords($headersNorm, [[ 'frota' ]]);
+        $idxOpCode    = idx_by_keywords($headersNorm, [[ 'codigo','funcion' ], ['código','funcion']]);
+        $idxOpName    = idx_by_keywords($headersNorm, [[ 'descricao','funcion' ], ['descrição','funcion']]);
+        $idxOperCode  = idx_by_keywords($headersNorm, [[ 'codigo','operacao' ], ['código','opera']]);
+        $idxOperDesc  = idx_by_keywords($headersNorm, [[ 'descricao','operacao' ], ['descrição','opera']]);
+        $idxSeg       = idx_by_keywords($headersNorm, [[ 'segundos' ]]);
+        $idxHoras     = idx_by_keywords($headersNorm, [[ 'horas' ]]);
+        $idxData      = idx_by_keywords($headersNorm, [[ 'data' ]]);
+
+        $needed = [
+          'Unidade'          => $idxUn,
+          'Frota'            => $idxFrota,
+          'Operador Nome'    => $idxOpName,
+          'Operação (desc)'  => $idxOperDesc,
+        ];
+
+        $missing = array_keys(array_filter($needed, fn($v)=>$v===null));
+        if ($missing) {
+          $errors[] = "Colunas obrigatórias não encontradas: ".implode(', ', $missing).". Ajuste o arquivo.";
+        } else {
+          $first = $headerIndex + 1;
+
+          $agg   = []; // unidade > frente > equip > operador(nome) > operacao(code|desc) => segundos
+          $dates = [];
+
+          for ($i=$first; $i<count($rows); $i++) {
+            $cells = $rows[$i];
+            if (!$cells || !array_filter($cells)) continue;
+
+            $un        = trim((string)($cells[$idxUn]       ?? ''));
+            $frota     = trim((string)($cells[$idxFrota]    ?? ''));
+            $eq        = parse_equip_code($frota);
+
+            $opCode    = $idxOpCode   !== null ? trim((string)($cells[$idxOpCode]   ?? '')) : '';
+            $opName    = $idxOpName   !== null ? trim((string)($cells[$idxOpName]   ?? '')) : '';
+            $operCode  = $idxOperCode !== null ? trim((string)($cells[$idxOperCode] ?? '')) : '';
+            $operDesc  = $idxOperDesc !== null ? trim((string)($cells[$idxOperDesc] ?? '')) : '';
+
+            if ($un==='' && $eq==='' && $opName==='') continue;
+            if (preg_match('/total/i', $opName)) continue;
+
+            // duração em SEGUNDOS
+            $durSec = 0;
+            if ($idxSeg !== null) {
+              $secsRaw = (string)($cells[$idxSeg] ?? '0');
+              $secsNum = preg_replace('/[^\d\-\.]/', '', $secsRaw);
+              $durSec  = (int)round((float)$secsNum);
+            } elseif ($idxHoras !== null) {
+              $horasRaw = (string)($cells[$idxHoras] ?? '');
+              $tmp      = parse_hhmmss_to_seconds($horasRaw);
+              if ($tmp === null) $tmp = excel_serial_to_seconds($horasRaw);
+              $durSec = $tmp ?? 0;
             }
 
-            // ordenação: equipamento ASC (numérico) → operador_cod ASC (numérico) → operação_cod ASC (numérico)
-            usort($linhas, function($a,$b){
-            // 1) Equipamento numérico (asc)
-            $ea = (int)preg_replace('/\D+/', '', (string)$a['equipamento']);
-            $eb = (int)preg_replace('/\D+/', '', (string)$b['equipamento']);
-            if ($ea !== $eb) return $ea <=> $eb;
+            // frente via mapa
+            $fr = '—';
+            if ($eq !== '' && isset($frMap[$eq])) $fr = $frMap[$eq]['codigo'];
 
-            // 2) Operador com regras: 9999 primeiro, depois 10001000, depois demais por código asc, vazios por último
-            $oa_raw = preg_replace('/\D+/', '', (string)$a['operador_cod']);
-            $ob_raw = preg_replace('/\D+/', '', (string)$b['operador_cod']);
+            // chave da operação
+            $opKey = ($operCode !== '' ? $operCode : '-') . '|' . ($operDesc !== '' ? $operDesc : '-');
 
-            $rank = static function($code){
-                if ($code === '9999')      return [0, 9999];
-                if ($code === '10001000')  return [1, 10001000];
-                if ($code === '' || $code === '0') return [3, PHP_INT_MAX]; // sem código → por último
-                return [2, (int)$code];
-            };
+            // agrega
+            $opKeyOper = ($opCode !== '' ? $opCode : '') . ' | ' . $opName;
+            $agg[$un][$fr][$eq][$opKeyOper][$opKey] = ($agg[$un][$fr][$eq][$opKeyOper][$opKey] ?? 0) + $durSec;
 
-            [$wa,$va] = $rank($oa_raw);
-            [$wb,$vb] = $rank($ob_raw);
-            if ($wa !== $wb) return $wa <=> $wb;
-            if ($va !== $vb) return $va <=> $vb;
+            // datas (opcional)
+            if ($idxData !== null) {
+              $d = trim((string)($cells[$idxData] ?? ''));
+              if ($d !== '') $dates[] = $d;
+            }
+          }
 
-            // (empate raro de código): ordena pelo nome do operador pra estabilidade
-            $cmpOpName = strcmp((string)$a['operador'], (string)$b['operador']);
-            if ($cmpOpName !== 0) return $cmpOpName;
+          // Monta cards
+          foreach ($agg as $unidade=>$byFrente) {
+            foreach ($byFrente as $frente=>$byEq) {
+              $linhas = [];
+              foreach ($byEq as $equip=>$byOperador) {
+                foreach ($byOperador as $opKeyOper=>$byProc) {
+                  [$opCodStored, $opNameStored] = explode('|', $opKeyOper, 2);
+                  foreach ($byProc as $opKey=>$secs) {
+                    [$operCod,$operDesc] = explode('|',$opKey,2);
+                    $perc = $PERC_BASE_SEC > 0 ? ($secs / $PERC_BASE_SEC) * 100.0 : 0;
+                    $linhas[] = [
+                      'equipamento'  => $equip,
+                      'operador'     => $opNameStored,
+                      'operador_cod' => $opCodStored,
+                      'operacao'     => $operDesc ?: '-',
+                      'operacao_cod' => $operCod ?: '',
+                      'segundos'     => (int)$secs,
+                      'perc'         => $perc
+                    ];
+                  }
+                }
+              }
 
-            // 3) Operações do mesmo operador por código asc
-            $pa_raw = preg_replace('/\D+/', '', (string)$a['operacao_cod']);
-            $pb_raw = preg_replace('/\D+/', '', (string)$b['operacao_cod']);
-            $pa = $pa_raw === '' ? PHP_INT_MAX : (int)$pa_raw;
-            $pb = $pb_raw === '' ? PHP_INT_MAX : (int)$pb_raw;
-            if ($pa !== $pb) return $pa <=> $pb;
+              usort($linhas, function($a,$b){
+                $ea = (int)preg_replace('/\D+/', '', (string)$a['equipamento']);
+                $eb = (int)preg_replace('/\D+/', '', (string)$b['equipamento']);
+                if ($ea !== $eb) return $ea <=> $eb;
 
-            // fallback: descrição da operação asc
-            $cmpOp = strcmp((string)$a['operacao'], (string)$b['operacao']);
-            if ($cmpOp !== 0) return $cmpOp;
+                $oa_raw = preg_replace('/\D+/', '', (string)$a['operador_cod']);
+                $ob_raw = preg_replace('/\D+/', '', (string)$b['operador_cod']);
+                $rank = static function($code){
+                  if ($code === '9999')      return [0, 9999];
+                  if ($code === '10001000')  return [1, 10001000];
+                  if ($code === '' || $code === '0') return [3, PHP_INT_MAX];
+                  return [2, (int)$code];
+                };
+                [$wa,$va] = $rank($oa_raw);
+                [$wb,$vb] = $rank($ob_raw);
+                if ($wa !== $wb) return $wa <=> $wb;
+                if ($va !== $vb) return $va <=> $vb;
 
-            // último desempate: maior tempo primeiro
-            return $b['segundos'] <=> $a['segundos'];
-            });
+                $cmpOpName = strcmp((string)$a['operador'], (string)$b['operador']);
+                if ($cmpOpName !== 0) return $cmpOpName;
 
-            $cards[$unidade][$frente] = $linhas;
+                $pa_raw = preg_replace('/\D+/', '', (string)$a['operacao_cod']);
+                $pb_raw = preg_replace('/\D+/', '', (string)$b['operacao_cod']);
+                $pa = $pa_raw === '' ? PHP_INT_MAX : (int)$pa_raw;
+                $pb = $pb_raw === '' ? PHP_INT_MAX : (int)$pb_raw;
+                if ($pa !== $pb) return $pa <=> $pb;
+
+                $cmpOp = strcmp((string)$a['operacao'], (string)$b['operacao']);
+                if ($cmpOp !== 0) return $cmpOp;
+
+                return $b['segundos'] <=> $a['segundos'];
+              });
+
+              $cards[$unidade][$frente] = $linhas;
+            }
+          }
+
+          if (!empty($dates)) {
+            sort($dates);
+            $periodo['inicio'] = $dates[0];
+            $periodo['fim']    = end($dates);
+          }
         }
-        }
-
-        // período exibido (se houver Data)
-        if (!empty($dates)) {
-        sort($dates);
-        $periodo['inicio'] = $dates[0];
-        $periodo['fim']    = end($dates);
-        }
-      }
     }
-  }
 }
 
 /* ========= View ========= */
@@ -634,6 +609,9 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
         <button type="button" id="btnPrint">Imprimir / PDF</button>
       </div>
     </form>
+    <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+        <button type="button" id="btnExportAll" class="btn-solid">Exportar PDFs (todas as frentes)</button>
+    </div>
     <?php if ($errors): ?>
   <div style="color:#b00020;margin-top:8px">
     <pre style="white-space:pre-wrap"><?= htmlspecialchars(implode("\n\n", $errors)) ?></pre>
@@ -661,40 +639,115 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       <div class="card">
         <div class="badge">Unidade: <?= htmlspecialchars($un) ?></div>
       </div>
-      <?php $firstFr = true; foreach ($byFrente as $fr=>$linhas): ?>
-        <div class="card <?= $firstFr ? '' : 'print-break' ?>">
-            <div class="subbadge">
-                Frente: <?= htmlspecialchars($fr) ?>
-                <?php if ($fr !== '—' && isset($frLabelByCode[$fr])): ?>
-                    — <?= htmlspecialchars($frLabelByCode[$fr]) ?>
-                <?php endif; ?>
-            </div>
-          <div class="meta">Jornada considerada: <?= (int)$jornadaHoras ?>h • Linhas: <?= count($linhas) ?></div>
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Equipamento</th>
-                <th>Operador</th>
-                <th>Operação</th>
-                <th class="right">Tempo</th>
-                <th class="right">% do Dia</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($linhas as $row): ?>
-                <tr>
-                  <td><?= htmlspecialchars($row['equipamento']) ?></td>
-                  <td><?= htmlspecialchars($row['operador']) ?></td>
-                  <td><?= htmlspecialchars($row['operacao']) ?></td>
-                  <td class="right"><?= fmt_hhmmss($row['segundos']) ?></td>
-                  <td class="right"><?= number_format($row['perc'], 2, ',', '.') ?>%</td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
-        <?php $firstFr = false; endforeach; ?>
+      <?php
+      // ordena frentes: numéricas ASC e '—' por último
+      $frKeys = array_keys($byFrente);
+      usort($frKeys, function($a,$b){
+        if ($a === '—' && $b !== '—') return 1;
+        if ($b === '—' && $a !== '—') return -1;
+        $na = preg_replace('/\D+/','',$a);
+        $nb = preg_replace('/\D+/','',$b);
+        if ($na !== '' && $nb !== '') return (int)$na <=> (int)$nb;
+        return strcmp((string)$a,(string)$b);
+      });
+    ?>
+
+    <nav class="frentes-nav no-print">
+    <?php foreach ($frKeys as $frCode):
+      $label = ($frCode !== '—' && isset($frLabelByCode[$frCode])) ? (' — '.$frLabelByCode[$frCode]) : '';
+      $secId = 'frente-'
+            . preg_replace('/[^A-Za-z0-9_-]+/','-', $un)
+            . '-'
+            . preg_replace('/[^A-Za-z0-9_-]+/','-', $frCode);
+    ?>
+      <a href="#<?= htmlspecialchars($secId) ?>" class="chip">
+        Frente <?= htmlspecialchars($frCode) ?><?= htmlspecialchars($label) ?>
+      </a>
     <?php endforeach; ?>
+    </nav>
+
+    <div class="frentes-grid">
+    <?php $firstFr = true; foreach ($frKeys as $fr): $linhas = $byFrente[$fr]; ?>
+
+    <?php
+  // cabeçalhos/contadores + id único
+  $totalSeg   = array_sum(array_column($linhas, 'segundos'));
+  $equipCount = count(array_unique(array_map(fn($r)=>$r['equipamento'], $linhas)));
+  $operCount  = count(array_unique(array_map(fn($r)=>($r['operador_cod'] ?? '').'|'.$r['operador'], $linhas)));
+  $frLabel    = ($fr !== '—' && isset($frLabelByCode[$fr])) ? (' — ' . $frLabelByCode[$fr]) : '';
+  $dataNome   = ($periodo['inicio'] ?? '') ?: date('Y-m-d');
+
+  $secId = 'frente-'
+         . preg_replace('/[^A-Za-z0-9_-]+/','-', $un)
+         . '-'
+         . preg_replace('/[^A-Za-z0-9_-]+/','-', $fr);
+?>
+
+<section
+  class="frente-card <?= $firstFr ? '' : 'print-break' ?>"
+  data-frente="<?= htmlspecialchars($fr) ?>"
+  data-unidade="<?= htmlspecialchars($un) ?>"
+  data-data="<?= htmlspecialchars($dataNome) ?>"
+  id="<?= htmlspecialchars($secId) ?>"
+>
+  <header class="frente-header">
+    <div>
+      <div class="frente-title">Frente <?= htmlspecialchars($fr) ?><?= htmlspecialchars($frLabel) ?></div>
+      <div class="frente-subtitle">
+        Unidade: <strong><?= htmlspecialchars($un) ?></strong>
+        <?php if ($periodo['inicio'] || $periodo['fim']): ?>
+          • Janela: <strong><?= htmlspecialchars($periodo['inicio'] ?: '?') ?> – <?= htmlspecialchars($periodo['fim'] ?: '?') ?></strong>
+        <?php endif; ?>
+      </div>
+      <div class="frente-badges">
+        <span class="frente-badge">Jornada: <?= (int)$jornadaHoras ?>h</span>
+        <span class="frente-badge">Equip.: <?= $equipCount ?></span>
+        <span class="frente-badge">Oper.: <?= $operCount ?></span>
+        <span class="frente-badge">Total: <?= fmt_hhmmss($totalSeg) ?></span>
+      </div>
+    </div>
+
+    <div class="frente-actions no-print">
+      <button type="button" class="btn-outline btn-export-frente">
+        Export PDF (Frente <?= htmlspecialchars($fr) ?>)
+      </button>
+    </div>
+  </header>
+
+  <div class="meta-line">Linhas: <?= count($linhas) ?></div>
+
+  <!-- WRAP COM SCROLL INTERNO -->
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Equipamento</th>
+          <th>Operador</th>
+          <th>Operação</th>
+          <th class="right">Tempo</th>
+          <th class="right">% do Dia</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($linhas as $row): ?>
+        <tr>
+          <td><?= htmlspecialchars($row['equipamento']) ?></td>
+          <td><?= htmlspecialchars($row['operador']) ?></td>
+          <td><?= htmlspecialchars($row['operacao']) ?></td>
+          <td class="right"><?= fmt_hhmmss($row['segundos']) ?></td>
+          <td class="right"><?= number_format($row['perc'], 2, ',', '.') ?>%</td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<?php $firstFr = false; endforeach; ?>
+</div>
+        
+    <?php endforeach; ?>
+
   <?php else: ?>
     <div class="card"><em>Importe um arquivo e clique em “Processar”.</em></div>
   <?php endif; ?>
@@ -741,6 +794,203 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       alert('Falha ao converter XLSX no navegador: ' + (err && err.message ? err.message : err));
     }
   }, { passive: false });
+})();
+</script>
+
+<!-- jsPDF + html2canvas (estáveis) -->
+<script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script>
+(function(){
+  // ===== Constantes de layout A4 =====
+  const PX_PER_MM = 3.7795275591; // 96dpi
+  const A4_W = 210 * PX_PER_MM;
+  const A4_H = 297 * PX_PER_MM;
+  const PAD_MM = 10;
+  const PAD_PX = PAD_MM * PX_PER_MM;
+
+  // --- helpers ---
+  function sanitizeFilePart(s){
+    return String(s || '').toLowerCase()
+      .replace(/\s+/g,'-')
+      .replace(/[^a-z0-9\-_]+/g,'')
+      .slice(0,64);
+  }
+
+  function ensureSandbox(){
+    let sb = document.getElementById('export-sandbox');
+    if (!sb) {
+      sb = document.createElement('div');
+      sb.id = 'export-sandbox';
+      document.body.appendChild(sb);
+    }
+    sb.innerHTML = '';
+    return sb;
+  }
+
+  function cloneHeader(card){
+    const header = card.querySelector('.frente-header')?.cloneNode(true) || document.createElement('div');
+    header.querySelectorAll('.frente-actions, .no-print').forEach(el => el.remove());
+    return header;
+  }
+  function cloneMeta(card){
+    return card.querySelector('.meta-line')?.cloneNode(true) || document.createElement('div');
+  }
+  function buildTableSkeleton(card){
+    const table = document.createElement('table');
+    table.className = 'table';
+    const theadOrig = card.querySelector('table thead');
+    const thead = theadOrig ? theadOrig.cloneNode(true) : document.createElement('thead');
+    const tbody = document.createElement('tbody');
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    return { table, thead, tbody };
+  }
+
+  function newExportPage(card, includeHeader){
+    const page = document.createElement('div');
+    page.className = 'export-page';
+
+    const inner = document.createElement('div');
+    inner.className = 'export-inner';
+    inner.style.width = (A4_W - PAD_PX * 2) + 'px';
+
+    if (includeHeader) {
+      inner.appendChild(cloneHeader(card));
+      inner.appendChild(cloneMeta(card));
+    }
+
+    const { table, thead, tbody } = buildTableSkeleton(card);
+    inner.appendChild(table);
+    page.appendChild(inner);
+
+    return { page, inner, thead, tbody };
+  }
+
+  // Quebra as linhas por ALTURA efetiva
+  function buildPagesByHeight(card){
+    const sandbox = ensureSandbox();
+    const rows = Array.from(card.querySelectorAll('table tbody tr'));
+    const pages = [];
+
+    let idx = 0;
+    let first = true;
+
+    while (idx < rows.length || first) {
+      const { page, inner, thead, tbody } = newExportPage(card, first);
+      sandbox.appendChild(page);
+
+      const avail = A4_H - PAD_PX * 2;
+      let headHeight = 0;
+      if (first) {
+        const hdr = inner.querySelector('.frente-header');
+        const meta = inner.querySelector('.meta-line');
+        headHeight += (hdr?.offsetHeight || 0) + (meta?.offsetHeight || 0);
+      }
+      const theadH = thead?.offsetHeight || 0;
+      const budget = Math.max(300, avail - headHeight - theadH - 8);
+
+      // Empacota linhas
+      let atLeastOne = false;
+      while (idx < rows.length) {
+        const nextRow = rows[idx].cloneNode(true);
+        tbody.appendChild(nextRow);
+        if (tbody.offsetHeight > budget) {
+          tbody.removeChild(nextRow);
+          break;
+        }
+        idx++;
+        atLeastOne = true;
+      }
+      // Segurança: se nenhuma coube, força 1 linha/página
+      if (!atLeastOne && idx < rows.length) {
+        tbody.appendChild(rows[idx].cloneNode(true));
+        idx++;
+      }
+
+      pages.push(page);
+      first = false;
+    }
+    return pages;
+  }
+
+  // Aguarda libs carregarem (defer + robustez)
+  function libsReady(){
+    return new Promise((resolve, reject) => {
+      let tries = 0;
+      (function check(){
+        const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : null;
+        const h2c = window.html2canvas || null;
+        if (jsPDFCtor && h2c) return resolve({ jsPDFCtor, h2c });
+        if (++tries > 200) return reject(new Error('Libs não carregadas'));
+        setTimeout(check, 25);
+      })();
+    });
+  }
+
+  async function exportCard(card){
+    const unidade = card.getAttribute('data-unidade') || 'unidade';
+    const frCode  = card.getAttribute('data-frente')  || 'frente';
+    const dataRef = card.getAttribute('data-data')     || (new Date()).toISOString().slice(0,10);
+    const filename = `horas-operacionais_${sanitizeFilePart(unidade)}_frente-${sanitizeFilePart(frCode)}_${dataRef}.pdf`;
+
+    // libs
+    let jsPDFCtor, h2c;
+    try {
+      const libs = await libsReady();
+      jsPDFCtor = libs.jsPDFCtor;
+      h2c = libs.h2c;
+    } catch(e){
+      console.error('Falha libs:', e);
+      alert('Falha ao carregar bibliotecas de exportação. Tente recarregar a página.');
+      return;
+    }
+
+    // paginação manual
+    const pages = buildPagesByHeight(card);
+
+    // cria PDF
+    const pdf = new jsPDFCtor({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+    // rasteriza cada página
+    for (let i = 0; i < pages.length; i++) {
+      if (i > 0) pdf.addPage();
+      // força layout antes do snapshot
+      await new Promise(r => setTimeout(r, 0));
+
+      const canvas = await h2c(pages[i], {
+        scale: 1,              // 1 == 96dpi; se ficar pesado, 0.9
+        backgroundColor: '#fff',
+        useCORS: true,
+        scrollY: 0,
+        allowTaint: true,      // ajuda em ambientes http
+        logging: false
+      });
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297); // mm
+    }
+
+    pdf.save(filename);
+    document.getElementById('export-sandbox')?.remove();
+  }
+
+  // Botão por frente
+  document.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.btn-export-frente');
+    if (!btn) return;
+    const card = btn.closest('.frente-card');
+    if (card) exportCard(card);
+  });
+
+  // Todas as frentes
+  document.getElementById('btnExportAll')?.addEventListener('click', async ()=>{
+    const cards = Array.from(document.querySelectorAll('.frente-card'));
+    for (const c of cards) {
+      await exportCard(c);
+      await new Promise(r => setTimeout(r, 120)); // respiro
+    }
+  });
 })();
 </script>
 

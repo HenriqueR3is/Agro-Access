@@ -1,20 +1,334 @@
-/* quebra por card (frente) no print */
-@media print{
+:root {
+  --brand: #2b772f;
+  --accent: #f29f3c;
+  --ink: #333;
+  --ink-dim: #555;
+  --line: #e8eaee;
+  --bg: #fff;
+}
+
+/* =========================
+   Layout / Container
+   ========================= */
+#print-area {
+  max-width: 1600px;
+  margin-inline: auto;
+}
+
+/* Grid responsivo das frentes */
+.frentes-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(700px, 1fr));
+  align-items: stretch;
+}
+@media (max-width: 1500px) {
+  .frentes-grid { grid-template-columns: 1fr; }
+}
+
+/* =========================
+   Navegação das frentes
+   ========================= */
+.frentes-nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 16px;
+}
+.frentes-nav .chip {
+  background: #fff;
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+}
+.frentes-nav .chip:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/* =========================
+   Card da frente
+   ========================= */
+.frente-card {
+  display: flex;
+  flex-direction: column;
+  height: 68vh;              /* visual; export desativa */
+  min-height: 520px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  padding: 16px;
+}
+.frente-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.frente-title {
+  font-weight: 800;
+  letter-spacing: .2px;
+  color: var(--ink);
+}
+.frente-subtitle {
+  color: var(--ink-dim);
+  font-size: 14px;
+}
+.frente-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.frente-badge {
+  background: #eef3f2;
+  border: 1px solid #dde5e2;
+  color: #334;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 12px;
+}
+.frente-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.meta-line {
+  margin: 6px 0 10px;
+  color: #445;
+  font-size: 13px;
+}
+
+/* Área rolável da tabela dentro do card */
+.table-wrap {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;          /* sem scroll horizontal */
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;            /* fundo sólido p/ snapshot */
+}
+
+/* =========================
+   Tabela (tela)
+   ========================= */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;         /* -> respeita larguras definidas */
+  font-size: 13px;             /* um pouco menor que 14px */
+}
+.table thead th {
+  background: #263238;
+  color: #fff;
+  text-align: left;
+  padding: 8px 10px;
+  position: sticky;            /* fixo no scroll interno */
+  top: 0;
+  z-index: 1;
+}
+.table th,
+.table td {
+  border: 1px solid #e6e6e6;
+  padding: 6px 8px;            /* menor padding -> menos altura */
+  line-height: 1.2;            /* linhas mais compactas */
+  vertical-align: middle;
+  font-weight: 500;
+}
+
+/* Larguras por coluna (somam ~100%) */
+.table th:nth-child(1), .table td:nth-child(1) { /* Equipamento */
+  width: 16%;
+  white-space: nowrap;
+}
+.table th:nth-child(2), .table td:nth-child(2) { /* Operador */
+  width: 32%;
+  white-space: nowrap;         /* enxuga linhas */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.table th:nth-child(3), .table td:nth-child(3) { /* Operação (LARGA) */
+  width: 36%;
+  white-space: normal;         /* pode quebrar */
+  overflow-wrap: break-word;   /* quebra saudável (NÃO 'anywhere') */
+  word-break: normal;
+}
+.table th:nth-child(4), .table td:nth-child(4) { /* Tempo */
+  width: 10%;
+  white-space: nowrap;
+  text-align: right;
+}
+.table th:nth-child(5), .table td:nth-child(5) { /* % do Dia */
+  width: 10%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.table tbody tr:nth-child(even) { background: #fafafa; }
+.table td.right, .table th.right { text-align: right; }
+
+/* =========================
+   Botões / Inputs
+   ========================= */
+.btn-outline,
+.btn-solid {
+  appearance: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  cursor: pointer;
+  transition: transform .08s ease, background .15s ease, color .15s ease,
+              box-shadow .15s ease, border-color .15s ease;
+}
+.btn-solid {
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand);
+}
+.btn-solid:hover { filter: brightness(1.05); }
+.btn-solid:active { transform: translateY(1px); }
+.btn-outline {
+  background: #fff;
+  color: var(--brand);
+  border: 1px solid var(--brand);
+}
+.btn-outline:hover { background: #f6faf7; }
+.btn-outline:active { transform: translateY(1px); }
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.actions button {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.actions button[type=submit] {
+  background: var(--brand);
+  color: #fff;
+}
+.actions #btnPrint {
+  background: #fff;
+  color: var(--brand);
+  border-color: var(--brand);
+}
+.row input[type="number"],
+.row input[type="file"] {
+  border: 1px solid #d8dee6;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+/* =========================
+   Badges / utilitários
+   ========================= */
+.card .meta { font-size: 12px; color: #555; margin-bottom: 6px; }
+.badge {
+  background: #eef3f2;
+  padding: 4px 10px;
+  border-radius: 8px;
+  display: inline-block;
+  font-weight: 600;
+  color: #333;
+}
+.subbadge { margin: 8px 0 6px; font-weight: 700; color: #555; }
+.kicker {
+  background: var(--accent);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  display: inline-block;
+  margin: 10px 0;
+}
+.right { text-align: right; }
+
+/* =========================
+   Print
+   ========================= */
+@media print {
+  .no-print { display: none !important; }
   .print-break { page-break-before: always; }
-  .no-print { display:none !important; }
+  body { background: #fff; }
+
+  .frentes-grid { display: block; }
+  .frente-card {
+    page-break-inside: avoid;
+    height: auto;
+    min-height: auto;
+    margin: 0 0 16px;
+  }
+  .table-wrap { overflow: visible; border: none; }
 }
-.table { width:100%; border-collapse:collapse; }
-.table th,.table td { border:1px solid #e0e0e0; padding:6px 8px; font-size:14px; }
-.table thead th { background:#263238; color:#fff; text-align:center; }
-.card .meta { font-size:12px; color:#555; margin-bottom:6px; }
-.badge { background:#eef3f2; padding:4px 10px; border-radius:8px; display:inline-block; font-weight:600; color:#333; }
-.subbadge { margin:8px 0 6px; font-weight:700; color:#555; }
-.actions { display:flex; gap:8px; margin-left:auto; }
-.actions button{
-  border:1px solid transparent; border-radius:10px; padding:10px 14px; font-weight:700; cursor:pointer;
+
+/* =========================
+   Export (DOM temporário)
+   ========================= */
+#export-sandbox {
+  position: fixed;
+  left: -99999px;
+  top: 0;
+  width: 210mm;               /* consistência durante medição */
 }
-.actions button[type=submit]{ background:#2b772f; color:#fff; }
-.actions #btnPrint{ background:#fff; color:#2b772f; border-color:#2b772f; }
-.row input[type="number"], .row input[type="file"]{ border:1px solid #d8dee6; border-radius:10px; padding:8px 10px; }
-.kicker { background:#f29f3c; color:#fff; padding:6px 10px; border-radius:8px; font-weight:700; display:inline-block; margin: 10px 0; }
-.right { text-align:right; }
+.export-page {
+  width: 210mm;
+  min-height: 297mm;
+  background: #fff;
+}
+.export-inner { padding: 10mm; }
+.export-page * { box-sizing: border-box; }
+
+/* Tabela nas páginas de export (mesmos princípios da tela) */
+.export-page .table {
+  table-layout: fixed !important; /* NÃO mude pra auto */
+  font-size: 12px;                /* menor pra caber mais */
+}
+.export-page .table th,
+.export-page .table td {
+  padding: 5px 7px;
+  line-height: 1.15;
+  vertical-align: middle;
+  border: 1px solid #e6e6e6;
+}
+
+/* Repete as larguras por coluna no export */
+.export-page .table th:nth-child(1), .export-page .table td:nth-child(1) { width: 16%; white-space: nowrap; }
+.export-page .table th:nth-child(2), .export-page .table td:nth-child(2) { width: 32%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.export-page .table th:nth-child(3), .export-page .table td:nth-child(3) { width: 36%; white-space: normal; overflow-wrap: break-word; word-break: normal; }
+.export-page .table th:nth-child(4), .export-page .table td:nth-child(4) { width: 10%; white-space: nowrap; text-align: right; }
+.export-page .table th:nth-child(5), .export-page .table td:nth-child(5) { width: 10%; white-space: nowrap; text-align: right; }
+
+/* Neutralizações p/ snapshot */
+.export-page .table thead th { position: static !important; }
+.export-page .table-wrap { overflow: visible !important; border: none !important; }
+
+/* Esconde controles no PDF */
+.export-page .frente-actions,
+.export-page .no-print { display: none !important; }
+
+/* =========================
+   Modo EXPORT no card (se usar)
+   ========================= */
+.frente-card.exporting {
+  height: auto !important;
+  min-height: 0 !important;
+}
+.frente-card.exporting .table-wrap {
+  overflow: visible !important;
+  height: auto !important;
+  max-height: none !important;
+  border: 1px solid transparent;
+}
+.frente-card.exporting .table thead th { position: static !important; }
+.frente-card.exporting .no-print,
+.frente-card.exporting .frente-actions { display: none !important; }
