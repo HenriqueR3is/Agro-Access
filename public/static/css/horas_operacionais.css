@@ -332,3 +332,40 @@
 .frente-card.exporting .table thead th { position: static !important; }
 .frente-card.exporting .no-print,
 .frente-card.exporting .frente-actions { display: none !important; }
+
+:root{
+  --pdf-blue: #006699;
+  --op-highlight: #70a9c6; /* cor para o 1º registro de cada operador */
+  --subtotal-lb: #eaf4fb;
+}
+
+/* Cabeçalho do PDF */
+.export-page .pdf-title-block{ margin: 0 0 10mm 0; }
+.export-page .pdf-title{
+  font-size: 26px; font-weight: 800; color: var(--ink); line-height: 1.15;
+  /* text-align:center;  <- se quiser centralizado */
+}
+.export-page .pdf-title-line{
+  height: 4px; width: 100%; background: var(--pdf-blue); border-radius: 2px; margin-top: 6px;
+}
+
+/* Destaque do início de cada operador (tela E PDF) */
+.table tbody tr.group-start{
+  background: var(--op-highlight) !important;
+  color: #fff;
+}
+
+/* Subtotal do operador (tela E PDF) */
+.table tr.subtotal-row td,
+.export-page .table tr.subtotal-row td{
+  font-weight: 800;
+  color: #1a1a1a;
+  background: #e6f2fa !important;      /* mais forte que #f2f7fb */
+  text-align: left;
+  border-top: 0;                        /* com collapse, a espessura pode perder o destaque */
+  box-shadow: inset 0 2px 0 var(--subtotal-lb); /* “linha” azul bem visível */
+}
+.table tr.subtotal-row td.right,
+.export-page .table tr.subtotal-row td.right{
+  text-align: right;
+}

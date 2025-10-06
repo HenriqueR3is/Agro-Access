@@ -725,12 +725,14 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
           <th>Operador</th>
           <th>Operação</th>
           <th class="right">Tempo</th>
-          <th class="right">% do Dia</th>
+          <th class="right">% Dia</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($linhas as $row): ?>
-        <tr>
+        <tr
+          data-opcod="<?= htmlspecialchars(preg_replace('/\D+/', '', (string)($row['operador_cod'] ?? ''))) ?>"
+          data-opname="<?= htmlspecialchars($row['operador']) ?>">
           <td><?= htmlspecialchars($row['equipamento']) ?></td>
           <td><?= htmlspecialchars($row['operador']) ?></td>
           <td><?= htmlspecialchars($row['operacao']) ?></td>
@@ -811,6 +813,94 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
   const PAD_PX = PAD_MM * PX_PER_MM;
 
   // --- helpers ---
+  function parseHmsToSec(str){
+    const m = String(str||'').match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if(!m) return 0;
+    const h=+m[1], mi=+m[2], s=m[3]?+m[3]:0;
+    return h*3600 + mi*60 + s;
+  }
+  function fmtHms(sec){
+    const t=Math.max(0, sec|0);
+    const h=String(Math.floor(t/3600)).padStart(2,'0');
+    const m=String(Math.floor((t%3600)/60)).padStart(2,'0');
+    const s=String(t%60).padStart(2,'0');
+    return `${h}:${m}:${s}`;
+  }
+  function formatPercentBR(p){
+    return (p).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) + '%';
+  }
+  function getJornadaSeconds(card){
+    const badges = card.querySelectorAll('.frente-badge');
+    for(const b of badges){
+      const txt = b.textContent || '';
+      const m = txt.match(/Jornada:\s*(\d+)\s*h/i);
+      if(m) return (+m[1]) * 3600;
+    }
+    // fallback padrão 24h
+    return 24*3600;
+  }
+  function normalizeStr(s){
+    return String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').trim().toLowerCase();
+  }
+
+  // Agrupa linhas por operador e guarda a matrícula (do data-opcod da 1ª linha do grupo)
+  function groupRowsByOperator(card){
+    const trs = Array.from(card.querySelectorAll('table tbody tr'));
+    const groups = [];
+    let current = null;
+
+    const norm = s => String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').trim().toLowerCase();
+
+    trs.forEach(tr=>{
+      const tds = tr.cells;
+      const opName = tds[1] ? tds[1].textContent : '';
+      const key    = norm(opName);
+      const opCode = tr.dataset.opcod || ''; // matrícula do operador
+      const sec    = (()=>{ const m = String(tds[3]?.textContent||'').match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/); if(!m) return 0; return (+m[1])*3600 + (+m[2])*60 + (+m[3]||0); })();
+
+      if(!current || norm(current.name) !== key){
+        current = { name: opName, code: opCode, key, rows: [], totalSec: 0 };
+        groups.push(current);
+      }
+      current.rows.push(tr);
+      current.totalSec += sec;
+    });
+
+    return groups;
+  }
+
+  // Cria a linha de subtotal como UMA célula (colspan=5)
+  function makeSubtotalRow(opName, opCode, totalSec, jornadaSec, dataRef){
+    const tr = document.createElement('tr');
+    tr.className = 'subtotal-row';
+    const td = document.createElement('td');
+    td.colSpan = 5;
+
+    const pct = (totalSec/jornadaSec)*100;
+    const fmtH = (s)=>{ const t=Math.max(0,s|0),h=String(Math.floor(t/3600)).padStart(2,'0'),m=String(Math.floor((t%3600)/60)).padStart(2,'0'),x=String(t%60).padStart(2,'0'); return `${h}:${m}:${x}`; };
+    const fmtP = (p)=> p.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '%';
+
+    td.innerHTML = `<strong>Total de Horas do Operador: ${opCode || '—'} no dia: ${dataRef}</strong> — ${fmtH(totalSec)} (${fmtP(pct)})`;
+    tr.appendChild(td);
+    return tr;
+  }
+
+  // --- Marca o 1º registro de cada operador (no root informado)
+  function markOperatorGroups(root=document){
+    const bodies = root.querySelectorAll('.table tbody, .export-page .table tbody');
+    const norm = s => String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').trim().toLowerCase();
+    bodies.forEach(tbody=>{
+      let last = null;
+      Array.from(tbody.rows).forEach((tr, idx)=>{
+        const op = tr.cells[1] ? norm(tr.cells[1].textContent) : '';
+        if(idx === 0 || op !== last){ tr.classList.add('group-start'); }
+        last = op;
+      });
+    });
+  }
+  document.addEventListener('DOMContentLoaded', ()=> markOperatorGroups());
+  window.__markOperatorGroups = markOperatorGroups;
+
   function sanitizeFilePart(s){
     return String(s || '').toLowerCase()
       .replace(/\s+/g,'-')
@@ -857,9 +947,10 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     inner.style.width = (A4_W - PAD_PX * 2) + 'px';
 
     if (includeHeader) {
-      inner.appendChild(cloneHeader(card));
-      inner.appendChild(cloneMeta(card));
-    }
+    inner.appendChild(buildReportTitle());    // <=== TÍTULO DO RELATÓRIO
+    inner.appendChild(cloneHeader(card));     // cabeçalho da frente
+    inner.appendChild(cloneMeta(card));       // meta “Linhas: …”
+  }
 
     const { table, thead, tbody } = buildTableSkeleton(card);
     inner.appendChild(table);
@@ -869,49 +960,101 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
   }
 
   // Quebra as linhas por ALTURA efetiva
-  function buildPagesByHeight(card){
+  function buildPagesByHeightGrouped(card){
     const sandbox = ensureSandbox();
-    const rows = Array.from(card.querySelectorAll('table tbody tr'));
+    const jornadaSec = getJornadaSeconds(card);
+    const dateRef = card.getAttribute('data-data') || (new Date()).toISOString().slice(0,10);
+    const groups = groupRowsByOperator(card);  // mantém ordem original
     const pages = [];
 
-    let idx = 0;
-    let first = true;
+    let gIdx = 0;
+    let firstPage = true;
 
-    while (idx < rows.length || first) {
-      const { page, inner, thead, tbody } = newExportPage(card, first);
+    while (gIdx < groups.length || firstPage){
+      const { page, inner, thead, tbody } = newExportPage(card, firstPage);
       sandbox.appendChild(page);
 
-      const avail = A4_H - PAD_PX * 2;
+      // orçamento de altura disponível
+      const avail = A4_H - PAD_PX*2;
+
+      // mede cabeçalhos da 1ª página (título + header/meta)
       let headHeight = 0;
-      if (first) {
-        const hdr = inner.querySelector('.frente-header');
+      if(firstPage){
+        const rep  = inner.querySelector('.pdf-title-block');
+        const hdr  = inner.querySelector('.frente-header');
         const meta = inner.querySelector('.meta-line');
-        headHeight += (hdr?.offsetHeight || 0) + (meta?.offsetHeight || 0);
+        headHeight += (rep?.offsetHeight || 0) + (hdr?.offsetHeight || 0) + (meta?.offsetHeight || 0);
       }
       const theadH = thead?.offsetHeight || 0;
       const budget = Math.max(300, avail - headHeight - theadH - 8);
 
-      // Empacota linhas
-      let atLeastOne = false;
-      while (idx < rows.length) {
-        const nextRow = rows[idx].cloneNode(true);
-        tbody.appendChild(nextRow);
-        if (tbody.offsetHeight > budget) {
-          tbody.removeChild(nextRow);
+      // tenta encher a página com grupos inteiros
+      while (gIdx < groups.length){
+        const g = groups[gIdx];
+
+        // tenta inserir TODO o grupo (linhas + subtotal)
+        // 1) insere as linhas do grupo
+        const inserted = [];
+        g.rows.forEach(srcTr=>{
+          const tr = srcTr.cloneNode(true);
+          inserted.push(tr);
+          tbody.appendChild(tr);
+        });
+        const subtotalTr = makeSubtotalRow(g.name, g.code, g.totalSec, jornadaSec, dateRef);
+        tbody.appendChild(subtotalTr);
+
+        // coube?
+        if (tbody.offsetHeight <= budget){
+          // marca visual do início de grupo dentro desta página
+          if (typeof window.__markOperatorGroups === 'function') window.__markOperatorGroups(page);
+          gIdx++; // segue para o próximo grupo
+          continue;
+        }
+
+        // não coube => remove o que tentou colocar
+        inserted.forEach(tr=> tbody.removeChild(tr));
+        tbody.removeChild(subtotalTr);
+
+        // se já há conteúdo na página, pula para a próxima página
+        if (tbody.children.length > 0) break;
+
+        // página vazia e mesmo assim não coube o grupo inteiro:
+        // fallback: quebra EXCEPCIONALMENTE o grupo em pedaços (linhas) na mesma página      
+        let i=0;
+        while (i < g.rows.length){
+          const tr = g.rows[i].cloneNode(true);
+          tbody.appendChild(tr);
+          if (tbody.offsetHeight > budget){
+            tbody.removeChild(tr);
+            break;
+          }
+          i++;
+        }
+        // consumiu i linhas deste grupo nesta página
+        if (i>0){
+          // recorta as linhas consumidas do grupo; mantém o restante para a próxima página
+          g.rows = g.rows.slice(i);
+          // marca destaques desta página
+          if (typeof window.__markOperatorGroups === 'function') window.__markOperatorGroups(page);
+        }else{
+          // (muito raro) nem 1 linha coube — evita loop infinito
           break;
         }
-        idx++;
-        atLeastOne = true;
-      }
-      // Segurança: se nenhuma coube, força 1 linha/página
-      if (!atLeastOne && idx < rows.length) {
-        tbody.appendChild(rows[idx].cloneNode(true));
-        idx++;
+
+        // encerra a página; subtotal virá apenas quando o grupo terminar
+        break;
       }
 
+      // se o grupo terminou exatamente nesta página, adiciona subtotal (já foi adicionado no ramo “coube”)
+      // se sobrou parte do grupo, subtotal virá lá na frente, quando o grupo acabar
+
       pages.push(page);
-      first = false;
+      firstPage = false;
+
+      // se terminou todos os grupos, mas a 1ª página estava vazia, ainda garantimos pelo menos 1
+      if (gIdx >= groups.length && pages.length===0) pages.push(page);
     }
+
     return pages;
   }
 
@@ -932,8 +1075,9 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
   async function exportCard(card){
     const unidade = card.getAttribute('data-unidade') || 'unidade';
     const frCode  = card.getAttribute('data-frente')  || 'frente';
-    const dataRef = card.getAttribute('data-data')     || (new Date()).toISOString().slice(0,10);
-    const filename = `horas-operacionais_${sanitizeFilePart(unidade)}_frente-${sanitizeFilePart(frCode)}_${dataRef}.pdf`;
+    const dateRef = card.getAttribute('data-data') || (new Date()).toISOString().slice(0,10);
+    
+    const filename = `horas-operacionais_${sanitizeFilePart(unidade)}_frente-${sanitizeFilePart(frCode)}_${dateRef}.pdf`;
 
     // libs
     let jsPDFCtor, h2c;
@@ -948,7 +1092,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     }
 
     // paginação manual
-    const pages = buildPagesByHeight(card);
+    const pages = buildPagesByHeightGrouped(card);
 
     // cria PDF
     const pdf = new jsPDFCtor({ unit: 'mm', format: 'a4', orientation: 'portrait' });
@@ -960,7 +1104,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       await new Promise(r => setTimeout(r, 0));
 
       const canvas = await h2c(pages[i], {
-        scale: 1,              // 1 == 96dpi; se ficar pesado, 0.9
+        scale: 2,              // 1 == 96dpi; se ficar pesado, 0.9
         backgroundColor: '#fff',
         useCORS: true,
         scrollY: 0,
@@ -988,10 +1132,24 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     const cards = Array.from(document.querySelectorAll('.frente-card'));
     for (const c of cards) {
       await exportCard(c);
-      await new Promise(r => setTimeout(r, 120)); // respiro
+      await new Promise(r => setTimeout(r, 120));
     }
   });
 })();
+
+function buildReportTitle(){
+  const wrap = document.createElement('div');
+  wrap.className = 'pdf-title-block';
+  const h = document.createElement('div');
+  h.className = 'pdf-title';
+  h.textContent = 'Relatório de Horas';
+  const line = document.createElement('div');
+  line.className = 'pdf-title-line';
+  wrap.appendChild(h);
+  wrap.appendChild(line);
+  return wrap;
+}
+
 </script>
 
 <script>
