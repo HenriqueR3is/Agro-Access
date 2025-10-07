@@ -55,9 +55,30 @@ function trim_bom($s){ return preg_replace('/^\x{FEFF}|^\xEF\xBB\xBF/u','',$s); 
 function parse_decimal($raw){
   $s = trim((string)$raw);
   if ($s==='') return 0.0;
-  // remove milhar . ou espaço; troca vírgula por ponto
-  $s = str_replace([' ', '.'], '', $s);
-  $s = str_replace(',', '.', $s);
+  // tira espaços
+  $s = str_replace(' ', '', $s);
+
+  // 1) 1.234,56 (pt-BR comum)
+  if (preg_match('/^\d{1,3}(\.\d{3})+(,\d+)?$/', $s)) {
+    $s = str_replace('.', '', $s);
+    $s = str_replace(',', '.', $s);
+    return (float)$s;
+  }
+
+  // 2) 1,234.56 (en-US)
+  if (preg_match('/^\d{1,3}(,\d{3})+(\.\d+)?$/', $s)) {
+    $s = str_replace(',', '', $s);
+    return (float)$s;
+  }
+
+  // 3) Só vírgula OU só ponto
+  // se tiver só vírgula, trata como decimal
+  if (strpos($s, ',') !== false && strpos($s, '.') === false) {
+    $s = str_replace(',', '.', $s);
+    return is_numeric($s) ? (float)$s : 0.0;
+  }
+  // se tiver só ponto, deixa como está (decimal)
+  // caso contrário, tenta direto
   return is_numeric($s) ? (float)$s : 0.0;
 }
 function idx_by_keywords(array $headers, array $cands): ?int {
@@ -71,8 +92,30 @@ function idx_by_keywords(array $headers, array $cands): ?int {
   return null;
 }
 function fmt2($v){ return number_format((float)$v, 2, ',', '.'); }
+function fmt1($v){ return number_format((float)$v, 1, ',', '.'); }
 function cellClass($cons, $okMax, $warnMax){ if ($cons <= $okMax) return 'ok'; if ($cons <= $warnMax) return 'warn'; return 'bad'; }
 function groupkey($u,$f){ return $u.'|'.$f; }
+
+// extrai "161" de "RDN - FRENTE 01 - (161)"; se não achar, devolve só os dígitos
+function parse_frente_code(string $s): string {
+  $s = trim((string)$s);
+  if ($s==='') return '—';
+  if (preg_match('/\((\d+)\)/', $s, $m)) return $m[1];
+  $d = preg_replace('/\D+/', '', $s);
+  return $d !== '' ? $d : $s;
+}
+
+// normaliza datas em chave YYYY-mm-dd (funciona c/ 05/10/2025 etc.)
+function normalize_date_key(string $s): string {
+  $s = trim($s);
+  if ($s==='') return '';
+  $fmts = ['d/m/Y H:i:s','d/m/Y H:i','d/m/Y','Y-m-d H:i:s','Y-m-d H:i','Y-m-d','d-m-Y','m/d/Y'];
+  foreach ($fmts as $f) {
+    $dt = DateTime::createFromFormat($f, $s);
+    if ($dt) return $dt->format('Y-m-d');
+  }
+  return $s;
+}
 
 // ====================== estado da página ======================
 $errors = [];
@@ -85,68 +128,84 @@ $okMax   = isset($_POST['ok'])   ? (float)$_POST['ok']   : 23.0; // verde ≤
 $warnMax = isset($_POST['warn']) ? (float)$_POST['warn'] : 25.0; // amarelo ≤
 
 // ====================== import CSV (POST) ======================
-if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo_csv'])) {
+$usingPlanB = false;
+$raw = null;
+
+if ($_SERVER['REQUEST_METHOD']==='POST') {
+  // Se o cliente emulou CSV (XLSX convertido), usa ele
+  if (isset($_POST['force_csv']) && $_POST['force_csv'] === '1' && isset($_POST['csv_emulado'])) {
+    $csv = (string)$_POST['csv_emulado'];
+    $raw = preg_split("/\r\n|\n|\r/", $csv, -1, PREG_SPLIT_NO_EMPTY);
+    $usingPlanB = true;
+  }
+}
+
+if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo_csv']) && !$usingPlanB) {
   if ($_FILES['arquivo_csv']['error'] !== UPLOAD_ERR_OK) {
     $errors[] = "Erro no upload (código: ".$_FILES['arquivo_csv']['error'].").";
   } else {
     $tmp = $_FILES['arquivo_csv']['tmp_name'];
     $raw = file($tmp, FILE_IGNORE_NEW_LINES);
     if ($raw === false || count($raw)===0) { $errors[]="Arquivo vazio ou ilegível."; }
-    else {
-      $headerIndex = encontrar_indice_cabecalho($raw);
-      $delim       = detectar_delimitador($raw, $headerIndex);
-      $headerLine  = $raw[$headerIndex] ?? '';
-      $headers     = array_map('trim_bom', str_getcsv($headerLine, $delim));
-      $headersNorm = array_map('norm', $headers);
-
-// === MAPEAMENTO DE COLUNAS (modelo do export SGPA) ===
-// Equipamento (evitar "Modelo Equipamento")
-$idxEq = null;
-foreach ($headersNorm as $i => $h) {
-  if (mb_strpos($h, 'equip') !== false && mb_strpos($h, 'modelo') === false) { $idxEq = $i; break; }
+  }
 }
 
-// Unidade / Operador
-$idxUn  = idx_by_keywords($headersNorm, [[ 'unidade' ]]);
-$idxOp  = idx_by_keywords($headersNorm, [[ 'operador' ]]);
+if ($raw && empty($errors)) {
+  // ===== detectar cabeçalho + delimitador =====
+  $headerIndex = encontrar_indice_cabecalho($raw);
+  $delim       = detectar_delimitador($raw, $headerIndex);
+  $headerLine  = $raw[$headerIndex] ?? '';
+  $headers     = array_map('trim_bom', str_getcsv($headerLine, $delim));
+  $headersNorm = array_map('norm', $headers);
 
-// Médias do relatório
-$idxHa  = idx_by_keywords($headersNorm, [[ 'media','ha','/','dia' ], ['ha','/','dia'], ['ha/dia']]); // "Média (ha/dia)"
-$idxHr  = idx_by_keywords($headersNorm, [[ 'media','h','/','dia' ], ['h','/','dia']]);               // "Média (h/dia)"
-$idxVel = idx_by_keywords($headersNorm, [[ 'veloc', 'efet' ], ['vel', 'efe']]);                      // "Velocidade Média Efetivo (km/h)"
-$idxRpm = idx_by_keywords($headersNorm, [[ 'rpm' ]]);                                               // "RPM Médio"
-$idxCon = idx_by_keywords($headersNorm, [[ 'consumo', 'l/h' ], ['cons','/h'], ['cons','l/h']]);     // "Consumo Médio Efetivo (l/h)"
-$idxDt  = idx_by_keywords($headersNorm, [[ 'data' ]]);                                              // opcional
+  // === MAPEAMENTO DE COLUNAS (modelo SGPA) ===
+  $idxEq = null;
+  foreach ($headersNorm as $i => $h) {
+    if (mb_strpos($h, 'equip') !== false && mb_strpos($h, 'modelo') === false) { $idxEq = $i; break; }
+  }
+  $idxUn  = idx_by_keywords($headersNorm, [[ 'unidade' ]]);
+  $idxOp  = idx_by_keywords($headersNorm, [[ 'operador' ]]);
+  $idxHa  = idx_by_keywords($headersNorm, [[ 'media','ha','/','dia' ], ['ha','/','dia'], ['ha/dia']]);
+  $idxHr  = idx_by_keywords($headersNorm, [[ 'media','h','/','dia' ], ['h','/','dia']]);
+  $idxVel = idx_by_keywords($headersNorm, [[ 'veloc', 'efet' ], ['vel', 'efe']]);
+  $idxRpm = idx_by_keywords($headersNorm, [[ 'rpm' ]]);
+  $idxCon = idx_by_keywords($headersNorm, [[ 'consumo', 'l/h' ], ['cons','/h'], ['cons','l/h']]);
+  $idxDt  = idx_by_keywords($headersNorm, [[ 'data' ]]);
 
-$needed = [
-  'Unidade'         => $idxUn,
-  'Equipamento'     => $idxEq,
-  'Operador'        => $idxOp,
-  'Média (ha/dia)'  => $idxHa,
-  'Média (h/dia)'   => $idxHr,
-  'Vel. Efetiva'    => $idxVel,
-  'RPM Médio'       => $idxRpm,
-  'Cons. (l/h)'     => $idxCon,
-];
-$missing = array_keys(array_filter($needed, fn($v)=>$v===null));
-if ($missing) {
-  $errors[] = "Não identifiquei as colunas: ".implode(', ', $missing).". Ajuste o CSV ou renomeie cabeçalhos.";
-} else {
-  // extrair só o código do equipamento ("13100298 - TRATOR..." -> "13100298")
-  $parseEquipCode = function(string $s): string {
-    $s = trim($s);
-    if ($s === '') return '';
-    if (preg_match('/^\s*(\d+)/', $s, $m)) return $m[1]; // começa com números
-    $parts = preg_split('/\s*-\s*|\s+/', $s);
-    return trim($parts[0] ?? $s);
-  };
-      
-    $first = $headerIndex + 1;
-$lastUn = ''; 
-$lastEqCode = '';
+  $idxFr    = idx_by_keywords($headersNorm, [[ 'frente' ]]); // Frente
+  $idxArea  = idx_by_keywords($headersNorm, [[ 'area','operacional' ], ['área','operacional']]); // Área Operacional (ha)
+  $idxTempo = idx_by_keywords($headersNorm, [[ 'tempo','efet' ], ['tempo','(h)']]);              // Tempo Efetivo (h)
+  $idxConHa = idx_by_keywords($headersNorm, [[ 'consumo','l/ha' ], ['cons','/ha']]);             // Consumo Médio Efetivo (l/ha)
 
-$sumUF = [];  // (Unidade, Equipamento) => soma de métricas + n
-$sumOp = [];  // Unidade => Equipamento => Operador => soma de métricas + n
+  $needed = [
+    'Unidade' => $idxUn, 'Equipamento' => $idxEq, 'Operador' => $idxOp,
+    'Média (ha/dia)' => $idxHa, 'Média (h/dia)' => $idxHr, 'Vel. Efetiva' => $idxVel,
+    'RPM Médio' => $idxRpm, 'Cons. (l/h)' => $idxCon,
+  ];
+  $missing = array_keys(array_filter($needed, fn($v)=>$v===null));
+  if ($missing) {
+    $errors[] = "Não identifiquei as colunas: ".implode(', ', $missing).". Ajuste o CSV ou renomeie cabeçalhos.";
+  } else {
+    // ===== loops + agregações =====
+$parseEquipCode = function(string $s): string {
+  $s = trim($s);
+  if ($s === '') return '';
+  if (preg_match('/^\s*(\d+)/', $s, $m)) return $m[1];
+  $parts = preg_split('/\s*-\s*|\s+/', $s);
+  return trim($parts[0] ?? $s);
+};
+
+$first = $headerIndex + 1;
+$lastUn = ''; $lastEqCode = ''; $lastFr = '—';
+
+// Somas por equipamento e por operador (com pesos)
+$sumEq  = []; // [un][fr][eq] => totals/weights
+$sumOp  = []; // [un][fr][eq][op] => totals/weights
+
+// Conjuntos de datas (p/ média por dia como o SGPA)
+$daysEq = []; // [un][fr][eq][date] = 1
+$daysOp = []; // [un][fr][eq][op][date] = 1
+
 $datas = [];
 
 for ($i=$first; $i<count($raw); $i++) {
@@ -156,138 +215,147 @@ for ($i=$first; $i<count($raw); $i++) {
   $cells = str_getcsv($line, $delim);
   if (!$cells || !array_filter($cells)) continue;
 
-  $un = trim($cells[$idxUn] ?? '');
-  $eqRaw = trim($cells[$idxEq] ?? '');
-  $op = trim($cells[$idxOp] ?? '');
+  $un     = trim($cells[$idxUn] ?? '');
+  $frRaw  = trim($cells[$idxFr] ?? '');
+  $eqRaw  = trim($cells[$idxEq] ?? '');
+  $op     = trim($cells[$idxOp] ?? '');
+  $date   = normalize_date_key((string)($cells[$idxDt] ?? ''));
 
-  $maybeSubtotal = ($op === '');
-
-  // forward-fill por causa de merges do xlsx
   if ($un === '') $un = $lastUn;
-  $eqCode = $eqRaw !== '' ? $parseEquipCode($eqRaw) : $lastEqCode;
+  $fr = $frRaw !== '' ? parse_frente_code($frRaw) : $lastFr;
+  $eq = $eqRaw !== '' ? $parseEquipCode($eqRaw)   : $lastEqCode;
 
-  // ignora linhas "Total" / seções
-  if (stripos($op, 'total') !== false) { $lastUn=$un; $lastEqCode=$eqCode; continue; }
+  // ignora linhas de total/seção
+  if ($op === '' || stripos($op, 'total') !== false) {
+    $lastUn=$un; $lastFr=$fr; $lastEqCode=$eq; continue;
+  }
 
-  $ha   = parse_decimal($cells[$idxHa]  ?? '');
-  $hr   = parse_decimal($cells[$idxHr]  ?? '');
+  // métricas da linha
+  $area = $idxArea  !== null ? parse_decimal($cells[$idxArea]  ?? '') : 0.0; // Área Operacional (ha)
+  $hr   = $idxTempo !== null ? parse_decimal($cells[$idxTempo] ?? '') : parse_decimal($cells[$idxHr] ?? ''); // horas efetivas p/ peso
+  $haD  = parse_decimal($cells[$idxHa]  ?? ''); // média ha/dia (linha)
+  $hrD  = parse_decimal($cells[$idxHr]  ?? ''); // média h/dia  (linha)
   $vel  = parse_decimal($cells[$idxVel] ?? '');
   $rpm  = parse_decimal($cells[$idxRpm] ?? '');
-  $cons = parse_decimal($cells[$idxCon] ?? '');
+  $clh  = parse_decimal($cells[$idxCon] ?? ''); // l/h
+  $clha = $idxConHa !== null ? parse_decimal($cells[$idxConHa] ?? '') : null; // l/ha
 
-  // filtra linhas sem valor (títulos internos etc.)
-  // ignora títulos internos, linhas sem valor e possíveis subtotais sem operador
-if (($ha + $hr + $vel + $rpm + $cons) <= 0 || $maybeSubtotal) {
-  $lastUn = $un; $lastEqCode = $eqCode; 
-  continue;
-}
-
-  if ($idxDt !== null) {
-    $d = trim($cells[$idxDt] ?? '');
-    if ($d!=='') $datas[] = $d;
+  // filtro ruído
+  if (($haD + $hrD + $vel + $rpm + $clh + (float)$clha + $area + $hr) <= 0) {
+    $lastUn=$un; $lastFr=$fr; $lastEqCode=$eq; continue;
   }
 
-  // agrega por Unidade + Equipamento (média de médias)
-  $k = groupkey($un, $eqCode);
-  if (!isset($sumUF[$k])) $sumUF[$k] = ['unidade'=>$un,'frota'=>$eqCode,'n'=>0,'ha'=>0,'hr'=>0,'vel'=>0,'rpm'=>0,'cons'=>0];
-  $sumUF[$k]['n']++;
-  $sumUF[$k]['ha']  += $ha;
-  $sumUF[$k]['hr']  += $hr;
-  $sumUF[$k]['vel'] += $vel;
-  $sumUF[$k]['rpm'] += $rpm;
-  $sumUF[$k]['cons']+= $cons;
+  if ($date !== '') $datas[] = $date;
 
-  // agrega operadores do equipamento
-  if ($op!=='') {
-    if (!isset($sumOp[$un])) $sumOp[$un]=[];
-    if (!isset($sumOp[$un][$eqCode])) $sumOp[$un][$eqCode]=[];
-    if (!isset($sumOp[$un][$eqCode][$op])) $sumOp[$un][$eqCode][$op]=['n'=>0,'ha'=>0,'hr'=>0,'vel'=>0,'rpm'=>0,'cons'=>0];
-    $sumOp[$un][$eqCode][$op]['n']++;
-    $sumOp[$un][$eqCode][$op]['ha']  += $ha;
-    $sumOp[$un][$eqCode][$op]['hr']  += $hr;
-    $sumOp[$un][$eqCode][$op]['vel'] += $vel;
-    $sumOp[$un][$eqCode][$op]['rpm'] += $rpm;
-    $sumOp[$un][$eqCode][$op]['cons']+= $cons;
-  }
+  // init
+  $sumEq[$un][$fr][$eq] ??= ['area'=>0,'h'=>0,'w_vel'=>0,'w_rpm'=>0,'w_clh'=>0,'w_clha'=>0];
+  $sumOp[$un][$fr][$eq][$op] ??= ['area'=>0,'h'=>0,'w_vel'=>0,'w_rpm'=>0,'w_clh'=>0,'w_clha'=>0];
 
-  $lastUn=$un; 
-  $lastEqCode=$eqCode;
+  // pesos: horas para l/h, vel, rpm; área para l/ha
+  $hW   = max(0.0, (float)$hr ?: (float)$hrD); // fallback: usa média h/dia como peso se não houver tempo efetivo
+  $aW   = max(0.0, (float)$area ?: (float)$haD); // fallback: usa média ha/dia como peso
+
+  // --- equipamento
+  $sumEq[$un][$fr][$eq]['area'] += ($area ?: 0.0);
+  $sumEq[$un][$fr][$eq]['h']    += ($hW   ?: 0.0);
+  $sumEq[$un][$fr][$eq]['w_vel']+= $vel * $hW;
+  $sumEq[$un][$fr][$eq]['w_rpm']+= $rpm * $hW;
+  $sumEq[$un][$fr][$eq]['w_clh']+= $clh * $hW;
+  if ($clha !== null) $sumEq[$un][$fr][$eq]['w_clha']+= $clha * $aW;
+
+  if ($date !== '') $daysEq[$un][$fr][$eq][$date] = 1;
+
+  // --- operador
+  $sumOp[$un][$fr][$eq][$op]['area'] += ($area ?: 0.0);
+  $sumOp[$un][$fr][$eq][$op]['h']    += ($hW   ?: 0.0);
+  $sumOp[$un][$fr][$eq][$op]['w_vel']+= $vel * $hW;
+  $sumOp[$un][$fr][$eq][$op]['w_rpm']+= $rpm * $hW;
+  $sumOp[$un][$fr][$eq][$op]['w_clh']+= $clh * $hW;
+  if ($clha !== null) $sumOp[$un][$fr][$eq][$op]['w_clha']+= $clha * $aW;
+
+  if ($date !== '') $daysOp[$un][$fr][$eq][$op][$date] = 1;
+
+  $lastUn=$un; $lastFr=$fr; $lastEqCode=$eq;
 }
 
-if ($datas) { sort($datas); $periodo=['inicio'=>$datas[0],'fim'=>end($datas)]; }
+  // período detectado
+  if ($datas) { sort($datas); $periodo = ['inicio'=>$datas[0], 'fim'=>end($datas)]; }
 
-// fecha os agregados em arrays finais
-foreach ($sumUF as $k=>$v) {
-  $n=max(1,$v['n']);
-  $resumo[]=[
-    'unidade'=>$v['unidade'],'frota'=>$v['frota'],
-    'ha'=>$v['ha']/$n,'hr'=>$v['hr']/$n,'vel'=>$v['vel']/$n,'rpm'=>$v['rpm']/$n,'cons'=>$v['cons']/$n
-  ];
-}
-foreach ($sumOp as $un=>$byEq) {
-  foreach ($byEq as $eqCode=>$byOperador) {
-    $lista=[];
-    foreach ($byOperador as $opName=>$v) {
-      $n=max(1,$v['n']);
-      $linha=[
-        'unidade'=>$un,'frota'=>$eqCode,'operador'=>$opName,
-        'ha'=>$v['ha']/$n,'hr'=>$v['hr']/$n,'vel'=>$v['vel']/$n,'rpm'=>$v['rpm']/$n,'cons'=>$v['cons']/$n
-      ];
-      $operadores[]=$linha; 
-      $lista[]=$linha;
-    }
-    // top3 por Hr.Efet./D (empate: maior ha/dia)
-    usort($lista, function($a,$b){ if ($a['hr']===$b['hr']) return $b['ha']<=>$a['ha']; return $b['hr']<=>$a['hr']; });
-    $top3[$un][$eqCode]=array_slice($lista,0,3);
-  }
-}
-
-        if ($datas) { sort($datas); $periodo=['inicio'=>$datas[0],'fim'=>end($datas)]; }
-
-        foreach ($sumUF as $k=>$v) {
-          $n=max(1,$v['n']);
-          $resumo[]=[
-            'unidade'=>$v['unidade'],'frota'=>$v['frota'],
-            'ha'=>$v['ha']/$n,'hr'=>$v['hr']/$n,'vel'=>$v['vel']/$n,'rpm'=>$v['rpm']/$n,'cons'=>$v['cons']/$n
-          ];
-        }
-
-        foreach ($sumOp as $un=>$byFr) {
-          foreach ($byFr as $fr=>$byOp) {
-            $lista=[];
-            foreach ($byOp as $op=>$v) {
-              $n=max(1,$v['n']);
-              $linha=[
-                'unidade'=>$un,'frota'=>$fr,'operador'=>$op,
-                'ha'=>$v['ha']/$n,'hr'=>$v['hr']/$n,'vel'=>$v['vel']/$n,'rpm'=>$v['rpm']/$n,'cons'=>$v['cons']/$n
-              ];
-              $operadores[]=$linha; $lista[]=$linha;
-            }
-            usort($lista, function($a,$b){ if ($a['hr']===$b['hr']) return $b['ha']<=>$a['ha']; return $b['hr']<=>$a['hr']; });
-            $top3[$un][$fr]=array_slice($lista,0,3);
-          }
-        }
+  // === fecha agregados finais ===
+  // 3.1) RESUMO por Unidade > Frente > Frota (ordenaremos por frota depois)
+  $resumo = [];
+  foreach ($sumEq as $un=>$byFr) {
+    foreach ($byFr as $fr=>$byEq) {
+      foreach ($byEq as $eq=>$v) {
+        $h = max(0.0001, (float)$v['h']);
+        $a = max(0.0001, (float)$v['area']);
+        $dias = count($daysEq[$un][$fr][$eq] ?? []);
+        $resumo[] = [
+          'unidade' => $un,
+          'frente'  => $fr,
+          'frota'   => $eq,
+          // médias “como o SGPA”: totais ÷ dias trabalhados (distintos)
+          'ha'      => $dias ? ($v['area'] / $dias) : 0.0, // Média (ha/dia)
+          'hr'      => $dias ? ($v['h']    / $dias) : 0.0, // Média (h/dia)
+          // ponderadas por hora/área
+          'vel'     => $v['w_vel']  / $h,   // km/h
+          'rpm'     => $v['w_rpm']  / $h,
+          'cons'    => $v['w_clh']  / $h,   // l/h
+          'cons_ha' => $v['w_clha'] ? ($v['w_clha'] / $a) : 0.0, // l/ha (se existir)
+        ];
       }
     }
   }
-}
 
+  // 3.2) OPERADORES por Unidade > Frente > Frota
+  $operadores = [];
+  $top3 = [];
+  foreach ($sumOp as $un=>$byFr) {
+    foreach ($byFr as $fr=>$byEq) {
+      foreach ($byEq as $eq=>$byOp) {
+        $lista = [];
+        foreach ($byOp as $op=>$v) {
+          $h = max(0.0001, (float)$v['h']);
+          $a = max(0.0001, (float)$v['area']);
+          $dias = count($daysOp[$un][$fr][$eq][$op] ?? []);
+          $linha = [
+            'unidade'  => $un,
+            'frente'   => $fr,
+            'frota'    => $eq,
+            'operador' => $op,
+            'ha'       => $dias ? ($v['area'] / $dias) : 0.0, // ha/dia
+            'hr'       => $dias ? ($v['h']    / $dias) : 0.0, // h/dia
+            'vel'      => $v['w_vel']  / $h,
+            'rpm'      => $v['w_rpm']  / $h,
+            'cons'     => $v['w_clh']  / $h,
+            'cons_ha'  => $v['w_clha'] ? ($v['w_clha'] / $a) : 0.0,
+          ];
+          $operadores[] = $linha; 
+          $lista[] = $linha;
+        }
+        // top3 por Hr.Efet./D (empate: maior ha/dia)
+        usort($lista, function($a,$b){ if ($a['hr']===$b['hr']) return $b['ha']<=>$a['ha']; return $b['hr']<=>$a['hr']; });
+        $top3[$un][$fr][$eq] = array_slice($lista, 0, 3);
+      }
+    }
+  }
+  }
+}
 // --- DEDUPE rápido ---
 if (!empty($operadores)) {
   $seen = [];
   foreach ($operadores as $row) {
-    $k = $row['unidade'].'|'.$row['frota'].'|'.$row['operador'];
+    $k = $row['unidade'].'|'.$row['frente'].'|'.$row['frota'].'|'.$row['operador'];
     $seen[$k] = $row; // último ganha
   }
   $operadores = array_values($seen);
 }
 
-// dedupe do resumo por unidade+equipamento
+// dedupe do resumo por unidade+frente+equipamento
 if (!empty($resumo)) {
   $seenR = [];
   foreach ($resumo as $r) {
-    $k = $r['unidade'].'|'.$r['frota'];
-    // se já existir, mantém o de maior 'n' (melhor agregação); se não tiver, fica o último
+    $k = $r['unidade'].'|'.$r['frente'].'|'.$r['frota'];
     if (!isset($seenR[$k])) $seenR[$k] = $r;
   }
   $resumo = array_values($seenR);
@@ -307,9 +375,11 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
   <div class="card">
     <form method="post" enctype="multipart/form-data" class="row" action="<?= htmlspecialchars($_SERVER['REQUEST_URI']) ?>">
       <div>
-        <label><strong>Arquivo CSV</strong></label><br>
-        <input type="file" name="arquivo_csv" accept=".csv" required>
-        <div><small class="hint">Exporte do SGPA em CSV. Campos vazios de linhas “em escadinha” serão preenchidos automaticamente.</small></div>
+        <label><strong>Arquivo (CSV ou XLSX)</strong></label><br>
+        <input type="file" name="arquivo_csv" accept=".csv,.xlsx,.xls,.xlsm" required>
+        <input type="hidden" name="csv_emulado" id="csv_emulado" value="">
+        <input type="hidden" name="force_csv"   id="force_csv"   value="0">
+        <small class="hint">Aceita CSV, XLSX e XLS (XLS é convertido automaticamente). Campos vazios “em escadinha” serão preenchidos.</small>
       </div>
       <div>
         <label>Consumo (verde ≤)</label><br>
@@ -321,9 +391,49 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       </div>
       <div class="actions" style="align-self:flex-end">
         <button type="submit">Processar</button>
-        <button type="button" id="btnExport">Exportar PNG</button>
+        <button type="button" id="btnExport">Exportar PDF</button>
       </div>
     </form>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+    (function(){
+      const form      = document.querySelector('form.row');
+      const fileInput = form?.querySelector('input[type="file"][name="arquivo_csv"]');
+      const csvField  = document.getElementById('csv_emulado');
+      const forceFld  = document.getElementById('force_csv');
+
+      if (!form || !fileInput || !csvField || !forceFld) return;
+
+      form.addEventListener('submit', async function(e){
+        const f = fileInput.files && fileInput.files[0];
+        if (!f) return;
+
+        const name = f.name.toLowerCase();
+        const isXlsxLike = name.endsWith('.xlsx') || name.endsWith('.xlsm') || name.endsWith('.xls');
+
+        // Se for XLSX/XLSM/XLS -> converte p/ CSV no cliente e envia
+        if (!isXlsxLike) return;
+
+        e.preventDefault();
+        try {
+          const buf = await f.arrayBuffer();
+          const wb  = XLSX.read(buf, { type: 'array' });
+          const sh  = wb.SheetNames[0];
+          const ws  = wb.Sheets[sh];
+          const csv = XLSX.utils.sheet_to_csv(ws, { FS: ',', RS: '\n' });
+
+          csvField.value = csv;
+          forceFld.value = '1';
+
+          // Submete (sem depender do arquivo)
+          form.submit();
+        } catch(err) {
+          alert('Falha ao converter XLSX: ' + (err?.message || err));
+        }
+      }, { passive: false });
+    })();
+    </script>
+
     <?php if ($errors): ?>
       <div style="color:#b00020;margin-top:8px"><?= implode('<br>', array_map('htmlspecialchars',$errors)) ?></div>
     <?php endif; ?>
@@ -339,121 +449,388 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
   </div>
 
   <?php if ($resumo): ?>
-    <div class="kicker">Resumo por Unidade / Frota</div>
+    <div class="kicker">Resumo por Unidade / Frente / Frota</div>
     <?php
-      $byUn = [];
-      foreach ($resumo as $r) { $byUn[$r['unidade']][] = $r; }
-      foreach ($byUn as $un=>$linhas):
-    ?>
-      <div class="card">
-        <div class="badge"><?= htmlspecialchars($un) ?></div>
-        <table class="grid">
-          <thead><tr>
-            <th>Frota</th><th>ha/dia</th><th>Hr.Efet./D</th><th>Vel.Efe.</th><th>RPM Méd.</th><th>Cons. (l/h)</th>
-          </tr></thead>
-          <tbody>
-          <?php foreach ($linhas as $r): ?>
-            <tr>
-              <td><?= htmlspecialchars($r['frota']) ?></td>
-              <td><?= fmt2($r['ha']) ?></td>
-              <td><?= fmt2($r['hr']) ?></td>
-              <td><?= fmt2($r['vel']) ?></td>
-              <td><?= fmt2($r['rpm']) ?></td>
-              <?php $cls = cellClass($r['cons'], $okMax, $warnMax); ?>
-              <td class="<?= $cls ?>"><?= fmt2($r['cons']) ?></td>
-            </tr>
-          <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
-    <?php endforeach; ?>
-  <?php endif; ?>
+      // agrupa: Unidade > Frente
+      $byUnFr = [];
+      foreach ($resumo as $r) { $byUnFr[$r['unidade']][$r['frente']][] = $r; }
 
-  
-  <?php if ($operadores): ?>
-    <div class="kicker">Operadores por Frota (top 3 por Hr.Efet./D destacado)</div>
-    <?php
-      // agrupar Operadores por Unidade > Frota
-      $opsByUF = [];
-      foreach ($operadores as $row) {
-        $opsByUF[$row['unidade']][$row['frota']][] = $row;
-      }
-      foreach ($opsByUF as $un=>$byFrota):
+      foreach ($byUnFr as $un=>$byFr):
+        // ordenar frentes por número (e '—' por último)
+        $frKeys = array_keys($byFr);
+        usort($frKeys, function($a,$b){
+          if ($a==='—' && $b!=='—') return 1;
+          if ($b==='—' && $a!=='—') return -1;
+          $na = preg_replace('/\D+/', '', (string)$a);
+          $nb = preg_replace('/\D+/', '', (string)$b);
+          if ($na!=='' && $nb!=='') return (int)$na <=> (int)$nb;
+          return strcmp((string)$a,(string)$b);
+        });
     ?>
-      <div class="card">
-        <div class="badge"><?= htmlspecialchars($un) ?></div>
-        <?php foreach ($byFrota as $frota=>$rows): ?>
-          <div class="subbadge"><?= htmlspecialchars($frota) ?></div>
+      <div class="cards-grid cards-resumo">
+      <?php foreach ($frKeys as $frCode):
+        $linhas = $byFr[$frCode];
+
+        // ordena equipamentos numericamente
+        usort($linhas, function($a,$b){
+          $ea = (int)preg_replace('/\D+/', '', (string)$a['frota']);
+          $eb = (int)preg_replace('/\D+/', '', (string)$b['frota']);
+          return $ea <=> $eb;
+        });
+
+        $cardId = 'card-resumo-'
+          .preg_replace('/[^A-Za-z0-9_-]+/','-', $un)
+          .'-'.preg_replace('/[^A-Za-z0-9_-]+/','-', $frCode);
+        $pdfTitle = "Resumo — {$un} — Frente {$frCode}";
+      ?>
+        <div class="card" id="<?= htmlspecialchars($cardId) ?>" data-card-type="resumo" data-unidade="<?= htmlspecialchars($un) ?>" data-frente="<?= htmlspecialchars($frCode) ?>">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div class="badge"><?= htmlspecialchars($un) ?></div>
+            <div class="subbadge" style="margin:0">Frente <?= htmlspecialchars($frCode) ?></div>
+            <div style="margin-left:auto">
+              <button type="button" class="btnExportCard" data-target="<?= htmlspecialchars($cardId) ?>" data-title="<?= htmlspecialchars($pdfTitle) ?>">Exportar PDF (Resumo)</button>
+            </div>
+          </div>
+        
+      <div class="card-body">
+        <div class="table-wrap">
           <table class="grid">
             <thead>
               <tr>
-                <th style="min-width:260px">Operador</th>
+                <th>Frota</th>
                 <th>ha/dia</th>
                 <th>Hr.Efet./D</th>
                 <th>Vel.Efe.</th>
                 <th>RPM Méd.</th>
                 <th>Cons. (l/h)</th>
+                <th>Cons. (l/ha)</th>
               </tr>
             </thead>
             <tbody>
-              <?php
-                // who are top 3 for this unidade/frota?
-                $tops = $top3[$un][$frota] ?? [];
-                $topNames = array_map(fn($t)=>$t['operador'], $tops);
-                // ordenar por Hr.Efet./D desc, tie: ha/dia desc
-                usort($rows, function($a,$b){
-                  if ($a['hr'] === $b['hr']) return $b['ha'] <=> $a['ha'];
-                  return $b['hr'] <=> $a['hr'];
-                });
-                foreach ($rows as $r):
-                  $isTop = in_array($r['operador'], $topNames, true);
-                  $cls  = cellClass($r['cons'], $okMax, $warnMax);
-              ?>
-              <tr class="<?= $isTop ? 'top' : '' ?>">
-                <td>
-                  <?= $isTop ? '★ ' : '' ?>
-                  <?= htmlspecialchars($r['operador']) ?>
-                </td>
-                <td><?= fmt2($r['ha']) ?></td>
-                <td><?= fmt2($r['hr']) ?></td>
-                <td><?= fmt2($r['vel']) ?></td>
-                <td><?= fmt2($r['rpm']) ?></td>
-                <td class="<?= $cls ?>"><?= fmt2($r['cons']) ?></td>
-              </tr>
+              <?php foreach ($linhas as $r): ?>
+                <tr>
+                  <td><?= htmlspecialchars($r['frota']) ?></td>
+                  <td><?= fmt1($r['ha']) ?></td>
+                  <td><?= fmt1($r['hr']) ?></td>
+                  <td><?= fmt1($r['vel']) ?></td>
+                  <td><?= fmt1($r['rpm']) ?></td>
+                  <?php $cls = cellClass($r['cons'], $okMax, $warnMax); ?>
+                  <td class="<?= $cls ?>"><?= fmt2($r['cons']) ?></td>
+                  <td><?= fmt2($r['cons_ha']) ?></td>
+                </tr>
               <?php endforeach; ?>
             </tbody>
           </table>
-        <?php endforeach; ?>
+          </div>
+          </div>
+        </div>
+      <?php endforeach; ?>
       </div>
     <?php endforeach; ?>
   <?php endif; ?>
-</div>
-</div>
+  
+  <?php if ($operadores): ?>
+    <div class="kicker">Operadores por Frente / Frota (top 3 por Hr.Efet./D em destaque)</div>
 
-<!-- Exportar PNG (usa html2canvas se disponível; fallback para print) -->
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script>
-  (function(){
-    const btn = document.getElementById('btnExport');
-    if(!btn) return;
-    btn.addEventListener('click', function(){
-      const area = document.getElementById('export-area') || document.querySelector('.container');
-
-      if (window.html2canvas) {
-        const w = area.scrollWidth;
-        const h = area.scrollHeight;
-
-        html2canvas(area, {scale: 2, backgroundColor:'#ffffff'}).then(canvas => {
-          const a = document.createElement('a');
-          a.href = canvas.toDataURL('image/png');
-          a.download = 'relatorio_consumo.png';
-          a.click();
-        }).catch(() => window.print());
-      } else {
-        window.print();
+    <?php
+      // Agrupar por Unidade > Frente > Frota
+      $opsBy = [];
+      foreach ($operadores as $row) {
+        $opsBy[$row['unidade']][$row['frente']][$row['frota']][] = $row;
       }
+    ?>
+
+    <?php foreach ($opsBy as $un => $byFr): ?>
+      <?php
+        // Ordenar frentes por número (e '—' por último)
+        $frKeys = array_keys($byFr);
+        usort($frKeys, function ($a, $b) {
+          if ($a === '—' && $b !== '—') return 1;
+          if ($b === '—' && $a !== '—') return -1;
+          $na = preg_replace('/\D+/', '', (string)$a);
+          $nb = preg_replace('/\D+/', '', (string)$b);
+          if ($na !== '' && $nb !== '') return (int)$na <=> (int)$nb;
+          return strcmp((string)$a, (string)$b);
+        });
+      ?>
+
+      <div class="cards-grid cards-ops"><!-- ABRE 2 COLUNAS -->
+
+        <?php foreach ($frKeys as $frCode): ?>
+          <?php
+            // Ordenar frotas por número
+            $frotas = array_keys($byFr[$frCode]);
+            usort($frotas, function ($a, $b) {
+              $ea = (int)preg_replace('/\D+/', '', (string)$a);
+              $eb = (int)preg_replace('/\D+/', '', (string)$b);
+              return $ea <=> $eb;
+            });
+
+            $cardId   = 'card-ops-'
+                      . preg_replace('/[^A-Za-z0-9_-]+/', '-', $un)
+                      . '-' . preg_replace('/[^A-Za-z0-9_-]+/', '-', $frCode);
+            $pdfTitle = "Operadores — {$un} — Frente {$frCode}";
+          ?>
+
+          <div class="card"
+              id="<?= htmlspecialchars($cardId) ?>"
+              data-card-type="operadores"
+              data-unidade="<?= htmlspecialchars($un) ?>"
+              data-frente="<?= htmlspecialchars($frCode) ?>">
+
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <div class="badge"><?= htmlspecialchars($un) ?></div>
+              <div class="subbadge" style="margin:0">Frente <?= htmlspecialchars($frCode) ?></div>
+              <div style="margin-left:auto">
+                <button type="button"
+                        class="btnExportCard"
+                        data-target="<?= htmlspecialchars($cardId) ?>"
+                        data-title="<?= htmlspecialchars($pdfTitle) ?>">
+                  Exportar PDF (Operadores)
+                </button>
+              </div>
+            </div>
+
+            <div class="card-body">
+              <!-- ⬇️ UMA área rolável por card -->
+              <div class="table-wrap">
+
+                <?php foreach ($frotas as $frota): ?>
+                  <?php
+                    $rows = $byFr[$frCode][$frota];
+
+                    // ordem por Hr desc, empate por ha desc
+                    usort($rows, function ($a, $b) {
+                      if ($a['hr'] === $b['hr']) return $b['ha'] <=> $a['ha'];
+                      return $b['hr'] <=> $a['hr'];
+                    });
+
+                    $tops     = $top3[$un][$frCode][$frota] ?? [];
+                    $topNames = array_map(fn($t) => $t['operador'], $tops);
+                  ?>
+
+                  <div class="frota-section">
+                    <div class="subbadge" style="margin-left:6px">Frota <?= htmlspecialchars($frota) ?></div>
+
+                    <table class="grid">
+                      <thead>
+                        <tr>
+                          <th style="min-width:260px">Operador</th>
+                          <th>ha/dia</th>
+                          <th>Hr.Efet./D</th>
+                          <th>Vel.Efe.</th>
+                          <th>RPM Méd.</th>
+                          <th>Cons. (l/h)</th>
+                          <th>Cons. (l/ha)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <?php foreach ($rows as $r): ?>
+                          <?php
+                            $isTop = in_array($r['operador'], $topNames, true);
+                            $cls   = cellClass($r['cons'], $okMax, $warnMax);
+                          ?>
+                          <tr class="<?= $isTop ? 'top' : '' ?>">
+                            <td><?= $isTop ? '★ ' : '' ?><?= htmlspecialchars($r['operador']) ?></td>
+                            <td><?= fmt1($r['ha']) ?></td>
+                            <td><?= fmt1($r['hr']) ?></td>
+                            <td><?= fmt1($r['vel']) ?></td>
+                            <td><?= fmt1($r['rpm']) ?></td>
+                            <td class="<?= $cls ?>"><?= fmt2($r['cons']) ?></td>
+                            <td><?= fmt2($r['cons_ha']) ?></td>
+                          </tr>
+                        <?php endforeach; ?>
+                      </tbody>
+                    </table>
+                  </div><!-- .frota-section -->
+
+                <?php endforeach; ?>
+
+              </div><!-- .table-wrap -->
+            </div><!-- .card-body -->
+          </div><!-- .card -->
+
+        <?php endforeach; ?>
+
+      </div><!-- .cards-grid -->
+    <?php endforeach; ?>
+  <?php endif; ?>
+
+<!-- jsPDF + html2canvas -->
+<script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script>
+(function(){
+  const PX_PER_MM = 3.7795275591; // 96dpi
+  const A4_W = 210 * PX_PER_MM;
+  const A4_H = 297 * PX_PER_MM;
+  const PAD_MM = 10;
+  const PAD_PX = PAD_MM * PX_PER_MM;
+
+  function ensureSandbox(){
+    let sb = document.getElementById('export-sandbox');
+    if (!sb) {
+      sb = document.createElement('div');
+      sb.id = 'export-sandbox';
+      sb.style.position = 'fixed';
+      sb.style.left = '-99999px';
+      sb.style.top = '0';
+      sb.style.width = '210mm';
+      document.body.appendChild(sb);
+    }
+    sb.innerHTML = '';
+    return sb;
+  }
+
+  function buildReportTitle(text){
+    const wrap = document.createElement('div');
+    wrap.className = 'pdf-title-block';
+    const h = document.createElement('div');
+    h.className = 'pdf-title';
+    h.textContent = text || 'Relatório de Consumo';
+    const line = document.createElement('div');
+    line.className = 'pdf-title-line';
+    wrap.appendChild(h);
+    wrap.appendChild(line);
+    return wrap;
+  }
+
+  function newExportPage(){
+    const page = document.createElement('div');
+    page.className = 'export-page';
+    const inner = document.createElement('div');
+    inner.className = 'export-inner';
+    inner.style.width = (A4_W - PAD_PX * 2) + 'px';
+    page.appendChild(inner);
+    return { page, inner };
+  }
+
+  function buildTableSkeleton(grid){
+    const table = document.createElement('table');
+    table.className = 'grid';
+    const theadOrig = grid.querySelector('thead');
+    const thead = theadOrig ? theadOrig.cloneNode(true) : document.createElement('thead');
+    const tbody = document.createElement('tbody');
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    return { table, thead, tbody };
+  }
+
+  function paginateGridInto(pagesAcc, grid, firstPage, titleOnce){
+    const sandbox = document.getElementById('export-sandbox');
+    let first = firstPage;
+    const rows = Array.from(grid.querySelectorAll('tbody tr'));
+    let idx = 0;
+
+    while (idx < rows.length || first){
+      const { page, inner } = newExportPage();
+      sandbox.appendChild(page);
+
+      if (titleOnce && first) inner.appendChild(buildReportTitle(titleOnce));
+
+      const { table, thead, tbody } = buildTableSkeleton(grid);
+      inner.appendChild(table);
+
+      const avail = A4_H - PAD_PX*2;
+      const headH = (titleOnce && first ? (inner.querySelector('.pdf-title-block')?.offsetHeight || 0) : 0);
+      const theadH = thead.offsetHeight || 0;
+      const budget = Math.max(300, avail - headH - theadH - 8);
+
+      let atLeastOne = false;
+      while (idx < rows.length){
+        const tr = rows[idx].cloneNode(true);
+        tbody.appendChild(tr);
+        if (tbody.offsetHeight > budget){
+          tbody.removeChild(tr);
+          break;
+        }
+        idx++;
+        atLeastOne = true;
+      }
+      if (!atLeastOne && idx < rows.length){
+        tbody.appendChild(rows[idx].cloneNode(true));
+        idx++;
+      }
+
+      pagesAcc.push(page);
+      first = false;
+    }
+  }
+
+  async function exportCard(cardEl, title){
+    if (!cardEl) return;
+
+    // aguarda libs
+    let jsPDFCtor, h2c;
+    try {
+      const libs = await new Promise((resolve, reject)=>{
+        let tries=0;
+        (function check(){
+          const j = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : null;
+          const h = window.html2canvas || null;
+          if (j && h) return resolve({jsPDFCtor:j, h2c:h});
+          if (++tries > 200) return reject(new Error('Libs não carregadas'));
+          setTimeout(check, 25);
+        })();
+      });
+      jsPDFCtor = libs.jsPDFCtor;
+      h2c = libs.h2c;
+    } catch(e){
+      alert('Falha ao carregar bibliotecas de exportação.');
+      return;
+    }
+
+    const sandbox = ensureSandbox();
+    const pages = [];
+
+    // Header chips (badge/subbadge) da própria card
+    const { page: p0, inner: in0 } = newExportPage();
+    sandbox.appendChild(p0);
+    in0.appendChild(buildReportTitle(title || 'Relatório de Consumo'));
+    Array.from(cardEl.querySelectorAll('.badge, .subbadge')).forEach(h=>{
+      const chip = document.createElement('div');
+      chip.className = 'pdf-chip';
+      chip.textContent = h.textContent;
+      in0.appendChild(chip);
     });
-  })();
+    pages.push(p0);
+
+    // Quebra cada tabela desta card
+    const grids = Array.from(cardEl.querySelectorAll('table.grid'));
+    let firstTable = false; // já colocamos um título na capa acima
+    for (const grid of grids){
+      paginateGridInto(pages, grid, firstTable, null);
+      firstTable = false;
+    }
+
+    // Monta PDF
+    const pdf = new jsPDFCtor({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    for (let i=0; i<pages.length; i++){
+      if (i>0) pdf.addPage();
+      await new Promise(r => setTimeout(r, 0));
+      const canvas = await h2c(pages[i], {
+        scale: 2, backgroundColor: '#fff', useCORS: true, scrollY: 0,
+        allowTaint: true, logging: false
+      });
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+    }
+    const safeTitle = (title || 'relatorio').replace(/[^\w\-]+/g,'_').toLowerCase();
+    pdf.save(`${safeTitle}.pdf`);
+    sandbox.remove();
+  }
+
+  // liga os botões de export por card
+  document.querySelectorAll('.btnExportCard').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-target');
+      const title = btn.getAttribute('data-title') || 'Relatório de Consumo';
+      const card = document.getElementById(id);
+      exportCard(card, title);
+    });
+  });
+})();
 </script>
 
 <?php require_once __DIR__ . '/../../../../app/includes/footer.php'; ?>

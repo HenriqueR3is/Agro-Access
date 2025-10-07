@@ -1,89 +1,700 @@
-/* ===== Paleta / Tokens ===== */
+/* ==========================================================================
+   1) Design tokens / Paleta
+   ========================================================================== */
+
 :root {
-  --primary:#2b772f;        /* verde principal */
-  --primary-600:#256a29;    /* hover */
-  --primary-700:#1f5723;    /* active/text */
-  --accent:#f29f3c;         /* laranja (rótulos, botão do arquivo) */
-  --ink:#333333;
-  --header:#263238;         /* cabeçalho da tabela */
-  --muted:#f6faf6;
+  --primary:        #2b772f;
+  --primary-600:    #256a29;
+  --primary-700:    #1f5723;
+  --accent:         #f29f3c;
+
+  --ink:            #333333;
+  --header:         #263238;
+  --muted:          #f6faf6;
+
+  /* Tokens específicos p/ PDF/export */
+  --pdf-blue:       #006699;
 }
 
-/* ===== Layout básico ===== */
-.container{max-width:1200px;margin:0 auto;padding:12px}
-.card{background:#fff;border:1px solid #eee;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:12px;margin-bottom:16px}
-.row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end}
-.row .actions{margin-left:auto;display:flex;gap:8px}
+/* ==========================================================================
+   2) Base / Reset leve
+   ========================================================================== */
 
-/* ===== Tabela ===== */
-.grid{width:100%;border-collapse:collapse;margin-top:8px}
-.grid th,.grid td{border:1px solid #e0e0e0;padding:6px 10px;font-size:14px;text-align:right}
-.grid th:first-child,.grid td:first-child{text-align:left}
-.grid thead th{background:var(--header);color:#fff;text-align:center}
-.grid tr:nth-child(even){background:#fafafa}
-
-/* ===== Badges / Títulos ===== */
-.kicker{background:var(--accent);color:#fff;padding:6px 10px;border-radius:8px;font-weight:700;display:inline-block;margin:18px 0 8px}
-.badge{display:inline-block;background:#eef3f2;color:var(--ink);padding:4px 10px;border-radius:8px;font-weight:600;margin-bottom:8px}
-.subbadge{margin:8px 0 6px;font-weight:700;color:#555}
-.container>h2{margin:4px 0 12px;font-weight:800;color:var(--ink)}
-
-/* ===== Estados (células/linhas) ===== */
-td.ok{background:#e6f4ea}
-td.warn{background:#fff7e0}
-td.bad{background:#fde2e1}
-.top{background:#f1f7ff}
-small.hint{color:#5f6b76;display:block;margin-top:4px}
-
-/* ===== Controles da barra de ações ===== */
-
-/* Número (metas) */
-.row input[type="number"]{
-  appearance:textfield;border:1px solid #d8e2d9;background:#fff;color:var(--ink);
-  padding:8px 10px;border-radius:10px;min-width:90px;font-size:14px;
-  transition:border-color .15s, box-shadow .15s;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
-.row input[type="number"]:focus{
-  outline:none;border-color:var(--primary-600);
-  box-shadow:0 0 0 3px rgba(43,119,47,.18);
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  line-height: 1.4;
+  background: #fafafa;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* ==========================================================================
+   3) Layout geral
+   ========================================================================== */
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px;
+}
+
+.container > h2 {
+  margin: 4px 0 12px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+/* Cards básicos */
+.card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+/* Grid de cards em 2 colunas (comparativo lado a lado) */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(560px, 1fr));
+  gap: 32px;
+  align-items: stretch;         /* força mesma altura por linha */
+}
+
+.cards-grid > .card {
+  margin: 0;
+  height: 100%;
+  display: flex;                /* permite header/tabela/footer internos */
+  flex-direction: column;
+}
+
+/* Responsivo: 1 coluna em telas menores */
+@media (max-width: 1200px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   4) Barra de ações / Formulário (linha superior)
+   ========================================================================== */
+
+.row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.row .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* Inputs numéricos */
+.row input[type="number"] {
+  appearance: textfield;
+  border: 1px solid #d8e2d9;
+  background: #fff;
+  color: var(--ink);
+  padding: 8px 10px;
+  border-radius: 10px;
+  min-width: 90px;
+  font-size: 14px;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.row input[type="number"]:focus {
+  outline: none;
+  border-color: var(--primary-600);
+  box-shadow: 0 0 0 3px rgba(43, 119, 47, .18);
+}
+
 .row input[type="number"]::-webkit-outer-spin-button,
-.row input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-
-/* Arquivo (botão laranja embutido) */
-.row input[type="file"]{border:1px solid #e3e3e3;background:#fff;padding:6px;border-radius:10px;font-size:14px}
-.row input[type="file"]::file-selector-button,
-.row input[type="file"]::-webkit-file-upload-button{
-  margin-right:10px;padding:8px 12px;border:none;border-radius:8px;background:var(--accent);
-  color:#fff;font-weight:700;cursor:pointer;transition:transform .08s, background .15s, box-shadow .15s;
+.row input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
+
+/* Input de arquivo (com botão embutido) */
+.row input[type="file"] {
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  padding: 6px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.row input[type="file"]::file-selector-button,
+.row input[type="file"]::-webkit-file-upload-button {
+  margin-right: 10px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform .08s, background .15s, box-shadow .15s;
+}
+
 .row input[type="file"]::file-selector-button:hover,
-.row input[type="file"]::-webkit-file-upload-button:hover{background:#d6851f}
+.row input[type="file"]::-webkit-file-upload-button:hover {
+  background: #d6851f;
+}
+
 .row input[type="file"]::file-selector-button:active,
-.row input[type="file"]::-webkit-file-upload-button:active{transform:translateY(1px)}
+.row input[type="file"]::-webkit-file-upload-button:active {
+  transform: translateY(1px);
+}
 
 /* Botões (Processar / Exportar) */
-.row .actions button{
-  appearance:none;border:1px solid transparent;border-radius:10px;padding:10px 14px;
-  font-weight:800;letter-spacing:.2px;cursor:pointer;
-  transition:transform .08s, background .15s, color .15s, box-shadow .15s, border-color .15s;
+.row .actions button {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  cursor: pointer;
+  transition: transform .08s, background .15s, color .15s, box-shadow .15s, border-color .15s;
 }
+
+.row .actions button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  box-shadow: none !important;
+}
+
 /* Processar = verde sólido */
-.row .actions button[type="submit"]{
-  background:var(--primary);color:#fff;box-shadow:0 2px 6px rgba(31,87,35,.28);
+.row .actions button[type="submit"] {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(31, 87, 35, .28);
 }
-.row .actions button[type="submit"]:hover{background:var(--primary-600);box-shadow:0 4px 10px rgba(31,87,35,.28)}
-.row .actions button[type="submit"]:active{transform:translateY(1px)}
-.row .actions button[type="submit"]:focus-visible{
-  outline:none;box-shadow:0 0 0 3px rgba(43,119,47,.22);
+
+.row .actions button[type="submit"]:hover {
+  background: var(--primary-600);
+  box-shadow: 0 4px 10px rgba(31, 87, 35, .28);
 }
-/* Exportar PNG = outline verde */
-.row .actions #btnExport{
-  background:#fff;color:var(--primary-700);border-color:var(--primary-600);
+
+.row .actions button[type="submit"]:active {
+  transform: translateY(1px);
 }
-.row .actions #btnExport:hover{background:var(--muted)}
-.row .actions #btnExport:active{transform:translateY(1px)}
-.row .actions #btnExport:focus-visible{
-  outline:none;box-shadow:0 0 0 3px rgba(43,119,47,.18);
+
+.row .actions button[type="submit"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(43, 119, 47, .22);
 }
-.row .actions button:disabled{opacity:.55;cursor:not-allowed;box-shadow:none!important}
+
+/* Exportar PDF (topo) = contorno verde */
+.row .actions #btnExport {
+  background: #fff;
+  color: var(--primary-700);
+  border-color: var(--primary-600);
+}
+
+.row .actions #btnExport:hover {
+  background: var(--muted);
+}
+
+.row .actions #btnExport:active {
+  transform: translateY(1px);
+}
+
+.row .actions #btnExport:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(43, 119, 47, .18);
+}
+
+small.hint {
+  color: #5f6b76;
+  display: block;
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   5) Tabelas (.grid)
+   ========================================================================== */
+
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  table-layout: auto;                 /* deixa o browser ajustar colunas */
+}
+
+.grid thead th {
+  background: var(--header);
+  color: #fff;
+  text-align: center;
+  font-size: 13px;
+}
+
+.grid th,
+.grid td {
+  border: 1px solid #e0e0e0;
+  padding: 6px 10px;
+  font-size: 14px;
+  line-height: 1.25;
+  vertical-align: middle;
+}
+
+/* 1ª coluna (texto: Frota/Operador) : largura confortável e quebra */
+.grid th:first-child,
+.grid td:first-child {
+  min-width: 260px;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+/* Demais colunas = numéricas, compactas e alinhadas à direita */
+.grid th:nth-child(n+2),
+.grid td:nth-child(n+2) {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* Listrado */
+.grid tr:nth-child(even) {
+  background: #fafafa;
+}
+
+/* ==========================================================================
+   6) Badges / Títulos / Navegação de frentes
+   ========================================================================== */
+
+.kicker {
+  background: var(--accent);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  display: inline-block;
+  margin: 18px 0 8px;
+}
+
+.badge {
+  display: inline-block;
+  background: #eef3f2;
+  color: var(--ink);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.subbadge {
+  margin: 8px 0 6px;
+  font-weight: 700;
+  color: #555;
+}
+
+/* Chips de navegação (quando existirem) */
+.frentes-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.frentes-nav .chip {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #dbe6db;
+  background: #f6faf6;
+  color: #264;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.frentes-nav .chip:hover {
+  background: #eef6ee;
+}
+
+/* Botão de exportação por card */
+.card .btnExportCard {
+  border: 1px solid var(--primary-600);
+  background: #fff;
+  color: var(--primary-700);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .15s, transform .08s;
+}
+
+.card .btnExportCard:hover {
+  background: var(--muted);
+}
+
+.card .btnExportCard:active {
+  transform: translateY(1px);
+}
+
+/* ==========================================================================
+   7) Estados/Cores nas células/linhas
+   ========================================================================== */
+
+td.ok   { background: #e6f4ea; }
+td.warn { background: #fff7e0; }
+td.bad  { background: #fde2e1; }
+
+tr.top td {
+  background: #f1f7ff;
+}
+
+/* ==========================================================================
+   8) Exportação em PDF (html2canvas/jsPDF)
+   - Estes estilos são usados no "sandbox" de export, não no layout normal
+   ========================================================================== */
+
+#export-sandbox {
+  width: 210mm;
+}
+
+.export-page {
+  width: 210mm;
+  min-height: 297mm;
+  background: #fff;
+}
+
+.export-inner {
+  padding: 10mm;
+}
+
+.export-page * {
+  box-sizing: border-box;
+}
+
+.export-page .pdf-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: #333;
+  line-height: 1.15;
+}
+
+.export-page .pdf-title-line {
+  height: 4px;
+  width: 100%;
+  background: var(--pdf-blue);
+  border-radius: 2px;
+  margin-top: 6px;
+}
+
+.export-page .pdf-chip {
+  display: inline-block;
+  margin: 8px 8px 0 0;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #eef3f2;
+  border: 1px solid #dde5e2;
+  font-weight: 600;
+  font-size: 12px;
+  color: #334;
+}
+
+/* Tabelas dentro da página de exportação */
+.export-page table.grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed; /* p/ previsibilidade de quebra no PDF */
+  font-size: 12px;
+}
+
+.export-page table.grid th,
+.export-page table.grid td {
+  border: 1px solid #e6e6e6;
+  padding: 5px 7px;
+  line-height: 1.15;
+  vertical-align: middle;
+}
+
+.export-page table.grid thead th {
+  background: var(--header);
+  color: #fff;
+}
+
+.export-page table.grid tr.top td {
+  background: #fff9e6;
+}
+
+/* ==========================================================================
+   9) Utilidades / Print
+   ========================================================================== */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* =========================
+   Grid de cards (2 colunas)
+   ========================= */
+.cards-grid{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(640px, 1fr)); /* 640px dá folga pra 7 colunas */
+  gap: 16px;
+  align-items: stretch; /* alturas iguais na linha */
+}
+@media (max-width: 1280px){
+  .cards-grid{ grid-template-columns: 1fr; }
+}
+.cards-grid > .card{
+  margin: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* =========================
+   Tabela dentro do card
+   ========================= */
+/* wrapper rolável vertical; segura qualquer resíduo horizontal */
+.table-wrap{
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;              /* evita barra horizontal */
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  background: #fff;
+}
+
+/* layout fixo + limites de largura -> impede “estouro” */
+.table-wrap .grid{
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;             /* chave do controle de largura */
+  font-size: 14px;
+}
+
+/* cabeçalho pode quebrar (ajuda a caber) */
+.table-wrap .grid thead th{
+  background: #263238;
+  color: #fff;
+  text-align: center;
+  padding: 8px 10px;
+  white-space: normal;
+  hyphens: auto;
+}
+
+/* células base */
+.table-wrap .grid th,
+.table-wrap .grid td{
+  border: 1px solid #e0e0e0;
+  padding: 6px 10px;
+  line-height: 1.25;
+  vertical-align: middle;
+  overflow: hidden;                /* garante que nada “sangre” */
+  text-overflow: ellipsis;
+}
+
+/* ===== Larguras por tipo de card =====
+   7 colunas no resumo:
+   [Frota] [ha/dia] [Hr] [Vel] [RPM] [l/h] [l/ha]
+*/
+
+/* 1ª coluna é texto (pode quebrar) */
+.card[data-card-type="resumo"] .grid th:nth-child(1),
+.card[data-card-type="resumo"] .grid td:nth-child(1){
+  width: 32%;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Numéricas compactas por “ch” (tamanho de dígitos) */
+.card[data-card-type="resumo"] .grid th:nth-child(n+2),
+.card[data-card-type="resumo"] .grid td:nth-child(n+2){
+  width: 9ch;              /* cabe “9.999,99” tranquilo */
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* ajustar RPM/l/ha um pouquinho mais largos, se quiser */
+.card[data-card-type="resumo"] .grid th:nth-child(5),
+.card[data-card-type="resumo"] .grid td:nth-child(5){ width: 10ch; } /* RPM */
+.card[data-card-type="resumo"] .grid th:nth-child(7),
+.card[data-card-type="resumo"] .grid td:nth-child(7){ width: 10ch; } /* l/ha */
+
+/* ===== Operadores (1ª coluna é nome - precisa de mais espaço) ===== */
+.card[data-card-type="operadores"] .grid th:nth-child(1),
+.card[data-card-type="operadores"] .grid td:nth-child(1){
+  width: 36%;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Demais colunas numéricas (mesma lógica do resumo) */
+.card[data-card-type="operadores"] .grid th:nth-child(n+2),
+.card[data-card-type="operadores"] .grid td:nth-child(n+2){
+  width: 9ch;
+  white-space: nowrap;
+  text-align: right;
+}
+.card[data-card-type="operadores"] .grid th:nth-child(7),
+.card[data-card-type="operadores"] .grid td:nth-child(7){ width: 10ch; } /* l/ha */
+
+/* listrado básico */
+.table-wrap .grid tbody tr:nth-child(even){ background:#fafafa; }
+
+/* estados/coringas que você já usa */
+td.ok{ background:#e6f4ea; }
+td.warn{ background:#fff7e0; }
+td.bad{ background:#fde2e1; }
+tr.top td{ background:#f1f7ff; }
+
+/* =========================================================
+   FIX: cards mais largos + cabeçalho sem cortar
+   (cole no FINAL do CSS atual)
+   ========================================================= */
+
+/* 1) container e grid de cards um pouco maiores */
+.container{
+  max-width: 1400px; /* antes 1200px */
+}
+
+.cards-grid{
+  grid-template-columns: repeat(2, minmax(680px, 1fr)); /* antes 560/640px */
+  gap: 24px; /* um respiro a mais */
+}
+
+@media (max-width: 1280px){
+  .cards-grid{ grid-template-columns: 1fr; }
+}
+
+/* 2) cabeçalho da tabela: pode quebrar e não recebe ellipsis */
+.table-wrap .grid thead th{
+  white-space: normal;     /* pode quebrar */
+  overflow: visible;       /* não esconde */
+  text-overflow: clip;     /* sem "..." */
+  line-height: 1.35;       /* mais alto p/ 2 linhas */
+  padding: 10px 12px;      /* respiro */
+  font-size: 13.5px;       /* levemente maior */
+}
+
+/* 3) larguras das colunas — RESUMO
+   Frota | ha/dia | Hr | Vel | RPM | l/h | l/ha
+*/
+.card[data-card-type="resumo"] .grid th:nth-child(1),
+.card[data-card-type="resumo"] .grid td:nth-child(1){
+  width: 38%;              /* mais espaço p/ “Frota” */
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.card[data-card-type="resumo"] .grid th:nth-child(2),
+.card[data-card-type="resumo"] .grid td:nth-child(2),
+.card[data-card-type="resumo"] .grid th:nth-child(3),
+.card[data-card-type="resumo"] .grid td:nth-child(3),
+.card[data-card-type="resumo"] .grid th:nth-child(4),
+.card[data-card-type="resumo"] .grid td:nth-child(4){
+  width: 12ch;             /* ha/dia, Hr, Vel um pouco mais largos */
+}
+
+.card[data-card-type="resumo"] .grid th:nth-child(5),
+.card[data-card-type="resumo"] .grid td:nth-child(5),  /* RPM */
+.card[data-card-type="resumo"] .grid th:nth-child(6),
+.card[data-card-type="resumo"] .grid td:nth-child(6),  /* l/h  */
+.card[data-card-type="resumo"] .grid th:nth-child(7),
+.card[data-card-type="resumo"] .grid td:nth-child(7){  /* l/ha */
+  width: 13ch;             /* garante “Cons. (l/ha)” inteiro (pode quebrar) */
+}
+
+/* 4) larguras das colunas — OPERADORES
+   Operador | ha/dia | Hr | Vel | RPM | l/h | l/ha
+*/
+.card[data-card-type="operadores"] .grid th:nth-child(1),
+.card[data-card-type="operadores"] .grid td:nth-child(1){
+  width: 44%;              /* nome do operador precisa de mais espaço */
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.card[data-card-type="operadores"] .grid th:nth-child(2),
+.card[data-card-type="operadores"] .grid td:nth-child(2),
+.card[data-card-type="operadores"] .grid th:nth-child(3),
+.card[data-card-type="operadores"] .grid td:nth-child(3),
+.card[data-card-type="operadores"] .grid th:nth-child(4),
+.card[data-card-type="operadores"] .grid td:nth-child(4){
+  width: 12ch;
+}
+
+.card[data-card-type="operadores"] .grid th:nth-child(5),
+.card[data-card-type="operadores"] .grid td:nth-child(5),
+.card[data-card-type="operadores"] .grid th:nth-child(6),
+.card[data-card-type="operadores"] .grid td:nth-child(6),
+.card[data-card-type="operadores"] .grid th:nth-child(7),
+.card[data-card-type="operadores"] .grid td:nth-child(7){
+  width: 13ch;
+}
+
+/* 1) Linhas mais compactas (só body da tabela) */
+.table-wrap .grid tbody td {
+  padding: 4px 8px;      /* antes 6px 10px */
+  line-height: 1.5;     /* mais baixinho */
+}
+
+/* Cabeçalho ainda legível, mas não “alto” demais */
+.table-wrap .grid thead th {
+  padding: 8px 10px;     /* antes 8~10 / 10~12 */
+  line-height: 1.25;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* 2) No card de OPERADORES, deixe a tabela flexível:
+      - layout “auto” pra 1ª coluna (Operador) absorver o espaço
+      - colunas numéricas mínimas e sem quebra
+*/
+.card[data-card-type="operadores"] .grid {
+  table-layout: auto;               /* libera a 1ª coluna pra crescer */
+}
+
+/* 1ª coluna = Operador (ocupa o resto) */
+.card[data-card-type="operadores"] .grid th:nth-child(1),
+.card[data-card-type="operadores"] .grid td:nth-child(1) {
+  white-space: normal;              /* pode quebrar nome grande */
+  word-break: break-word;
+  text-align: left;
+}
+
+/* Demais colunas numéricas = mínimas, sem quebra */
+.card[data-card-type="operadores"] .grid th:nth-child(n+2),
+.card[data-card-type="operadores"] .grid td:nth-child(n+2) {
+  width: 1%;                        /* “encolhe” ao mínimo */
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* Se quiser segurar um pouquinho mais espaço pra l/ha (opcional) */
+.card[data-card-type="operadores"] .grid th:nth-child(7),
+.card[data-card-type="operadores"] .grid td:nth-child(7) {
+  min-width: 9ch;                   /* “9.999,99” cabe folgado */
+}
