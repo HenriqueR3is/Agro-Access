@@ -944,7 +944,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
 
     const inner = document.createElement('div');
     inner.className = 'export-inner';
-    inner.style.width = (A4_W - PAD_PX * 2) + 'px';
+//    inner.style.width = (A4_W - PAD_PX * 2) + 'px';
 
     if (includeHeader) {
     inner.appendChild(buildReportTitle());    // <=== TÍTULO DO RELATÓRIO

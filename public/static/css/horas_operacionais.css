@@ -369,3 +369,58 @@
 .export-page .table tr.subtotal-row td.right{
   text-align: right;
 }
+
+/* === Alinhamento vertical consistente (tela e export) === */
+.table thead th,
+.table tbody td {
+  vertical-align: middle;
+  line-height: 1.20;      /* iguala o thead ao tbody */
+}
+
+.export-page .table thead th,
+.export-page .table tbody td {
+  vertical-align: middle;
+  line-height: 1.15;      /* export já usa 1.15 no corpo; iguala thead */
+}
+
+/* Deixa os paddings simétricos (evita parecer “alto” ou “baixo”) */
+.table th, .table td { padding-top: 7px; padding-bottom: 7px; }
+.export-page .table th, .export-page .table td { padding-top: 6px; padding-bottom: 6px; }
+
+/* === Subtotal: não remove a borda de cima e não usa box-shadow que engana o olho === */
+.table tr.subtotal-row td,
+.export-page .table tr.subtotal-row td{
+  font-weight: 800;
+  color: #1a1a1a;
+  /* volta a ter borda em cima pra equilibrar a altura visual */
+  border-top: 1px solid #cfe3f3 !important;
+  /* tira o box-shadow que “puxava” o conteúdo pra cima */
+  box-shadow: none !important;
+  /* mantém o fundo, e adiciona uma linha fininha no topo via background, sem mexer em layout */
+  background:
+    linear-gradient(#d9ecfb, #d9ecfb) 0 0 / 100% 2px no-repeat,
+    #e6f2fa !important;
+  white-space: normal !important; /* evita estourar no export */
+}
+
+/* A primeira linha marcada de cada operador continua destacada,
+   mas com padding igual às demais (altura homogênea) */
+.table tbody tr.group-start td,
+.export-page .table tbody tr.group-start td{
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+/* === ocultar badges e "Linhas:" no EXPORT (html2canvas/jsPDF) === */
+.export-page .frente-badges,
+.export-page .meta-line {
+  display: none !important;
+}
+
+/* === ocultar também na impressão do navegador === */
+@media print {
+  .frente-badges,
+  .meta-line {
+    display: none !important;
+  }
+}
