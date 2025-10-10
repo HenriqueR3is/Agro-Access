@@ -424,3 +424,42 @@
     display: none !important;
   }
 }
+
+/* pinta a linha toda */
+.table tr.meta-ok    td { background:#e6f4ea !important; color:#1a1a1a; font-weight: bold; }
+.table tr.meta-warn  td { background:#fff7e0 !important; color:#1a1a1a; font-weight: bold; }
+.table tr.meta-bad   td { background:#fde2e1 !important; color:#1a1a1a; font-weight: bold; }
+
+/* export */
+.export-page .table tr.meta-ok   td { background:#e6f4ea !important; color:#1a1a1a; }
+.export-page .table tr.meta-warn td { background:#fff7e0 !important; color:#1a1a1a; }
+.export-page .table tr.meta-bad  td { background:#fde2e1 !important; color:#1a1a1a; }
+
+/* mantém o subtotal com sua cor própria: */
+.table tr.subtotal-row td,
+.export-page .table tr.subtotal-row td { background:#e6f2fa !important; }
+
+/* deixa cada bloco (label+campo) alinhado e com espaçamento */
+.row { align-items: flex-start; }                   /* em vez de flex-end */
+.row > div { display:grid; }
+
+/* numéricos – mesmo visual dos outros campos */
+.row input[type="number"]{
+  border:1px solid #d8dee6; border-radius:10px; padding:8px 10px; min-width:100px;
+}
+.row input[type="number"]:focus{
+  outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(43,119,47,.18);
+}
+
+/* multi-select bonito e consistente */
+#metaOps{
+  min-width:300px; max-width:520px; min-height:168px;
+  border:1px solid #d8dee6; border-radius:10px; padding:6px;
+  background:#fff; color:var(--ink); font-size:14px;
+}
+#metaOps:disabled{ opacity:.6; background:#f7f7f7; cursor:not-allowed; }
+#metaOps:focus{
+  outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(43,119,47,.18);
+}
+/* melhora a legibilidade dos itens dentro do multi-select */
+#metaOps option{ padding:4px 6px; }

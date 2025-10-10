@@ -361,6 +361,11 @@ try {
   // se der erro, seguimos sem frente (não quebra a página)
 }
 
+/* ========== Metas ========== */
+$META_OK_MIN   = isset($_POST['meta_ok'])   ? (float)$_POST['meta_ok']   : 5.0; // minutos (verde ≤)
+$META_WARN_MIN = isset($_POST['meta_warn']) ? (float)$_POST['meta_warn'] : 8.0; // minutos (amarelo ≤)
+$META_OPS      = isset($_POST['meta_ops'])  ? array_values(array_filter((array)$_POST['meta_ops'])) : [];
+
 /* ========= Import ========= */
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo'])) {
     $rows = null;
@@ -604,6 +609,25 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
         <input type="number" name="jornada" step="1" min="1" value="<?= htmlspecialchars($jornadaHoras) ?>" style="width:90px">
         <small class="hint">Usado para calcular % do dia (ex.: 24h).</small>
       </div>
+      <div>
+        <label>Meta (min) – verde ≤</label><br>
+        <input type="number" step="1" min="0" name="meta_ok"
+              value="<?= htmlspecialchars($META_OK_MIN) ?>" style="width:90px">
+        </div>
+
+        <div>
+          <label>Neutra (min) – amarelo ≤</label><br>
+          <input type="number" step="1" min="0" name="meta_warn"
+                value="<?= htmlspecialchars($META_WARN_MIN) ?>" style="width:90px">
+        </div>
+
+        <div>
+          <label>Operações-alvo</label><br>
+          <select id="metaOps" name="meta_ops[]" multiple size="6" style="min-width:260px" disabled>
+            <option value="" disabled>(procese o arquivo para habilitar)</option>
+          </select>
+          <small class="hint">As cores aplicam só às operações selecionadas.</small>
+        </div>
       <div class="actions" style="align-self:flex-end">
         <button type="submit">Processar</button>
         <button type="button" id="btnPrint">Imprimir / PDF</button>
@@ -944,7 +968,6 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
 
     const inner = document.createElement('div');
     inner.className = 'export-inner';
-//    inner.style.width = (A4_W - PAD_PX * 2) + 'px';
 
     if (includeHeader) {
     inner.appendChild(buildReportTitle());    // <=== TÍTULO DO RELATÓRIO
@@ -1149,7 +1172,85 @@ function buildReportTitle(){
   wrap.appendChild(line);
   return wrap;
 }
+</script>
 
+<script>
+  window.HORAS_META = {
+    okMin:  <?= json_encode($META_OK_MIN) ?>,
+    warnMin:<?= json_encode($META_WARN_MIN) ?>,
+    ops:    <?= json_encode($META_OPS, JSON_UNESCAPED_UNICODE) ?>
+  };
+</script>
+
+<script>
+(function(){
+  // ---- helpers
+  function hmsToSec(txt){
+    const m = String(txt||'').match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    return m ? (+m[1])*3600 + (+m[2])*60 + (+m[3]||0) : 0;
+  }
+  function getSelectedOps(){
+    const sel = document.getElementById('metaOps');
+    if(!sel) return new Set();
+    return new Set(Array.from(sel.selectedOptions).map(o=>o.value));
+  }
+
+  function colorize(){
+  const okMin   = Math.max(0, parseFloat(document.querySelector('input[name="meta_ok"]')?.value || 0));
+  const warnMin = Math.max(0, parseFloat(document.querySelector('input[name="meta_warn"]')?.value || 0));
+  const targets = getSelectedOps();
+
+  document.querySelectorAll('.frente-card table tbody tr:not(.subtotal-row)').forEach(tr=>{
+    const op = tr.cells[2]?.textContent.trim() || '';
+
+    // limpa estados antigos
+    tr.classList.remove('meta-ok','meta-warn','meta-bad');
+
+    if (!targets.size || !targets.has(op)) return;
+
+    const minutes = hmsToSec(tr.cells[3]?.textContent)/60;
+
+    if (minutes <= okMin)      tr.classList.add('meta-ok');
+    else if (minutes <= warnMin) tr.classList.add('meta-warn');
+    else                        tr.classList.add('meta-bad');
+  });
+}
+
+  function populateOps(){
+    const sel = document.getElementById('metaOps');
+    if(!sel) return;
+
+    const opsSet = new Set();
+    document.querySelectorAll('.frente-card table tbody tr:not(.subtotal-row)').forEach(tr=>{
+      const t = tr.cells[2]?.textContent.trim();
+      if (t) opsSet.add(t);
+    });
+
+    sel.innerHTML = '';
+    if (opsSet.size === 0){ sel.disabled = true; return; }
+
+    Array.from(opsSet).sort((a,b)=>a.localeCompare(b,'pt-BR')).forEach(op=>{
+      const opt = document.createElement('option');
+      opt.value = op;
+      opt.textContent = op;
+      if (Array.isArray(window.HORAS_META?.ops) && window.HORAS_META.ops.includes(op)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.disabled = false;
+  }
+
+  // expõe p/ export chamar antes de snapshot
+  window.__colorizeHoras = colorize;
+
+  // init
+  window.addEventListener('DOMContentLoaded', ()=>{
+    populateOps();
+    colorize();
+    document.getElementById('metaOps')?.addEventListener('change', colorize);
+    document.querySelector('input[name="meta_ok"]')?.addEventListener('input', colorize);
+    document.querySelector('input[name="meta_warn"]')?.addEventListener('input', colorize);
+  });
+})();
 </script>
 
 <script>

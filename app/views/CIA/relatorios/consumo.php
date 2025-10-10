@@ -125,7 +125,7 @@ $top3 = [];           // top3 por frota baseado em Hr.Efet./D (tie: ha/dia)
 $periodo = ['inicio'=>null,'fim'=>null];
 
 $okMax   = isset($_POST['ok'])   ? (float)$_POST['ok']   : 23.0; // verde ≤
-$warnMax = isset($_POST['warn']) ? (float)$_POST['warn'] : 25.0; // amarelo ≤
+$warnMax = isset($_POST['warn']) ? (float)$_POST['warn'] : 25.0; // amarelo ≤ 
 
 // ====================== import CSV (POST) ======================
 $usingPlanB = false;
