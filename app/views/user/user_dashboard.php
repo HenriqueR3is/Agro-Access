@@ -611,11 +611,14 @@ $total_monthly_entries  = array_sum(array_map(function($r) { return $r['total_en
 <!-- Header -->
 <header class="ctt-header">
     <div class="container">
+        
         <div class="header-content">
+            
             <div class="header-brand">
+
                 <img src="/public/static/img/logousa.png" alt="CTT Logo" class="header-logo">
-                <i class="fas fa-chart-line"></i>
-                <h1>User Dashboard</h1>
+                                <i class="fas fa-tractor"></i>
+                <h1>Agro-Dash</h1>
                 <span class="badge bg-warning">v2.0</span>
             </div>
             <button class="mobile-menu-btn" id="mobileMenuBtn">

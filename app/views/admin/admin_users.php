@@ -754,23 +754,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const btn = e.target.closest('.edit-user');
             const userId = btn.getAttribute('data-id');
 
-            // Simular dados para teste - REMOVA ESTA PARTE QUANDO O ARQUIVO get_user.php ESTIVER PRONTO
-            const mockData = {
-                user: {
-                    id: userId,
-                    nome: 'Usuário Teste',
-                    email: 'teste@email.com',
-                    tipo: 'operador',
-                    ativo: 1
-                },
-                unidades: [1, 2],
-                operacoes: [1, 3]
-            };
-
-            // Usar dados mock por enquanto - REMOVA ESTA LINHA QUANDO O ARQUIVO ESTIVER PRONTO
-            const data = mockData;
-
-            /* DESCOMENTE ESTE CÓDIO QUANDO O ARQUIVO get_user.php ESTIVER PRONTO
+            // Buscar dados reais do usuário
             fetch(`/app/views/admin/get_user.php?id=${userId}`, { 
                 credentials: 'same-origin' 
             })
@@ -779,7 +763,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 return res.json();
             })
             .then(data => {
-            */
                 if (data.error) {
                     showAlert('danger', data.error);
                     return;
@@ -810,17 +793,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 openModal(userModal);
-            /* DESCOMENTE ESTE CÓDIO QUANDO O ARQUIVO get_user.php ESTIVER PRONTO
             })
             .catch(err => {
-                showAlert('danger', "Erro ao buscar dados do usuário: " + err.message);
-                console.error(err);
+                console.error('Erro:', err);
+                showAlert('danger', 'Erro ao carregar dados do usuário');
             });
-            */
         }
     });
 
-    // Abrir modal de confirmação (Excluir) - CORRIGIDO
+    // Abrir modal "Excluir"
     document.addEventListener('click', function(e) {
         if (e.target.closest('.delete-user')) {
             const btn = e.target.closest('.delete-user');
@@ -830,99 +811,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Submit do formulário (Salvar) com AJAX + feedback - CORRIGIDO
-    document.getElementById('userForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-
-        const form = this;
-        const btnSubmit = form.querySelector('.btn.btn-primary');
-        const originalText = btnSubmit.textContent;
-        btnSubmit.disabled = true;
-        btnSubmit.textContent = 'Salvando...';
-
-        try {
-            const res = await fetch(window.location.href, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: new FormData(form)
-            });
-
-            const text = await res.text();
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch {
-                throw new Error('Resposta inválida do servidor');
-            }
-
-            if (data.success) {
-                closeModal(userModal);
-                showAlert('success', data.message || 'Usuário salvo com sucesso!');
-                setTimeout(() => location.reload(), 900);
-            } else {
-                const msg = data.error || 'Erro ao salvar usuário.';
-                showAlert('danger', msg);
-            }
-        } catch (err) {
-            showAlert('danger', 'Erro na requisição: ' + err.message);
-            console.error(err);
-        } finally {
-            btnSubmit.disabled = false;
-            btnSubmit.textContent = originalText;
-        }
-    });
-
-    // Submit do excluir com AJAX + feedback - CORRIGIDO
-    const deleteForm = document.getElementById('deleteForm');
-    if (deleteForm) {
-        deleteForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-
-            const btn = deleteForm.querySelector('button[type="submit"]');
-            const original = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = 'Excluindo...';
-
-            try {
-                const res = await fetch(window.location.href, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: new FormData(deleteForm)
-                });
-                
-                const text = await res.text();
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch {
-                    throw new Error('Resposta inválida do servidor');
-                }
-
-                if (data.success) {
-                    closeModal(confirmModal);
-                    showAlert('success', data.message || 'Usuário excluído com sucesso!');
-                    setTimeout(() => location.reload(), 600);
-                } else {
-                    const msg = data.error || 'Erro ao excluir usuário.';
-                    showAlert('danger', msg);
-                }
-            } catch (err) {
-                showAlert('danger', 'Erro na requisição: ' + err.message);
-                console.error(err);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = original;
-            }
-        });
-    }
-
-    // Fechar modais (X)
+    // Fechar modais
     modalCloses.forEach(btn => {
         btn.addEventListener('click', function() {
             const modal = this.closest('.modal-overlay');
@@ -930,58 +819,129 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Fechar modal ao clicar fora
-    window.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal-overlay')) {
-            closeModal(e.target);
-        }
+    // Fechar modal clicando fora
+    [userModal, confirmModal].forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) closeModal(this);
+        });
     });
+
+    // Filtros
+    const filterTipo = document.getElementById('filterTipo');
+    const filterStatus = document.getElementById('filterStatus');
+    const perPage = document.getElementById('perPage');
+    const resetFilters = document.getElementById('resetFilters');
+
+    function applyFilters() {
+        const url = new URL(window.location.href);
+        
+        if (filterTipo.value) url.searchParams.set('tipo', filterTipo.value);
+        else url.searchParams.delete('tipo');
+        
+        if (filterStatus.value !== '') url.searchParams.set('status', filterStatus.value);
+        else url.searchParams.delete('status');
+        
+        if (perPage.value !== '10') url.searchParams.set('per_page', perPage.value);
+        else url.searchParams.delete('per_page');
+        
+        url.searchParams.set('page', '1');
+        window.location.href = url.toString();
+    }
+
+    if (filterTipo) filterTipo.addEventListener('change', applyFilters);
+    if (filterStatus) filterStatus.addEventListener('change', applyFilters);
+    if (perPage) perPage.addEventListener('change', applyFilters);
+
+    if (resetFilters) {
+        resetFilters.addEventListener('click', () => {
+            window.location.href = '<?= qs(['tipo' => '', 'status' => '', 'search' => '', 'page' => 1, 'per_page' => 10]) ?>';
+        });
+    }
+
+const userForm = document.getElementById('userForm');
+if (userForm) {
+    userForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+        submitBtn.disabled = true;
+
+        fetch('', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'  // Adicione isso aqui
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', data.message);
+                closeModal(userModal);
+                setTimeout(() => window.location.reload(), 800);
+            } else {
+                showAlert('danger', data.error || 'Erro desconhecido');
+            }
+        })
+        .catch(err => {
+            console.error('Erro:', err);
+            showAlert('danger', 'Erro de rede ao salvar usuário');
+        })
+        .finally(() => {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        });
+    });
+}
+    // Submit do formulário de exclusão com AJAX
+    const deleteForm = document.getElementById('deleteForm');
+    if (deleteForm) {
+        deleteForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Excluindo...';
+            submitBtn.disabled = true;
+
+            fetch('', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: {
+                'X-Requested-With': 'XMLHttpRequest'  // Adicione isso aqui
+            }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                    closeModal(confirmModal);
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    showAlert('danger', data.error || 'Erro desconhecido');
+                closeModal(confirmModal);
+                submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                }
+            })
+            .catch(err => {
+                console.error('Erro:', err);
+                showAlert('danger', 'Erro de rede ao excluir usuário');
+                closeModal(confirmModal);
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
+        });
+    }
 });
-
-// Filtros e paginação
-const perPageSel = document.getElementById('perPage');
-if (perPageSel) {
-    perPageSel.addEventListener('change', () => {
-        const url = new URL(location.href);
-        url.searchParams.set('per_page', perPageSel.value);
-        url.searchParams.set('page', 1);
-        location.href = url.toString();
-    });
-}
-
-const tipoSel = document.getElementById('filterTipo');
-const statusSel = document.getElementById('filterStatus');
-const resetBtn = document.getElementById('resetFilters');
-
-function applyFilter() {
-    const url = new URL(location.href);
-    if (tipoSel && tipoSel.value) {
-        url.searchParams.set('tipo', tipoSel.value);
-    } else {
-        url.searchParams.delete('tipo');
-    }
-    if (statusSel && statusSel.value !== '') {
-        url.searchParams.set('status', statusSel.value);
-    } else {
-        url.searchParams.delete('status');
-    }
-    url.searchParams.set('page', 1);
-    location.href = url.toString();
-}
-
-if (tipoSel) tipoSel.addEventListener('change', applyFilter);
-if (statusSel) statusSel.addEventListener('change', applyFilter);
-
-if (resetBtn) {
-    resetBtn.addEventListener('click', () => {
-        const url = new URL(location.href);
-        url.searchParams.delete('tipo');
-        url.searchParams.delete('status');
-        url.searchParams.delete('search');
-        url.searchParams.set('page', 1);
-        location.href = url.toString();
-    });
-}
 </script>
 </body>
 </html>

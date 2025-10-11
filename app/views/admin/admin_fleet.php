@@ -171,18 +171,18 @@ ORDER BY (codigo REGEXP '^[0-9]+$') DESC, CAST(codigo AS UNSIGNED), codigo, nome
 // Filtros (GET)
 $filtro_unidade     = $_GET['unidade']      ?? '';
 $filtro_operacao_id = $_GET['operacao_id']  ?? '';
-$filtro_frente = $_GET['frente'] ?? '';
+$filtro_frente      = $_GET['frente']       ?? '';
 $filtro_implemento  = $_GET['implemento']   ?? '';
 $filtro_status = isset($_GET['status']) ? $_GET['status'] : '';
 $visualizacao       = $_GET['visualizacao'] ?? 'cards'; // cards ou lista
 
 // Mapa de ícones por operacao_id (1=ACOP, 2=PLANTIO, 3=SUBSOLAGEM, 4=VINHAÇA)
 $iconePorOperacao = [
-    1 => 'fa-tractor text-success',      // ACOP
-    2 => 'fa-seedling text-primary',     // PLANTIO
-    3 => 'fa-person-digging text-warning', // SUBSOLAGEM
-    4 => 'fa-tractor text-danger',    // VINHAÇA
-    5 => 'fa-truck text-secondary'
+    1 => 'fa-spray-can text-primary',        // ACOP (aplicação de insumos)
+    2 => 'fa-seedling text-primary',         // PLANTIO
+    3 => 'fa-person-digging text-warning',   // SUBSOLAGEM/ARADO
+    4 => 'fa-wine-bottle text-danger',       // VINHAÇA (líquido)
+    5 => 'fa-truck text-secondary',          // Transporte/Logística
 ];
 
 // Query principal já trazendo o nome da operação
@@ -379,7 +379,7 @@ $equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina)
             <div class="row g-4">
                 <?php foreach ($equipamentos_paginados as $eq): 
                     // Definir ícone conforme operação
-                    $icone = $iconePorOperacao[(int)($eq['operacao_id'] ?? 0)] ?? 'fa-tractor text-secondary';
+                    $icone = $iconePorOperacao[(int)($eq['operacao_id'] ?? 0)] ?? 'fa-wheat-awn text-success';
                 ?>
                 <div class="col-md-3">
                     <div class="card shadow-lg border-0 h-100">
@@ -541,7 +541,7 @@ $equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina)
                             </thead>
                             <tbody>
                                 <?php foreach ($equipamentos_paginados as $eq): 
-                                    $icone = $iconePorOperacao[(int)($eq['operacao_id'] ?? 0)] ?? 'fa-tractor text-secondary';
+                                    $icone = $iconePorOperacao[(int)($eq['operacao_id'] ?? 0)] ?? 'fa-wheat-awn text-success';
                                 ?>
                                 <tr>
                                     <td><i class="fas <?= $icone ?> fa-2x"></i></td>
@@ -892,8 +892,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Criar URL de busca
         const params = new URLSearchParams();
         for (const key in filtros) {
-            if (filtros[key]) {
-                params.append(key, filtros[key]);
+            const v = filtros[key];
+            if (v !== undefined && v !== null && v !== '') {
+                params.append(key, v);
             }
         }
         
@@ -928,8 +929,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Adicionar event listeners para os filtros
-    [filtroUnidade, filtroOperacao, filtroImplemento, filtroStatus].forEach(select => {
-    select.addEventListener('change', aplicarFiltros);
+    const selects = [filtroUnidade, filtroOperacao, filtroImplemento, filtroFrente, filtroStatus];
+    selects.forEach(select => {
+    if (select) select.addEventListener('change', aplicarFiltros);
     });
     
     // Prevenir envio tradicional do formulário
