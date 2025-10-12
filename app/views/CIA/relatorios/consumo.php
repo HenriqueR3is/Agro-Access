@@ -216,6 +216,146 @@ function aggregate_by_operator(array $rows): array {
 }
 
 /**
+ * Modo compatível com a TELA do SGPA:
+ * - agrupa por DIA e por (operador + equipamento)
+ * - dentro de cada dia: médias ponderadas por horas
+ * - ARREDONDA POR DIA: area(2), tempo(0), vel(1), rpm(1), cons(2)
+ * - consolida período:
+ *     * área/tempo: soma dos diários já arredondados
+ *     * vel/rpm/cons: média SIMPLES dos diários já arredondados (não ponderada)
+ *
+ * Outros modos:
+ * - 'planilha': agrupa por (operador+equip), soma área/tempo, e faz médias ponderadas por horas (round final)
+ * - 'weighted_total': igual ao atual (ponderado global), mas separando por equip.
+ */
+function aggregate_by_operator_mode(array $rows, string $mode='sgpa_ui'): array {
+  // separa por operador+equipamento (para bater com a tela)
+  $bucket = []; // key => rows
+  foreach ($rows as $r) {
+    $op = $r['operador'] ?: '-';
+    $eq = (string)($r['equipamento'] ?? '');
+    $k  = operator_key($op) . '|' . $eq;
+    if (!isset($bucket[$k])) {
+      $bucket[$k] = ['op_display'=>$op, 'eq'=>$eq, 'rows'=>[]];
+    }
+    $bucket[$k]['rows'][] = $r;
+  }
+
+  $out = [];
+
+  foreach ($bucket as $k => $grp) {
+    $opDisp = $grp['op_display'];
+    $eq     = $grp['eq'];
+    $rowsG  = $grp['rows'];
+
+    if ($mode === 'sgpa_ui') {
+      // 1) por dia
+      $byDay = [];
+      foreach ($rowsG as $r) {
+        $day = $r['data_iso'] ?? '0000-00-00';
+        $byDay[$day][] = $r;
+      }
+
+      $areaTotal = 0.0; $tempoTotal = 0.0;
+      $velDays = []; $rpmDays = []; $consDays = [];
+
+      foreach ($byDay as $day => $rlist) {
+        $area  = 0.0; $tempo = 0.0;
+        $vt=0; $vw=0; $rt=0; $rw=0; $ct=0; $cw=0;
+
+        foreach ($rlist as $r) {
+          $t = max(0.0, (float)($r['tempo'] ?? 0));
+          $a = (float)($r['area']  ?? 0);
+          $v = isset($r['vel'])     ? (float)$r['vel']     : null;
+          $rp= isset($r['rpm'])     ? (float)$r['rpm']     : null;
+          $c = isset($r['consumo']) ? (float)$r['consumo'] : null;
+
+          $area  += $a;
+          $tempo += $t;
+
+          if ($v  !== null) { $vt += $v  * $t; $vw += $t; }
+          if ($rp !== null) { $rt += $rp * $t; $rw += $t; }
+          if ($c  !== null) { $ct += $c  * $t; $cw += $t; }
+        }
+
+        // 2) ARREDONDA POR DIA (tela)
+        $area_d = round($area, 2);
+        $tempo_d= round($tempo, 0); // inteiro
+        $vel_d  = ($vw>0) ? round($vt/$vw, 1) : null;
+        $rpm_d  = ($rw>0) ? round($rt/$rw, 1) : null;
+        $cons_d = ($cw>0) ? round($ct/$cw, 2) : null;
+
+        // 3) acumula período
+        $areaTotal  += $area_d;
+        $tempoTotal += $tempo_d;
+        if ($vel_d  !== null) $velDays[]  = $vel_d;
+        if ($rpm_d  !== null) $rpmDays[]  = $rpm_d;
+        if ($cons_d !== null) $consDays[] = $cons_d;
+      }
+
+      // média SIMPLES dos diários já arredondados
+      $vel  = count($velDays)  ? round(array_sum($velDays)/count($velDays), 1) : 0.0;
+      $rpm  = count($rpmDays)  ? round(array_sum($rpmDays)/count($rpmDays), 1) : 0.0;
+      $cons = count($consDays) ? round(array_sum($consDays)/count($consDays), 2): 0.0;
+
+      $out[] = [
+        'equipamento' => $eq ?: '-',
+        'operador'    => $opDisp,
+        'area'        => $areaTotal,
+        'tempo'       => $tempoTotal,
+        'vel'         => $vel,
+        'rpm'         => $rpm,
+        'consumo'     => $cons,
+      ];
+    }
+    else {
+      // 'planilha' | 'weighted_total' -> ponderado global por horas
+      $area=0; $tempo=0; $vt=0; $vw=0; $rt=0; $rw=0; $ct=0; $cw=0;
+      foreach ($rowsG as $r) {
+        $t = max(0.0, (float)($r['tempo'] ?? 0));
+        $a = (float)($r['area']  ?? 0);
+        $v = isset($r['vel'])     ? (float)$r['vel']     : null;
+        $rp= isset($r['rpm'])     ? (float)$r['rpm']     : null;
+        $c = isset($r['consumo']) ? (float)$r['consumo'] : null;
+
+        $area  += $a;
+        $tempo += $t;
+        if ($v  !== null) { $vt += $v  * $t; $vw += $t; }
+        if ($rp !== null) { $rt += $rp * $t; $rw += $t; }
+        if ($c  !== null) { $ct += $c  * $t; $cw += $t; }
+      }
+
+      // arredonda só no final (decimais “clássicos”)
+      $vel  = ($vw>0) ? round($vt/$vw, 1) : 0.0;
+      $rpm  = ($rw>0) ? round($rt/$rw, 1) : 0.0;
+      $cons = ($cw>0) ? round($ct/$cw, 2): 0.0;
+
+      $out[] = [
+        'equipamento' => $eq ?: '-',
+        'operador'    => $opDisp,
+        'area'        => round($area, 2),
+        'tempo'       => round($tempo, 1),
+        'vel'         => $vel,
+        'rpm'         => $rpm,
+        'consumo'     => $cons,
+      ];
+    }
+  }
+
+  // ordenação: equip numérico > operador > consumo desc (como antes)
+  usort($out, function($a,$b){
+    $ea = (int)preg_replace('/\D+/', '', (string)$a['equipamento']);
+    $eb = (int)preg_replace('/\D+/', '', (string)$b['equipamento']);
+    if ($ea !== $eb) return $ea <=> $eb;
+    $cmpOp = strcmp((string)$a['operador'], (string)$b['operador']);
+    if ($cmpOp !== 0) return $cmpOp;
+    return $b['consumo'] <=> $a['consumo'];
+  });
+
+  return $out;
+}
+
+/**
  * Estatísticas de nível FRENTE sobre as linhas já agregadas por operador.
  * - Consumo/Vel/RPM: média ponderada por Tempo Efetivo (h)
  * - Área e Tempo: soma
@@ -290,6 +430,7 @@ try {
 
 /* ========== Foco & Metas dinâmicas (Cons/Vel/RPM) ========== */
 $FOCO = $_POST['foco'] ?? 'cons'; // cons | vel | rpm
+$AGG_MODE = $_POST['agg_mode'] ?? 'sgpa_ui'; // 'sgpa_ui' | 'planilha' | 'weighted_total'
 $META_OK_VAL   = isset($_POST['meta_ok'])   ? (float)$_POST['meta_ok']   : 23.0;
 $META_WARN_VAL = isset($_POST['meta_warn']) ? (float)$_POST['meta_warn'] : 25.0;
 $META_OPS      = isset($_POST['meta_ops'])  ? array_values(array_filter((array)$_POST['meta_ops'])) : [];
@@ -447,6 +588,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo_csv'])) {
           'vel'         => ($vel   ?? 0.0),
           'rpm'         => ($rpm   ?? 0.0),
           'consumo'     => (float)$consLH, // l/h
+          'data_iso'    => $pd['iso'] ?? null,
         ];
 
         // dentro do loop, após $dataRaw:
@@ -470,7 +612,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo_csv'])) {
       foreach ($agg as $unidade => $byFrente) {
         foreach ($byFrente as $frente => $rowsList) {
           // agrega por OPERADOR com médias ponderadas por horas
-          $aggOps = aggregate_by_operator($rowsList); // já vem ordenado dentro da função
+          $aggOps = aggregate_by_operator_mode($rowsList, $AGG_MODE);
           $cards[$unidade][$frente] = $aggOps;
         }
       }
@@ -509,6 +651,16 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
           <option value="cons" <?= $FOCO==='cons'?'selected':'' ?>>Consumo (l/h)</option>
         </select>
         <small class="hint">A cor aplica apenas nessa coluna.</small>
+      </div>
+
+      <div>
+        <label><strong>Modo de consolidação</strong></label><br>
+        <select name="agg_mode" id="agg_mode">
+          <option value="sgpa_ui" <?= ($AGG_MODE==='sgpa_ui')?'selected':'' ?>>Compatível SGPA (UI)</option>
+          <option value="planilha" <?= ($AGG_MODE==='planilha')?'selected':'' ?>>Compatível SGPA (Planilha)</option>
+          <option value="weighted_total" <?= ($AGG_MODE==='weighted_total')?'selected':'' ?>>Ponderado por horas (global)</option>
+        </select>
+        <small class="hint">“Compatível SGPA (UI)” arredonda por dia e faz média dos diários.</small>
       </div>
 
       <!-- Metas para RPM -->
