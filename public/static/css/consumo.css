@@ -7,6 +7,7 @@
   --ink:#333;
   --header:#263238;
   --muted:#f6faf6;
+  --accent: #f29f3c;
 }
 
 /* ================================
@@ -154,15 +155,30 @@ small.hint{color:#5f6b76;display:block;margin-top:4px}
 
 .frente-card .table th:nth-child(7),
 .frente-card .table td:nth-child(7),
-.table td.meta-ok   { background: #e9f7ec; }
-.table td.meta-warn { background: #fff6e5; }
-.table td.meta-bad  { background: #ffecec; }
 #export-sandbox .table th:nth-child(7),
-#export-sandbox .table td:nth-child(7){ width:12% !important; }
+#export-sandbox .table td:nth-child(7){
+  width:12% !important;
+}
 
 /* Listrado e estados (mantém o que já funcionava) */
 .frente-card .table tbody tr:nth-child(even){ background:#fafafa; }
-.subtotal-row td{ font-weight:700; background:#f7f7f7; }
+
+/* Subtotal em uma única linha e ocupando a largura toda */
+.subtotal-row td{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  font-weight: 700;
+  background: #f7f7f7;
+}
+
+/* Quando renderizado no export-sandbox (PDF), manter o mesmo comportamento */
+#export-sandbox .subtotal-row td{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Print util */
 @media print{ .no-print{ display:none !important } }
@@ -172,10 +188,62 @@ small.hint{color:#5f6b76;display:block;margin-top:4px}
 .table td.meta-warn { background:#fff6e5; }
 .table td.meta-bad  { background:#ffecec; }
 
-/* (opcional) contorno leve nas células coloridas */
+/* Texto preto e legível nas células coloridas */
 .table td.meta-ok,
 .table td.meta-warn,
-.table td.meta-bad { outline: 2px solid rgba(0,0,0,.03); }
+.table td.meta-bad {
+  color:#000 !important;
+  -webkit-text-fill-color:#000 !important; /* garante no WebKit/Chromium */
+}
 
-/* (opcional) destaque do th da coluna focada */
-.table thead th.focus-col { box-shadow: inset 0 -3px 0 #f29f3c; }
+/* Se houver elementos dentro da célula, herdam o preto */
+.table td.meta-ok  * ,
+.table td.meta-warn* ,
+.table td.meta-bad * { color:inherit !important; }
+
+/* === Select estilizado: #foco (Foco das metas) ============================ */
+#foco{
+  /* remove UI nativa */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  /* caixa */
+  min-width: 240px;
+  padding: 8px 40px 8px 12px;   /* espaço pra a seta à direita */
+  border: 1px solid #dbe6db;
+  border-radius: 10px;
+  background-color: #fff;
+  color: #263238;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+
+  /* seta custom (SVG inline) */
+  background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M7 10l5 5 5-5' stroke='%23263238' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+
+  /* leve sombra interna opcional */
+  box-shadow: inset 0 1px 0 rgba(0,0,0,.02);
+}
+
+/* hover/focus/disabled */
+#foco:hover{ border-color:#cbd8cb; }
+#foco:focus{
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(242,159,60,.22);
+}
+#foco:disabled{
+  background-color:#f5f7f5;
+  color:#7b8790;
+  cursor:not-allowed;
+}
+
+/* remove a setinha do IE/Edge legado */
+#foco::-ms-expand{ display:none; }
+
+/* opções (o que dá pra estilizar de forma consistente) */
+#foco option{ color:#263238; font-weight:600; }
+

@@ -459,21 +459,27 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       <div>
         <label><strong>Foco (coluna para metas)</strong></label><br>
         <select name="foco" id="foco">
-          <option value="cons" <?= $FOCO==='cons'?'selected':'' ?>>Consumo (l/h)</option>
           <option value="vel"  <?= $FOCO==='vel' ?'selected':'' ?>>Velocidade (km/h)</option>
           <option value="rpm"  <?= $FOCO==='rpm' ?'selected':'' ?>>RPM</option>
+          <option value="cons" <?= $FOCO==='cons'?'selected':'' ?>>Consumo (l/h)</option>
         </select>
         <small class="hint">A cor aplica apenas nessa coluna.</small>
       </div>
 
       <!-- Metas para RPM -->
-      <div data-meta-group="rpm">
-        <label>RPM (verde ≤)</label><br>
-        <input type="number" step="1" name="meta_ok_rpm" value="<?= htmlspecialchars($META['rpm']['ok'] ?? '') ?>" placeholder="ex.: 2000" style="width:110px">
+      <div>
+        <label id="metaOkLabel">Meta (verde ≤)</label><br>
+        <input type="number" id="metaOk" name="meta_ok"
+              step="0.1" style="width:110px"
+              value="<?= htmlspecialchars($META_OK_VAL) ?>"
+              placeholder="ex.: 6,0">
       </div>
-      <div data-meta-group="rpm">
-        <label>Faixa neutra (amarelo ≤)</label><br>
-        <input type="number" step="1" name="meta_warn_rpm" value="<?= htmlspecialchars($META['rpm']['warn'] ?? '') ?>" placeholder="ex.: 2200" style="width:110px">
+      <div>
+        <label id="metaWarnLabel">Faixa neutra (amarelo ≤)</label><br>
+        <input type="number" id="metaWarn" name="meta_warn"
+              step="0.1" style="width:110px"
+              value="<?= htmlspecialchars($META_WARN_VAL) ?>"
+              placeholder="ex.: 7,5">
       </div>
 
       <div class="actions" style="align-self:flex-end">
@@ -603,7 +609,9 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
                   <td><?= htmlspecialchars($row['equipamento']) ?></td>
                   <td title="<?= htmlspecialchars($row['operador']) ?>"><?= htmlspecialchars($row['operador']) ?></td>
                   <td class="right"><?= number_format((float)$row['area'], 2, ',', '.') ?></td>
-                  <td class="right"><?= number_format((float)$row['tempo'], 1, ',', '.') ?></td>
+                  <td class="right" data-tempo="<?= htmlspecialchars(number_format((float)$row['tempo'], 3, '.', '')) ?>">
+                    <?= number_format((float)$row['tempo'], 1, ',', '.') ?>
+                  </td>
                   <td class="right" data-vel="<?= htmlspecialchars(number_format((float)$row['vel'], 3, '.', '')) ?>">
                     <?= number_format((float)$row['vel'], 1, ',', '.') ?>
                   </td>
@@ -612,7 +620,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
                   </td>
                   <td class="right" data-cons="<?= htmlspecialchars(number_format((float)$row['consumo'], 3, '.', '')) ?>">
                     <?= number_format((float)$row['consumo'], 2, ',', '.') ?>
-                  </td>
+                  </td>                  
                 </tr>
               <?php endforeach; ?>
             </tbody>
@@ -666,11 +674,19 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
 
 <script>
 (function(){
-  const PX_PER_MM = 3.7795275591, A4_H = 297 * PX_PER_MM, PAD_PX = 10 * PX_PER_MM;
+  // === foco atual: define label, unidade, nome de arquivo e título do PDF ===
+  function focusMeta(){
+    const foco = document.getElementById('foco')?.value || window.CONSUMO_META?.foco || 'cons';
+    if (foco === 'vel') return { key:'vel', label:'Velocidade Média Efetiva', unit:'km/h', file:'velocidade', title:'Relatório de Velocidade' };
+    if (foco === 'rpm') return { key:'rpm', label:'RPM Médio',               unit:'RPM',  file:'rpm',        title:'Relatório de RPM' };
+    return { key:'cons', label:'Consumo', unit:'l/h', file:'consumo', title:'Relatório de Consumo' };
+  }
 
+  // ===== helpers de construção da página exportada =====
   function buildReportTitle(){
+    const { title } = focusMeta();
     const wrap = document.createElement('div'); wrap.className = 'pdf-title-block';
-    const h = document.createElement('div'); h.className = 'pdf-title'; h.textContent = 'Relatório de Consumo';
+    const h = document.createElement('div'); h.className = 'pdf-title'; h.textContent = title;
     const line = document.createElement('div'); line.className = 'pdf-title-line';
     wrap.appendChild(h); wrap.appendChild(line); return wrap;
   }
@@ -687,10 +703,10 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
   function cloneMeta(card){ return card.querySelector('.meta-line')?.cloneNode(true) || document.createElement('div'); }
   function buildTableSkeleton(card){
     const table = document.createElement('table'); table.className = 'table';
-    const colgOrig = card.querySelector('table colgroup');
-    if (colgOrig) table.appendChild(colgOrig.cloneNode(true)); // clone das larguras
     const theadOrig = card.querySelector('table thead');
     const thead = theadOrig ? theadOrig.cloneNode(true) : document.createElement('thead');
+    // remove eventual destaque da coluna focada no PDF
+    thead.querySelectorAll('.focus-col').forEach(th => th.classList.remove('focus-col'));
     const tbody = document.createElement('tbody');
     table.appendChild(thead); table.appendChild(tbody);
     return { table, thead, tbody };
@@ -704,35 +720,41 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     return { page, inner, thead, tbody };
   }
 
-  // === Agrupa por EQUIPAMENTO e soma/mede consumo ===
+  // ===== agrupamento por equipamento e média ponderada por HORAS =====
   function groupRowsByEquipment(card){
+    const { key } = focusMeta(); // 'cons' | 'vel' | 'rpm'
     const trs = Array.from(card.querySelectorAll('table tbody tr'));
     const groups = []; let current = null;
     const norm = s => String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').trim().toLowerCase();
 
     trs.forEach(tr=>{
-      const tds = tr.cells;
-      const eq  = tds[0] ? tds[0].textContent : '';
-      const key = norm(eq);
-      const cons = parseFloat(tr.querySelector('td[data-cons]')?.dataset.cons || '0') || 0;
+      const eqText  = tr.cells[0]?.textContent || '';
+      const eqKey   = norm(eqText);
+      const tdVal   = tr.querySelector(`td[data-${key}]`);
+      const tdHoras = tr.querySelector('td[data-tempo]');
+      const val     = parseFloat(tdVal?.dataset[key]   ?? 'NaN');
+      const horas   = parseFloat(tdHoras?.dataset.tempo ?? '0') || 0;
 
-      if(!current || norm(current.eq) !== key){
-        current = { eq, key, rows: [], sum: 0, n: 0 };
+      if(!current || norm(current.eq) !== eqKey){
+        current = { eq:eqText, key:eqKey, rows:[], sumW:0, w:0 };
         groups.push(current);
       }
       current.rows.push(tr);
-      current.sum += cons;
-      current.n += 1;
+      if (Number.isFinite(val) && horas > 0){ current.sumW += val * horas; current.w += horas; }
     });
     return groups;
   }
-  function makeSubtotalRow(eqName, sum, count, colSpan){
+
+  function makeSubtotalRow(eqName, agg, colSpan){
+    const { label, unit } = focusMeta();
     const tr = document.createElement('tr'); tr.className = 'subtotal-row';
     const td = document.createElement('td'); td.colSpan = colSpan;
-    const media = count>0 ? (sum/count) : 0;
-    td.innerHTML = `<strong>Média de Consumo do Equipamento ${eqName}:</strong> ${media.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    td.style.whiteSpace = 'nowrap'; td.style.overflow = 'hidden'; td.style.textOverflow = 'ellipsis';
+    const media = agg.w > 0 ? (agg.sumW / agg.w) : 0;
+    td.innerHTML = `<strong>Média de ${label} do Equipamento ${eqName}:</strong> ${media.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})} ${unit}`;
     tr.appendChild(td); return tr;
   }
+
   function markGroupStarts(root=document){
     const bodies = root.querySelectorAll('.table tbody, .export-page .table tbody');
     const norm = s => String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').trim().toLowerCase();
@@ -745,18 +767,18 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       });
     });
   }
-  document.addEventListener('DOMContentLoaded', ()=> markGroupStarts());
 
   function sanitizeFilePart(s){
     return String(s || '').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9\-_]+/g,'').slice(0,64);
   }
 
+  // ===== paginação por altura com subtotais =====
   function buildPagesByHeightGrouped(card){
     const PX_PER_MM = 3.7795275591, A4_H = 297 * PX_PER_MM, PAD_PX = 10 * PX_PER_MM;
     const sandbox = ensureSandbox();
-    const dateRef = card.getAttribute('data-data') || (new Date()).toISOString().slice(0,10);
     const groups = groupRowsByEquipment(card);
     const pages = []; let gIdx = 0; let firstPage = true;
+    const colsCount = card.querySelectorAll('table thead th').length || 7;
 
     while (gIdx < groups.length || firstPage){
       const { page, inner, thead, tbody } = newExportPage(card, firstPage);
@@ -781,7 +803,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
           inserted.push(tr);
           tbody.appendChild(tr);
         });
-        const subtotalTr = makeSubtotalRow(g.eq, g.sum, g.n);
+        const subtotalTr = makeSubtotalRow(g.eq, g, colsCount);
         tbody.appendChild(subtotalTr);
 
         if (tbody.offsetHeight <= budget){
@@ -804,12 +826,10 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
         }
         if (i>0){ g.rows = g.rows.slice(i); markGroupStarts(page); }
         else { break; }
-
         break;
       }
       pages.push(page);
       firstPage = false;
-      if (gIdx >= groups.length && pages.length===0) pages.push(page);
     }
     return pages;
   }
@@ -828,13 +848,14 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
   }
 
   async function exportCard(card){
+    const { file } = focusMeta();
     const unidade = card.getAttribute('data-unidade') || 'unidade';
     const frCode  = card.getAttribute('data-frente')  || 'frente';
     const dateRef = card.getAttribute('data-data') || (new Date()).toISOString().slice(0,10);
-    const filename = `consumo_${sanitizeFilePart(unidade)}_frente-${sanitizeFilePart(frCode)}_${dateRef}.pdf`;
+    const filename = `${file}_${sanitizeFilePart(unidade)}_frente-${sanitizeFilePart(frCode)}_${dateRef}.pdf`;
 
-    let jsPDFCtor, h2c;
-    try { const libs = await libsReady(); jsPDFCtor = libs.jsPDFCtor; h2c = libs.h2c; }
+    let jsPDFCtor;
+    try { ({ jsPDFCtor } = await libsReady()); }
     catch(e){ console.error('Falha libs:', e); alert('Falha ao carregar bibliotecas de exportação.'); return; }
 
     const pages = buildPagesByHeightGrouped(card);
@@ -851,6 +872,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     document.getElementById('export-sandbox')?.remove();
   }
 
+  // eventos de export
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.btn-export-frente'); if (!btn) return;
     const card = btn.closest('.frente-card'); if (card) exportCard(card);
@@ -863,61 +885,114 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
 </script>
 
 <script>
-  window.CONSUMO_META = {
-    foco: <?= json_encode($FOCO) ?>,
-    ok:   <?= json_encode($META_OK_VAL) ?>,
-    warn: <?= json_encode($META_WARN_VAL) ?>,
-    ops:  <?= json_encode($META_OPS, JSON_UNESCAPED_UNICODE) ?>
-  };
+(function(){
+  // Marca o início de cada grupo de equipamento nos CARDS DA TELA
+  function markGroupStarts(root=document){
+    const norm = s => String(s||'')
+      .normalize('NFD').replace(/\p{Diacritic}/gu,'')
+      .trim().toLowerCase();
+
+    root.querySelectorAll('.frente-card .table tbody').forEach(tbody=>{
+      let last = null;
+      Array.from(tbody.rows).forEach((tr, idx)=>{
+        tr.classList.remove('group-start');
+        const eq = tr.cells[0]?.textContent || '';
+        const eqKey = norm(eq);
+        if (idx === 0 || eqKey !== last) tr.classList.add('group-start');
+        last = eqKey;
+      });
+    });
+  }
+
+  // roda ao carregar; se em algum momento você reordenar linhas, pode chamar de novo
+  window.addEventListener('DOMContentLoaded', ()=> markGroupStarts());
+})();
 </script>
 
 <script>
-// Colorização por CÉLULA, com 2 metas e foco (cons/vel/rpm)
-(function(){
+// Colorização por célula — versão consolidada (sem funções duplicadas)
+(function () {
   function currentFocus(){
     return document.getElementById('foco')?.value || window.CONSUMO_META?.foco || 'cons';
   }
+
+  // metas (ok/warn) lidas dos inputs; fallback para CONSUMO_META
   function thresholds(){
-    let ok   = parseFloat(document.querySelector('input[name="meta_ok"]')?.value);
-    let warn = parseFloat(document.querySelector('input[name="meta_warn"]')?.value);
+    const okEl   = document.getElementById('metaOk');
+    const warnEl = document.getElementById('metaWarn');
+    let ok   = okEl   ? parseFloat(okEl.value)   : NaN;
+    let warn = warnEl ? parseFloat(warnEl.value) : NaN;
+
+    if (!isFinite(ok))   ok   = window.CONSUMO_META?.ok;
+    if (!isFinite(warn)) warn = window.CONSUMO_META?.warn;
+
     if (!isFinite(ok) || !isFinite(warn)) return null;
     if (ok > warn) [ok, warn] = [warn, ok]; // garante ok <= warn
-    return {ok, warn};
+    return { ok, warn };
   }
+
+  function updateMetaUI(){
+    const foco = currentFocus();
+    const okL  = document.getElementById('metaOkLabel');
+    const wnL  = document.getElementById('metaWarnLabel');
+    const okI  = document.getElementById('metaOk');
+    const wnI  = document.getElementById('metaWarn');
+    if (!okL || !wnL || !okI || !wnI) return;
+
+    if (foco === 'vel') {
+      okL.textContent = 'Velocidade (verde ≤)';
+      wnL.textContent = 'Faixa neutra (amarelo ≤)';
+      okI.step = wnI.step = '0.1';
+      okI.placeholder = 'ex.: 6,0';
+      wnI.placeholder = 'ex.: 7,5';
+    } else if (foco === 'rpm') {
+      okL.textContent = 'RPM (verde ≤)';
+      wnL.textContent = 'Faixa neutra (amarelo ≤)';
+      okI.step = wnI.step = '1';
+      okI.placeholder = 'ex.: 2000';
+      wnI.placeholder = 'ex.: 2200';
+    } else {
+      okL.textContent = 'Consumo (l/h) (verde ≤)';
+      wnL.textContent = 'Faixa neutra (amarelo ≤)';
+      okI.step = wnI.step = '0.1';
+      okI.placeholder = 'ex.: 23,0';
+      wnI.placeholder = 'ex.: 25,0';
+    }
+  }
+
+  function highlightHeader(){
+    const foco = currentFocus();
+    const idx  = foco==='cons' ? 7 : (foco==='vel' ? 5 : 6); // 1-based
+    document.querySelectorAll('.table thead th').forEach((th,i)=>{
+      th.classList.toggle('focus-col', (i+1)===idx);
+    });
+  }
+
   function getSelectedOps(){
     const sel = document.getElementById('metaOps');
     if(!sel) return new Set();
     return new Set(Array.from(sel.selectedOptions).map(o=>o.value));
   }
-  function highlightHeader(){
-    const foco = currentFocus();
-    const idx  = foco==='cons' ? 7 : (foco==='vel' ? 5 : 6); // col index 1-based
-    document.querySelectorAll('.table thead th').forEach((th,i)=>{
-      th.classList.toggle('focus-col', (i+1)===idx);
-    });
-  }
+
   function colorize(){
-    const foco    = currentFocus();                  // 'cons' | 'vel' | 'rpm'
-    const thr     = thresholds();                    // {ok,warn} ou null
+    const foco    = currentFocus();
+    const thr     = thresholds();
     const targets = getSelectedOps();
     const sel     = (foco==='cons') ? 'td[data-cons]' :
                     (foco==='vel'  ? 'td[data-vel]'  : 'td[data-rpm]');
 
     document.querySelectorAll('.frente-card table tbody tr').forEach(tr=>{
-      // limpa cores de TODAS as métricas primeiro
       tr.querySelectorAll('td[data-cons],td[data-vel],td[data-rpm]')
         .forEach(td=> td.classList.remove('meta-ok','meta-warn','meta-bad'));
 
-      if (!thr) return; // sem metas válidas
-
+      if (!thr) return;
       const op = tr.cells[1]?.textContent.trim() || '';
-      if (targets.size && !targets.has(op)) return; // filtro por operador
+      if (targets.size && !targets.has(op)) return;
 
-      const td = tr.querySelector(sel);
+      const td  = tr.querySelector(sel);
       if (!td) return;
 
-      const raw = td.dataset.cons ?? td.dataset.vel ?? td.dataset.rpm;
-      const val = parseFloat(raw);
+      const val = parseFloat(td.dataset.cons ?? td.dataset.vel ?? td.dataset.rpm);
       if (!isFinite(val)) return;
 
       if (val <= thr.ok)        td.classList.add('meta-ok');
@@ -947,15 +1022,16 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
   }
 
   window.addEventListener('DOMContentLoaded', ()=>{
-    // aplica foco do PHP (se existir)
+    // aplica foco default do PHP se existir
     const f = document.getElementById('foco'); if (f && window.CONSUMO_META?.foco) f.value = window.CONSUMO_META.foco;
 
+    updateMetaUI();
     populateOps();
     colorize();
 
-    document.getElementById('foco')?.addEventListener('change', colorize);
-    document.querySelector('input[name="meta_ok"]')?.addEventListener('input', colorize);
-    document.querySelector('input[name="meta_warn"]')?.addEventListener('input', colorize);
+    document.getElementById('foco')?.addEventListener('change', ()=>{ updateMetaUI(); colorize(); });
+    document.getElementById('metaOk')?.addEventListener('input', colorize);
+    document.getElementById('metaWarn')?.addEventListener('input', colorize);
     document.getElementById('metaOps')?.addEventListener('change', colorize);
   });
 })();
