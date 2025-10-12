@@ -93,14 +93,11 @@ function parse_date_guess(string $s): ?array {
 function parse_float_ptbr($s){
   $s = trim((string)$s);
   if ($s==='') return null;
-  // remove tudo exceto dígitos, separadores e sinal
   $s = preg_replace('/[^0-9,\.\-]+/','', $s);
-  // se tem vírgula e ponto, assume vírgula como decimal (BR) e remove milhares
   if (strpos($s, ',') !== false && strpos($s, '.') !== false) {
     $s = str_replace('.', '', $s);
     $s = str_replace(',', '.', $s);
   } else {
-    // só vírgula -> decimal BR
     if (strpos($s, ',') !== false) $s = str_replace(',', '.', $s);
   }
   return is_numeric($s) ? (float)$s : null;
@@ -115,6 +112,14 @@ function parse_frente_code(string $s): string {
   return $d !== '' ? $d : '—';
 }
 
+function parse_unidade_from_text(string $s): ?string {
+  $s = trim($s);
+  if ($s === '') return null;
+  if (preg_match('/^([A-Z]{2,6})\s*-\s*frent/i', $s, $m)) return $m[1];
+  if (preg_match('/^([A-Z]{2,6})\s*-\s*/', $s, $m)) return $m[1];
+  return null;
+}
+
 function parse_operator_name(string $s): string {
   $s = trim($s);
   if ($s === '') return '';
@@ -126,83 +131,68 @@ function parse_operator_name(string $s): string {
 }
 
 function operator_key(string $s): string {
-  // usa norm() para remover acentos e baixar caixa, depois limpa pontuação
   $k = preg_replace('/[^a-z\s]+/', '', norm($s));
   $k = preg_replace('/\s+/', ' ', trim($k));
   return $k !== '' ? $k : '-';
 }
 
 /**
- * Agrega por OPERADOR (dentro da frente) com médias ponderadas por Tempo Efetivo (h).
- * - Consumo (l/h), Vel e RPM: média ponderada por horas.
- * - Área e Horas: soma.
- * - Equipamento: o mais usado em horas pelo operador ("principal").
- * - Nome exibido: mantém a primeira variante não vazia encontrada.
+ * AGREGAÇÃO FINAL (ÚNICA): Ponderada por HORAS (global) por (operador + equipamento).
+ * - Área e Tempo: somatório
+ * - Vel/RPM/Cons (l/h): média ponderada por Tempo Efetivo (h)
+ * - Ordenação: equipamento (numérico) > operador > consumo desc
  */
-function aggregate_by_operator(array $rows): array {
-  $g = []; // key_operador => acumuladores
+function aggregate_by_operator_weighted(array $rows): array {
+  // bucket por operador+equip para manter granularidade compatível com SGPA UI
+  $bucket = []; // key => acumuladores
   foreach ($rows as $r) {
     $opRaw = $r['operador'] ?: '-';
-    $key   = operator_key($opRaw);
     $eq    = (string)($r['equipamento'] ?? '');
-    $area  = (float)($r['area']  ?? 0);
-    $tempo = max(0.0, (float)($r['tempo'] ?? 0));
-    $vel   = isset($r['vel'])   ? (float)$r['vel']   : null;
-    $rpm   = isset($r['rpm'])   ? (float)$r['rpm']   : null;
-    $cons  = isset($r['consumo']) ? (float)$r['consumo'] : null;
+    $k     = operator_key($opRaw) . '|' . $eq;
 
-    if (!isset($g[$key])) {
-      $g[$key] = [
-        'display' => ($opRaw !== '' ? $opRaw : '-'),
-        'area_sum' => 0.0, 'tempo_sum' => 0.0,
-        'vel_t' => 0.0, 'vel_w' => 0.0, 'vel_sum' => 0.0, 'vel_n' => 0,
-        'rpm_t' => 0.0, 'rpm_w' => 0.0, 'rpm_sum' => 0.0, 'rpm_n' => 0,
-        'cons_t'=> 0.0, 'cons_w'=> 0.0, 'cons_sum'=> 0.0, 'cons_n'=> 0,
-        'equip_tempo' => [], 'n' => 0
+    $t  = max(0.0, (float)($r['tempo'] ?? 0));
+    $a  = (float)($r['area']  ?? 0);
+    $v  = isset($r['vel'])     ? (float)$r['vel']     : null;
+    $rp = isset($r['rpm'])     ? (float)$r['rpm']     : null;
+    $c  = isset($r['consumo']) ? (float)$r['consumo'] : null;
+
+    if (!isset($bucket[$k])) {
+      $bucket[$k] = [
+        'display' => $opRaw,
+        'eq'      => $eq,
+        'area'    => 0.0,
+        'tempo'   => 0.0,
+        'vt'=>0.0,'vw'=>0.0, // vel
+        'rt'=>0.0,'rw'=>0.0, // rpm
+        'ct'=>0.0,'cw'=>0.0, // consumo l/h
       ];
-    } else {
-      // se vier uma variante de nome mais “bonita”, atualiza display (opcional)
-      if ($g[$key]['display'] === '-' && $opRaw !== '-') $g[$key]['display'] = $opRaw;
     }
 
-    $g[$key]['area_sum']  += $area;
-    $g[$key]['tempo_sum'] += $tempo;
+    $bucket[$k]['area']  += $a;
+    $bucket[$k]['tempo'] += $t;
 
-    if ($vel !== null)  { $g[$key]['vel_t']  += $vel  * $tempo; $g[$key]['vel_w']  += $tempo; $g[$key]['vel_sum']  += $vel;  $g[$key]['vel_n']++; }
-    if ($rpm !== null)  { $g[$key]['rpm_t']  += $rpm  * $tempo; $g[$key]['rpm_w']  += $tempo; $g[$key]['rpm_sum']  += $rpm;  $g[$key]['rpm_n']++; }
-    if ($cons !== null) { $g[$key]['cons_t'] += $cons * $tempo; $g[$key]['cons_w'] += $tempo; $g[$key]['cons_sum'] += $cons; $g[$key]['cons_n']++; }
-
-    $g[$key]['equip_tempo'][$eq] = ($g[$key]['equip_tempo'][$eq] ?? 0) + $tempo;
-    $g[$key]['n']++;
+    if ($v  !== null) { $bucket[$k]['vt'] += $v  * $t; $bucket[$k]['vw'] += $t; }
+    if ($rp !== null) { $bucket[$k]['rt'] += $rp * $t; $bucket[$k]['rw'] += $t; }
+    if ($c  !== null) { $bucket[$k]['ct'] += $c  * $t; $bucket[$k]['cw'] += $t; }
   }
 
   $out = [];
-  foreach ($g as $key => $acc) {
-    // equipamento principal = maior tempo acumulado
-    $equip = '-';
-    if (!empty($acc['equip_tempo'])) {
-      arsort($acc['equip_tempo']);
-      $equip = (string)array_key_first($acc['equip_tempo']);
-    }
-
-    $tempo_sum = $acc['tempo_sum'];
-
-    $cons = $acc['cons_w'] > 0 ? ($acc['cons_t'] / $acc['cons_w']) : ($acc['cons_n'] ? $acc['cons_sum'] / $acc['cons_n'] : 0.0);
-    $vel  = $acc['vel_w']  > 0 ? ($acc['vel_t']  / $acc['vel_w'])  : ($acc['vel_n']  ? $acc['vel_sum']  / $acc['vel_n']  : 0.0);
-    $rpm  = $acc['rpm_w']  > 0 ? ($acc['rpm_t']  / $acc['rpm_w'])  : ($acc['rpm_n']  ? $acc['rpm_sum']  / $acc['rpm_n']  : 0.0);
+  foreach ($bucket as $acc) {
+    $vel  = $acc['vw'] > 0 ? ($acc['vt'] / $acc['vw']) : 0.0;
+    $rpm  = $acc['rw'] > 0 ? ($acc['rt'] / $acc['rw']) : 0.0;
+    $cons = $acc['cw'] > 0 ? ($acc['ct'] / $acc['cw']) : 0.0;
 
     $out[] = [
-      'equipamento' => $equip,
+      'equipamento' => ($acc['eq'] !== '' ? $acc['eq'] : '-'),
       'operador'    => $acc['display'],
-      'area'        => $acc['area_sum'],
-      'tempo'       => $tempo_sum,
+      'area'        => round($acc['area'], 2),
+      'tempo'       => round($acc['tempo'], 1),
       'vel'         => $vel,
       'rpm'         => $rpm,
       'consumo'     => $cons,
     ];
   }
 
-  // ordena: equipamento asc (numérico quando possível) > operador asc > consumo desc
   usort($out, function($a,$b){
     $ea = (int)preg_replace('/\D+/', '', (string)$a['equipamento']);
     $eb = (int)preg_replace('/\D+/', '', (string)$b['equipamento']);
@@ -216,147 +206,7 @@ function aggregate_by_operator(array $rows): array {
 }
 
 /**
- * Modo compatível com a TELA do SGPA:
- * - agrupa por DIA e por (operador + equipamento)
- * - dentro de cada dia: médias ponderadas por horas
- * - ARREDONDA POR DIA: area(2), tempo(0), vel(1), rpm(1), cons(2)
- * - consolida período:
- *     * área/tempo: soma dos diários já arredondados
- *     * vel/rpm/cons: média SIMPLES dos diários já arredondados (não ponderada)
- *
- * Outros modos:
- * - 'planilha': agrupa por (operador+equip), soma área/tempo, e faz médias ponderadas por horas (round final)
- * - 'weighted_total': igual ao atual (ponderado global), mas separando por equip.
- */
-function aggregate_by_operator_mode(array $rows, string $mode='sgpa_ui'): array {
-  // separa por operador+equipamento (para bater com a tela)
-  $bucket = []; // key => rows
-  foreach ($rows as $r) {
-    $op = $r['operador'] ?: '-';
-    $eq = (string)($r['equipamento'] ?? '');
-    $k  = operator_key($op) . '|' . $eq;
-    if (!isset($bucket[$k])) {
-      $bucket[$k] = ['op_display'=>$op, 'eq'=>$eq, 'rows'=>[]];
-    }
-    $bucket[$k]['rows'][] = $r;
-  }
-
-  $out = [];
-
-  foreach ($bucket as $k => $grp) {
-    $opDisp = $grp['op_display'];
-    $eq     = $grp['eq'];
-    $rowsG  = $grp['rows'];
-
-    if ($mode === 'sgpa_ui') {
-      // 1) por dia
-      $byDay = [];
-      foreach ($rowsG as $r) {
-        $day = $r['data_iso'] ?? '0000-00-00';
-        $byDay[$day][] = $r;
-      }
-
-      $areaTotal = 0.0; $tempoTotal = 0.0;
-      $velDays = []; $rpmDays = []; $consDays = [];
-
-      foreach ($byDay as $day => $rlist) {
-        $area  = 0.0; $tempo = 0.0;
-        $vt=0; $vw=0; $rt=0; $rw=0; $ct=0; $cw=0;
-
-        foreach ($rlist as $r) {
-          $t = max(0.0, (float)($r['tempo'] ?? 0));
-          $a = (float)($r['area']  ?? 0);
-          $v = isset($r['vel'])     ? (float)$r['vel']     : null;
-          $rp= isset($r['rpm'])     ? (float)$r['rpm']     : null;
-          $c = isset($r['consumo']) ? (float)$r['consumo'] : null;
-
-          $area  += $a;
-          $tempo += $t;
-
-          if ($v  !== null) { $vt += $v  * $t; $vw += $t; }
-          if ($rp !== null) { $rt += $rp * $t; $rw += $t; }
-          if ($c  !== null) { $ct += $c  * $t; $cw += $t; }
-        }
-
-        // 2) ARREDONDA POR DIA (tela)
-        $area_d = round($area, 2);
-        $tempo_d= round($tempo, 0); // inteiro
-        $vel_d  = ($vw>0) ? round($vt/$vw, 1) : null;
-        $rpm_d  = ($rw>0) ? round($rt/$rw, 1) : null;
-        $cons_d = ($cw>0) ? round($ct/$cw, 2) : null;
-
-        // 3) acumula período
-        $areaTotal  += $area_d;
-        $tempoTotal += $tempo_d;
-        if ($vel_d  !== null) $velDays[]  = $vel_d;
-        if ($rpm_d  !== null) $rpmDays[]  = $rpm_d;
-        if ($cons_d !== null) $consDays[] = $cons_d;
-      }
-
-      // média SIMPLES dos diários já arredondados
-      $vel  = count($velDays)  ? round(array_sum($velDays)/count($velDays), 1) : 0.0;
-      $rpm  = count($rpmDays)  ? round(array_sum($rpmDays)/count($rpmDays), 1) : 0.0;
-      $cons = count($consDays) ? round(array_sum($consDays)/count($consDays), 2): 0.0;
-
-      $out[] = [
-        'equipamento' => $eq ?: '-',
-        'operador'    => $opDisp,
-        'area'        => $areaTotal,
-        'tempo'       => $tempoTotal,
-        'vel'         => $vel,
-        'rpm'         => $rpm,
-        'consumo'     => $cons,
-      ];
-    }
-    else {
-      // 'planilha' | 'weighted_total' -> ponderado global por horas
-      $area=0; $tempo=0; $vt=0; $vw=0; $rt=0; $rw=0; $ct=0; $cw=0;
-      foreach ($rowsG as $r) {
-        $t = max(0.0, (float)($r['tempo'] ?? 0));
-        $a = (float)($r['area']  ?? 0);
-        $v = isset($r['vel'])     ? (float)$r['vel']     : null;
-        $rp= isset($r['rpm'])     ? (float)$r['rpm']     : null;
-        $c = isset($r['consumo']) ? (float)$r['consumo'] : null;
-
-        $area  += $a;
-        $tempo += $t;
-        if ($v  !== null) { $vt += $v  * $t; $vw += $t; }
-        if ($rp !== null) { $rt += $rp * $t; $rw += $t; }
-        if ($c  !== null) { $ct += $c  * $t; $cw += $t; }
-      }
-
-      // arredonda só no final (decimais “clássicos”)
-      $vel  = ($vw>0) ? round($vt/$vw, 1) : 0.0;
-      $rpm  = ($rw>0) ? round($rt/$rw, 1) : 0.0;
-      $cons = ($cw>0) ? round($ct/$cw, 2): 0.0;
-
-      $out[] = [
-        'equipamento' => $eq ?: '-',
-        'operador'    => $opDisp,
-        'area'        => round($area, 2),
-        'tempo'       => round($tempo, 1),
-        'vel'         => $vel,
-        'rpm'         => $rpm,
-        'consumo'     => $cons,
-      ];
-    }
-  }
-
-  // ordenação: equip numérico > operador > consumo desc (como antes)
-  usort($out, function($a,$b){
-    $ea = (int)preg_replace('/\D+/', '', (string)$a['equipamento']);
-    $eb = (int)preg_replace('/\D+/', '', (string)$b['equipamento']);
-    if ($ea !== $eb) return $ea <=> $eb;
-    $cmpOp = strcmp((string)$a['operador'], (string)$b['operador']);
-    if ($cmpOp !== 0) return $cmpOp;
-    return $b['consumo'] <=> $a['consumo'];
-  });
-
-  return $out;
-}
-
-/**
- * Estatísticas de nível FRENTE sobre as linhas já agregadas por operador.
+ * Estatísticas de nível FRENTE sobre as linhas já agregadas por operador+equipamento.
  * - Consumo/Vel/RPM: média ponderada por Tempo Efetivo (h)
  * - Área e Tempo: soma
  * - Equipamentos: contagem de distintos
@@ -406,8 +256,8 @@ $periodo = ['inicio'=>null,'fim'=>null];
 $cards = []; // [unidade][frente] => linhas
 
 /* ========= Pré-carrega mapa Frente por Equipamento ========= */
-$frMap = [];         // ['13020040' => ['codigo'=>'161','nome'=>'Frente 161']]
-$frLabelByCode = []; // ['161' => 'Frente 161']
+$frMap = [];         // ['13020040' => ['codigo'=>'161','nome'=>'CGA - Frente 161','unidade'=>'CGA']]
+$frLabelByUnit = []; // ['CGA'=>['161'=>'CGA - Frente 161'], 'IVA'=>['232'=>'IVA - Frente 232']]
 try {
   $q = $pdo->query("
     SELECT e.nome AS equip_nome, f.codigo AS frente_codigo, f.nome AS frente_nome
@@ -419,18 +269,19 @@ try {
   $rowsFr = $q->fetchAll(PDO::FETCH_ASSOC);
   foreach ($rowsFr as $r) {
     $eqCode = preg_replace('/\D+/', '', (string)$r['equip_nome']);
-    if ($eqCode !== '') {
-      $frMap[$eqCode] = ['codigo'=>(string)$r['frente_codigo'], 'nome'=>(string)$r['frente_nome']];
-      if ($r['frente_codigo'] !== '' && $r['frente_nome'] !== '') {
-        $frLabelByCode[(string)$r['frente_codigo']] = (string)$r['frente_nome'];
-      }
+    if ($eqCode === '') continue;
+    $frCode = (string)$r['frente_codigo'];
+    $frNome = (string)$r['frente_nome'];
+    $uSigla = parse_unidade_from_text($frNome) ?? '';
+    $frMap[$eqCode] = ['codigo'=>$frCode, 'nome'=>$frNome, 'unidade'=>$uSigla];
+    if ($frCode !== '' && $frNome !== '' && $uSigla !== '') {
+      $frLabelByUnit[$uSigla][$frCode] = $frNome;
     }
   }
-} catch (Throwable $e) { /* segue sem frente */ }
+} catch (Throwable $e) { /* ok sem mapa */ }
 
 /* ========== Foco & Metas dinâmicas (Cons/Vel/RPM) ========== */
 $FOCO = $_POST['foco'] ?? 'cons'; // cons | vel | rpm
-$AGG_MODE = $_POST['agg_mode'] ?? 'sgpa_ui'; // 'sgpa_ui' | 'planilha' | 'weighted_total'
 $META_OK_VAL   = isset($_POST['meta_ok'])   ? (float)$_POST['meta_ok']   : 23.0;
 $META_WARN_VAL = isset($_POST['meta_warn']) ? (float)$_POST['meta_warn'] : 25.0;
 $META_OPS      = isset($_POST['meta_ops'])  ? array_values(array_filter((array)$_POST['meta_ops'])) : [];
@@ -514,7 +365,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo_csv'])) {
     // R (Tempo Efetivo (h))
     $idxTempo = idx_by_keywords($headersNorm, [[ 'tempo','efetivo' ], ['tempo','(h)'], ['tempo','efetivo','h']]);
 
-    // M (Velocidade Média Efetivo (km/h)) — aceitar variações
+    // M (Velocidade Média Efetivo (km/h))
     $idxVel   = idx_by_keywords($headersNorm, [
       ['velocidade','efetiv','km/h'], ['velocidade','media','efetiv'], ['velocidade','efetiv'], ['velocidade','km/h']
     ]);
@@ -540,7 +391,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo_csv'])) {
     } else {
       $first   = $headerIndex + 1;
       $agg     = []; // unidade > frente > [linhas p/ tabela]
-      $dates   = [];
       $lastUn  = '';
       $lastEq  = '';
       $lastFr  = '—';
@@ -558,14 +408,18 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo_csv'])) {
         $opName  = $idxOper  !== null ? parse_operator_name((string)($cells[$idxOper]  ?? '')) : '';
         $dataRaw = $idxData  !== null ? trim((string)($cells[$idxData]  ?? '')) : '';
 
-        // escadinha
-        $un = $unRaw !== '' ? $unRaw : $lastUn;
+        // ----- Escadinha -----
         $eq = $eqRaw !== '' ? parse_equip_code($eqRaw) : $lastEq;
 
-        // frente do arquivo (preferencial) com fallback por mapa
+        $unFromFrRaw = ($frRaw !== '') ? parse_unidade_from_text($frRaw) : null;
+        $unFromMap   = ($eq !== '' && isset($frMap[$eq]['unidade']) && $frMap[$eq]['unidade'] !== '') ? $frMap[$eq]['unidade'] : null;
+        $un          = ($unRaw !== '') ? $unRaw : ($unFromFrRaw ?? $unFromMap ?? $lastUn);
+
         $fr = $lastFr;
         if ($frRaw !== '') $fr = parse_frente_code($frRaw);
-        if (($fr === '—' || $fr === '') && $eq !== '' && isset($frMap[$eq])) $fr = $frMap[$eq]['codigo'];
+        if (($fr === '—' || $fr === '') && $eq !== '' && isset($frMap[$eq]['codigo'])) {
+          $fr = $frMap[$eq]['codigo'];
+        }
 
         // ignora totais/seções
         if ($un==='' && $eq==='') continue;
@@ -580,18 +434,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo_csv'])) {
 
         if ($consLH === null) continue; // precisa do consumo l/h pra colorização/tabela
 
-        $agg[$un][$fr][] = [
-          'equipamento' => $eq ?: $eqRaw,
-          'operador'    => ($opName !== '' ? $opName : '-'),
-          'area'        => ($area  ?? 0.0),
-          'tempo'       => ($tempo ?? 0.0),
-          'vel'         => ($vel   ?? 0.0),
-          'rpm'         => ($rpm   ?? 0.0),
-          'consumo'     => (float)$consLH, // l/h
-          'data_iso'    => $pd['iso'] ?? null,
-        ];
-
-        // dentro do loop, após $dataRaw:
+        // data para janela detectada
+        $pd = null;
         if ($dataRaw !== '') {
           $pd = parse_date_guess($dataRaw);
           if ($pd) {
@@ -600,24 +444,32 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['arquivo_csv'])) {
           }
         }
 
-        // depois do foreach($agg...) e antes do render:
-        $periodo['inicio'] = $minHuman;
-        $periodo['fim']    = $maxHuman;
+        $agg[$un][$fr][] = [
+          'equipamento' => $eq ?: $eqRaw,
+          'operador'    => ($opName !== '' ? $opName : '-'),
+          'area'        => ($area  ?? 0.0),
+          'tempo'       => ($tempo ?? 0.0),
+          'vel'         => ($vel   ?? 0.0),
+          'rpm'         => ($rpm   ?? 0.0),
+          'consumo'     => (float)$consLH,
+          'data_iso'    => $pd['iso'] ?? null, // <- agora $pd existe
+        ];
 
         // atualiza escadinha
         $lastUn = $un; $lastEq = $eq; $lastFr = $fr;
       }
 
+      // janela detectada
+      $periodo['inicio'] = $minHuman;
+      $periodo['fim']    = $maxHuman;
+
       // monta cards
       foreach ($agg as $unidade => $byFrente) {
         foreach ($byFrente as $frente => $rowsList) {
-          // agrega por OPERADOR com médias ponderadas por horas
-          $aggOps = aggregate_by_operator_mode($rowsList, $AGG_MODE);
+          $aggOps = aggregate_by_operator_weighted($rowsList);
           $cards[$unidade][$frente] = $aggOps;
         }
       }
-
-      if (!empty($dates)) { sort($dates); $periodo['inicio'] = $dates[0]; $periodo['fim'] = end($dates); }
     }
   }
 }
@@ -653,30 +505,20 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
         <small class="hint">A cor aplica apenas nessa coluna.</small>
       </div>
 
-      <div>
-        <label><strong>Modo de consolidação</strong></label><br>
-        <select name="agg_mode" id="agg_mode">
-          <option value="sgpa_ui" <?= ($AGG_MODE==='sgpa_ui')?'selected':'' ?>>Compatível SGPA (UI)</option>
-          <option value="planilha" <?= ($AGG_MODE==='planilha')?'selected':'' ?>>Compatível SGPA (Planilha)</option>
-          <option value="weighted_total" <?= ($AGG_MODE==='weighted_total')?'selected':'' ?>>Ponderado por horas (global)</option>
-        </select>
-        <small class="hint">“Compatível SGPA (UI)” arredonda por dia e faz média dos diários.</small>
-      </div>
-
-      <!-- Metas para RPM -->
+      <!-- Metas -->
       <div>
         <label id="metaOkLabel">Meta (verde ≤)</label><br>
         <input type="number" id="metaOk" name="meta_ok"
               step="0.1" style="width:110px"
               value="<?= htmlspecialchars($META_OK_VAL) ?>"
-              placeholder="ex.: 6,0">
+              placeholder="ex.: 23,0">
       </div>
       <div>
         <label id="metaWarnLabel">Faixa neutra (amarelo ≤)</label><br>
         <input type="number" id="metaWarn" name="meta_warn"
               step="0.1" style="width:110px"
               value="<?= htmlspecialchars($META_WARN_VAL) ?>"
-              placeholder="ex.: 7,5">
+              placeholder="ex.: 25,0">
       </div>
 
       <div class="actions" style="align-self:flex-end">
@@ -729,7 +571,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
 
       <nav class="frentes-nav no-print">
         <?php foreach ($frKeys as $frCode):
-          $label = ($frCode !== '—' && isset($frLabelByCode[$frCode])) ? (' — '.$frLabelByCode[$frCode]) : '';
+          $label = ($frCode !== '—' && isset($frLabelByUnit[$un][$frCode])) ? (' — '.$frLabelByUnit[$un][$frCode]) : '';
           $secId = 'frente-'
                   . preg_replace('/[^A-Za-z0-9_-]+/','-', $un)
                   . '-'
@@ -745,7 +587,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
       <?php $firstFr = true; foreach ($frKeys as $fr):
         $linhas = $byFrente[$fr];
 
-        // stats por frente
+        // stats ponderadas por horas (sobre as linhas já agregadas)
         $stats      = aggregate_front_stats($linhas);
         $equipCount = $stats['equip_count'];
         $consAvg    = (float)($stats['consumo'] ?? 0.0);
@@ -753,7 +595,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
         $areaSum    = (float)$stats['area'];
         $velAvg     = $stats['vel'];
         $rpmAvg     = $stats['rpm'];
-        $frLabel    = ($fr !== '—' && isset($frLabelByCode[$fr])) ? (' — ' . $frLabelByCode[$fr]) : '';
+        $frLabel    = ($fr !== '—' && isset($frLabelByUnit[$un][$fr])) ? (' — ' . $frLabelByUnit[$un][$fr]) : '';
         $dataNome   = ($periodo['inicio'] ?? '') ?: date('Y-m-d');
 
         $secId = 'frente-'
@@ -884,7 +726,6 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
 
 <script>
 (function(){
-  // === foco atual: define label, unidade, nome de arquivo e título do PDF ===
   function focusMeta(){
     const foco = document.getElementById('foco')?.value || window.CONSUMO_META?.foco || 'cons';
     if (foco === 'vel') return { key:'vel', label:'Velocidade Média Efetiva', unit:'km/h', file:'velocidade', title:'Relatório de Velocidade' };
@@ -892,7 +733,6 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     return { key:'cons', label:'Consumo', unit:'l/h', file:'consumo', title:'Relatório de Consumo' };
   }
 
-  // ===== helpers de construção da página exportada =====
   function buildReportTitle(){
     const { title } = focusMeta();
     const wrap = document.createElement('div'); wrap.className = 'pdf-title-block';
@@ -915,7 +755,6 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     const table = document.createElement('table'); table.className = 'table';
     const theadOrig = card.querySelector('table thead');
     const thead = theadOrig ? theadOrig.cloneNode(true) : document.createElement('thead');
-    // remove eventual destaque da coluna focada no PDF
     thead.querySelectorAll('.focus-col').forEach(th => th.classList.remove('focus-col'));
     const tbody = document.createElement('tbody');
     table.appendChild(thead); table.appendChild(tbody);
@@ -930,9 +769,9 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     return { page, inner, thead, tbody };
   }
 
-  // ===== agrupamento por equipamento e média ponderada por HORAS =====
+  // agrupamento por equipamento (na página) e média ponderada por horas para subtotais
   function groupRowsByEquipment(card){
-    const { key } = focusMeta(); // 'cons' | 'vel' | 'rpm'
+    const { key } = focusMeta();
     const trs = Array.from(card.querySelectorAll('table tbody tr'));
     const groups = []; let current = null;
     const norm = s => String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').trim().toLowerCase();
@@ -982,7 +821,6 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     return String(s || '').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9\-_]+/g,'').slice(0,64);
   }
 
-  // ===== paginação por altura com subtotais =====
   function buildPagesByHeightGrouped(card){
     const PX_PER_MM = 3.7795275591, A4_H = 297 * PX_PER_MM, PAD_PX = 10 * PX_PER_MM;
     const sandbox = ensureSandbox();
@@ -1082,7 +920,6 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     document.getElementById('export-sandbox')?.remove();
   }
 
-  // eventos de export
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.btn-export-frente'); if (!btn) return;
     const card = btn.closest('.frente-card'); if (card) exportCard(card);
@@ -1114,19 +951,17 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     });
   }
 
-  // roda ao carregar; se em algum momento você reordenar linhas, pode chamar de novo
   window.addEventListener('DOMContentLoaded', ()=> markGroupStarts());
 })();
 </script>
 
 <script>
-// Colorização por célula — versão consolidada (sem funções duplicadas)
+// Colorização por célula
 (function () {
   function currentFocus(){
     return document.getElementById('foco')?.value || window.CONSUMO_META?.foco || 'cons';
   }
 
-  // metas (ok/warn) lidas dos inputs; fallback para CONSUMO_META
   function thresholds(){
     const okEl   = document.getElementById('metaOk');
     const warnEl = document.getElementById('metaWarn');
@@ -1137,7 +972,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     if (!isFinite(warn)) warn = window.CONSUMO_META?.warn;
 
     if (!isFinite(ok) || !isFinite(warn)) return null;
-    if (ok > warn) [ok, warn] = [warn, ok]; // garante ok <= warn
+    if (ok > warn) [ok, warn] = [warn, ok];
     return { ok, warn };
   }
 
@@ -1178,16 +1013,9 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     });
   }
 
-  function getSelectedOps(){
-    const sel = document.getElementById('metaOps');
-    if(!sel) return new Set();
-    return new Set(Array.from(sel.selectedOptions).map(o=>o.value));
-  }
-
   function colorize(){
     const foco    = currentFocus();
     const thr     = thresholds();
-    const targets = getSelectedOps();
     const sel     = (foco==='cons') ? 'td[data-cons]' :
                     (foco==='vel'  ? 'td[data-vel]'  : 'td[data-rpm]');
 
@@ -1196,9 +1024,6 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
         .forEach(td=> td.classList.remove('meta-ok','meta-warn','meta-bad'));
 
       if (!thr) return;
-      const op = tr.cells[1]?.textContent.trim() || '';
-      if (targets.size && !targets.has(op)) return;
-
       const td  = tr.querySelector(sel);
       if (!td) return;
 
@@ -1213,36 +1038,15 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     highlightHeader();
   }
 
-  function populateOps(){
-    const sel = document.getElementById('metaOps'); if(!sel) return;
-    const opsSet = new Set();
-    document.querySelectorAll('.frente-card table tbody tr').forEach(tr=>{
-      const t = tr.cells[1]?.textContent.trim();
-      if (t && t !== '-') opsSet.add(t);
-    });
-    sel.innerHTML = '';
-    if (opsSet.size === 0){ sel.disabled = true; return; }
-    Array.from(opsSet).sort((a,b)=>a.localeCompare(b,'pt-BR')).forEach(op=>{
-      const opt = document.createElement('option');
-      opt.value = opt.textContent = op;
-      if (Array.isArray(window.CONSUMO_META?.ops) && window.CONSUMO_META.ops.includes(op)) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    sel.disabled = false;
-  }
-
   window.addEventListener('DOMContentLoaded', ()=>{
-    // aplica foco default do PHP se existir
     const f = document.getElementById('foco'); if (f && window.CONSUMO_META?.foco) f.value = window.CONSUMO_META.foco;
 
     updateMetaUI();
-    populateOps();
     colorize();
 
     document.getElementById('foco')?.addEventListener('change', ()=>{ updateMetaUI(); colorize(); });
     document.getElementById('metaOk')?.addEventListener('input', colorize);
     document.getElementById('metaWarn')?.addEventListener('input', colorize);
-    document.getElementById('metaOps')?.addEventListener('change', colorize);
   });
 })();
 </script>
