@@ -215,6 +215,51 @@ function aggregate_by_operator(array $rows): array {
   return $out;
 }
 
+/**
+ * Estatísticas de nível FRENTE sobre as linhas já agregadas por operador.
+ * - Consumo/Vel/RPM: média ponderada por Tempo Efetivo (h)
+ * - Área e Tempo: soma
+ * - Equipamentos: contagem de distintos
+ */
+function aggregate_front_stats(array $opRows): array {
+  $area_sum = 0.0; $tempo_sum = 0.0;
+  $vel_t = 0.0; $vel_w = 0.0;
+  $rpm_t = 0.0; $rpm_w = 0.0;
+  $cons_t = 0.0; $cons_w = 0.0;
+  $equipSet = [];
+
+  foreach ($opRows as $r) {
+    $t = max(0.0, (float)($r['tempo'] ?? 0));
+    $a = (float)($r['area'] ?? 0);
+    $v = isset($r['vel'])     ? (float)$r['vel']     : null;
+    $rp= isset($r['rpm'])     ? (float)$r['rpm']     : null;
+    $c = isset($r['consumo']) ? (float)$r['consumo'] : null;
+
+    $area_sum  += $a;
+    $tempo_sum += $t;
+ 
+    if ($v  !== null) { $vel_t  += $v  * $t; $vel_w  += $t; }
+    if ($rp !== null) { $rpm_t  += $rp * $t; $rpm_w  += $t; }
+    if ($c  !== null) { $cons_t += $c  * $t; $cons_w += $t; }
+
+    if (!empty($r['equipamento'])) $equipSet[(string)$r['equipamento']] = true;
+  }
+
+  $vel   = $vel_w  > 0 ? ($vel_t  / $vel_w)  : null;
+  $rpm   = $rpm_w  > 0 ? ($rpm_t  / $rpm_w)  : null;
+  $cons  = $cons_w > 0 ? ($cons_t / $cons_w) : null;
+  $equip_count = count($equipSet);
+
+  return [
+    'equip_count' => $equip_count,
+    'area'        => $area_sum,
+    'tempo'       => $tempo_sum,
+    'vel'         => $vel,
+    'rpm'         => $rpm,
+    'consumo'     => $cons,
+  ];
+}
+
 /* ========= Estado ========= */
 $errors = [];
 $periodo = ['inicio'=>null,'fim'=>null];
@@ -549,8 +594,13 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
         $linhas = $byFrente[$fr];
 
         // stats por frente
-        $equipCount = count(array_unique(array_map(fn($r)=>$r['equipamento'], $linhas)));
-        $consAvg    = count($linhas) ? array_sum(array_column($linhas,'consumo'))/count($linhas) : 0.0;
+        $stats      = aggregate_front_stats($linhas);
+        $equipCount = $stats['equip_count'];
+        $consAvg    = (float)($stats['consumo'] ?? 0.0);
+        $tempoSum   = (float)$stats['tempo'];
+        $areaSum    = (float)$stats['area'];
+        $velAvg     = $stats['vel'];
+        $rpmAvg     = $stats['rpm'];
         $frLabel    = ($fr !== '—' && isset($frLabelByCode[$fr])) ? (' — ' . $frLabelByCode[$fr]) : '';
         $dataNome   = ($periodo['inicio'] ?? '') ?: date('Y-m-d');
 
@@ -578,7 +628,15 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
             <div class="frente-badges">
               <span class="frente-badge">Equip.: <?= $equipCount ?></span>
               <span class="frente-badge">Registros: <?= count($linhas) ?></span>
-              <span class="frente-badge">Média: <?= number_format($consAvg, 2, ',', '.') ?></span>
+              <span class="frente-badge">Horas: <?= number_format($tempoSum, 1, ',', '.') ?></span>
+              <span class="frente-badge">Área: <?= number_format($areaSum, 2, ',', '.') ?></span>
+              <span class="frente-badge">Média (l/h): <?= number_format($consAvg ?? 0, 2, ',', '.') ?></span>
+              <?php if ($velAvg !== null): ?>
+                <span class="frente-badge">Vel. (km/h): <?= number_format($velAvg, 2, ',', '.') ?></span>
+              <?php endif; ?>
+              <?php if ($rpmAvg !== null): ?>
+                <span class="frente-badge">RPM: <?= number_format($rpmAvg, 0, ',', '.') ?></span>
+              <?php endif; ?>
             </div>
           </div>
           <div class="frente-actions no-print">
