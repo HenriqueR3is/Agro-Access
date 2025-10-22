@@ -184,9 +184,9 @@ small.hint{color:#5f6b76;display:block;margin-top:4px}
 @media print{ .no-print{ display:none !important } }
 
 /* Cores por CÉLULA */
-.table td.meta-ok   { background:#e9f7ec; }
-.table td.meta-warn { background:#fff6e5; }
-.table td.meta-bad  { background:#ffecec; }
+.table td.meta-ok   { background:#4eff74; font-weight: bold; font-size: 14px; }
+.table td.meta-warn { background:#fff78e; font-weight: bold; font-size: 14px; }
+.table td.meta-bad  { background:#ff5959; font-weight: bold; font-size: 14px; }
 
 /* Texto preto e legível nas células coloridas */
 .table td.meta-ok,

@@ -17,6 +17,7 @@ RewriteRule ^admin_fleet$ app/views/admin/admin_fleet.php [L]
 RewriteRule ^fazendas$ app/views/admin/admin_farms.php [L]
 RewriteRule ^comparativo$ app/views/CIA/relatorios/comparativo.php [L]
 RewriteRule ^consumo$ app/views/CIA/relatorios/consumo.php [L]
+RewriteRule ^consumo_equip$ app/views/CIA/relatorios/consumo_equip_comp.php [L]
 RewriteRule ^horasoperacionais$ app/views/CIA/relatorios/horas_operacionais.php [L]
 
 # Endpoints (APIs)
