@@ -164,7 +164,8 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
   // Lista única de capabilities usadas nas telas/menus
   $ALL_CAPS = [
     'dashboard:view','admin:menu','admin:pages','users:crud', 'equip:crud',
-    'fazendas:crud', 'metas:view','metas:edit','admin_dashboard:view', 'apontamentos:view','user_dashboard:view', 'audit:view', 'consumo:view'
+    'fazendas:crud', 'metas:view','metas:edit','admin_dashboard:view', 'apontamentos:view',
+    'user_dashboard:view', 'audit:view', 'consumo:view', 'horasoperacionais:view'
   ];
 
   $caps = [];
@@ -174,11 +175,11 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
     if ($role === 'cia_dev') {
       $caps = ['*']; // acesso total
     } elseif ($role === 'admin') {
-      $caps = ['dashboard:view','admin:menu','admin:pages','users:crud','fazendas:crud','equip:crud','comparativo:view','metas:view','metas:edit', 'apontamentos:view', 'audit:view', 'consumo:view'];
+      $caps = ['dashboard:view','admin:menu','admin:pages','users:crud','fazendas:crud','equip:crud','comparativo:view','metas:view','metas:edit', 'apontamentos:view', 'audit:view', 'consumo:view', 'horasoperacionais:view'];
     } elseif ($role === 'cia_admin') {
-      $caps = ['dashboard:view','admin:menu','users:view','fazendas:crud','equip:crud','comparativo:view','metas:view', 'apontamentos:view', 'consumo:view'];
+      $caps = ['dashboard:view','admin:menu','users:view','fazendas:crud','equip:crud','comparativo:view','metas:view', 'apontamentos:view', 'consumo:view', 'horasoperacionais:view'];
     } elseif ($role === 'cia_user') {
-      $caps = ['dashboard:view','comparativo:view', 'consumo:view'];
+      $caps = ['dashboard:view','comparativo:view', 'consumo:view', 'horasoperacionais:view'];
     } elseif ($role === 'operador') {
       $caps = ['user_dashboard:view'];
     } else {

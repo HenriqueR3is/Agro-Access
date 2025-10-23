@@ -125,3 +125,34 @@ small.hint{color:var(--muted);display:block;margin-top:4px}
     border-left-color:#000;
   }
 }
+
+/* Linha de agrupamento por unidade (uma faixa entre blocos) */
+.table tr.unit-row td{
+  background:#e8f1ee;
+  color:#1f2937;
+  font-weight:700;
+  border-top:2px solid #cbd5e1;
+  border-bottom:1px solid #d1d5db;
+}
+
+/* Destaque do VAR Cons. (l/h) */
+.var-cons{
+  font-weight: 800;
+  font-size: 15px;          /* ↑ um pouco o tamanho */
+  letter-spacing: .1px;
+  border-left: 2px solid #cbd5e1; /* continuação do separador vertical */
+  background: #f8fafc;      /* leve fundo neutro */
+}
+
+/* Cores por estado (aproveita a classe que mandamos no PHP) */
+.var-cons.delta-pos{ color:#b00020; background:#fdecea; }  /* piorou */
+.var-cons.delta-neg{ color:#1b5e20; background:#eaf7ef; }  /* melhorou */
+.var-cons.delta-zero{ color:#334155; background:#eef2f7; } /* igual */
+
+/* Em impressão, mantém o destaque */
+@media print{
+  .var-cons{
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
