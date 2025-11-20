@@ -1,7 +1,3 @@
-
-
-
-
 /*==============================
   Importação de Fontes e Variáveis Globais
 ==============================*/
@@ -27,7 +23,7 @@
     --shadow-dark: 0 8px 30px rgba(0, 0, 0, 0.15);
     --transition-speed: 0.3s;
     --border-radius: 8px;
-    --sidebar-width: 260px;
+    --sidebar-width: 290px;
     --header-height: 60px;
 }
 
@@ -631,7 +627,10 @@ a:hover {
     transition: background-color 0.3s ease, box-shadow 0.3s ease;
     position: relative; /* não precisa absolute/sticky */
     z-index: 2; /* fica sempre acima do conteúdo rolável */
+    border-bottom-style: inset;
+    border-block-end-color: mediumseagreen;
 }
+
 .sidebar-profile-footer:hover {
     background-color: #388e3c;
     box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.3);
@@ -706,3 +705,162 @@ a:hover {
     text-shadow: 0 0 8px rgba(174, 213, 129, 0.8);
 }
 
+/* Footer fixo no final da sidebar */
+.sidebar-profile-footer {
+
+    
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 18px 15px;
+    border-top: 2px solid rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+    box-shadow: 
+        0 -4px 12px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    position: relative;
+    z-index: 2;
+    backdrop-filter: blur(10px);
+    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+    border-radius: 0 0 12px 12px;
+    margin-bottom: -8px;
+    width: calc(103% );
+        margin-left: -4px;
+    border-block-color: #27ae60;
+
+}
+
+.sidebar-profile-footer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(129, 199, 132, 0.6) 50%, 
+        transparent 100%);
+}
+
+.sidebar-profile-footer:hover {
+    background: linear-gradient(135deg, #388e3c 0%, #2e7d32 100%);
+    box-shadow: 
+        0 -6px 20px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+    border-top-color: rgba(129, 199, 132, 0.3);
+}
+
+.sidebar-profile-footer:active {
+    transform: translateY(0);
+    transition-duration: 0.1s;
+}
+
+.profile-picture-footer {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 3px solid #81c784;
+    box-shadow: 
+        0 0 15px rgba(129, 199, 132, 0.4),
+        inset 0 0 20px rgba(255, 255, 255, 0.1);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    flex-shrink: 0;
+    position: relative;
+    background: linear-gradient(135deg, #81c784, #a5d6a7);
+}
+
+.profile-picture-footer::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 0deg,
+        #81c784,
+        #a5d6a7,
+        #c8e6c9,
+        #a5d6a7,
+        #81c784
+    );
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.profile-picture-footer:hover::after {
+    opacity: 1;
+}
+
+.profile-picture-footer img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+}
+
+.profile-picture-footer:hover {
+    transform: scale(1.08);
+    border-color: #a5d6a7;
+    box-shadow: 
+        0 0 20px rgba(129, 199, 132, 0.6),
+        inset 0 0 25px rgba(255, 255, 255, 0.15);
+}
+
+.profile-picture-footer:hover img {
+    transform: scale(1.05);
+}
+
+.profile-info-footer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+}
+
+.profile-name-footer {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #ffffff;
+    text-shadow: 
+        1px 1px 2px rgba(0, 0, 0, 0.4),
+        0 0 10px rgba(232, 245, 233, 0.3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 3px;
+    letter-spacing: 0.3px;
+    transition: all 0.3s ease;
+}
+
+.sidebar-profile-footer:hover .profile-name-footer {
+    text-shadow: 
+        1px 1px 3px rgba(0, 0, 0, 0.5),
+        0 0 15px rgba(232, 245, 233, 0.5);
+}
+
+.profile-role-footer {
+    font-size: 0.82rem;
+    color: #e8f5e9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+.sidebar-profile-footer:hover .profile-role-footer {
+    color: #ffffff;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.4);
+}

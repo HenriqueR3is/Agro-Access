@@ -2,13 +2,8 @@
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
-$tipoSess = strtolower($_SESSION['usuario_tipo'] ?? '');
-$ADMIN_LIKE = ['admin','cia_admin','cia_dev'];
-
-if (!isset($_SESSION['usuario_id']) || !in_array($tipoSess, $ADMIN_LIKE, true)) {
-    header("Location: /");
-    exit();
-}
+require_once __DIR__ . '/../../helpers/SimpleAuth.php';
+canAccessPage('fazendas:crud');
 
 $FAZENDAS_BASE = '/fazendas';
 

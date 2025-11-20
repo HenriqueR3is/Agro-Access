@@ -591,6 +591,7 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
 
 <link rel="stylesheet" href="/public/static/css/consumo.css">
 <link rel="stylesheet" href="/public/static/css/horas_operacionais.css">
+<link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 
 <div class="container" id="print-area">
   <h2>Relatório – Tempo de Apontamento (por Frente)</h2>

@@ -18,47 +18,66 @@ function norm($s){
   return strtr($s,$map);
 }
 function trim_bom($s){ return preg_replace('/^\x{FEFF}|^\xEF\xBB\xBF/u','',$s); }
-function detectar_delimitador(array $linhas, int $headerIndex=0): string{
-  $delims=["\t",";",",","|"];$scores=[];$i=max(0,min($headerIndex,count($linhas)-1));
-  $line=$linhas[$i]??($linhas[0]??'');foreach($delims as $d){$scores[$d]=count(str_getcsv($line,$d));}
-  arsort($scores);return key($scores);
+
+function detectar_delimitador(array $linhas, int $headerIndex=0): string {
+  $delims = ["\t",";",",","|"]; $scores = [];
+  $i = max(0, min($headerIndex, count($linhas)-1));
+  $line = $linhas[$i] ?? ($linhas[0] ?? '');
+  foreach($delims as $d){ $scores[$d] = count(str_getcsv($line,$d)); }
+  arsort($scores);
+  return key($scores);
 }
-function encontrar_indice_cabecalho(array $linhas): int{
-  $keywords=['unidade','frente','frota','equip','consumo','litro','operacao','operação','data'];
-  $max=min(6,count($linhas)-1); for($i=0;$i<=$max;$i++){
-    $l=mb_strtolower($linhas[$i]??''); foreach($keywords as $k){ if(mb_strpos($l,$k)!==false) return $i; }
-  } return 0;
+function encontrar_indice_cabecalho(array $linhas): int {
+  $keywords = ['unidade','frente','frota','equip','consumo','litro','operacao','operação','data'];
+  $max = min(6, count($linhas)-1);
+  for($i=0;$i<=$max;$i++){
+    $l = mb_strtolower($linhas[$i]??'');
+    foreach($keywords as $k){ if(mb_strpos($l,$k)!==false) return $i; }
+  }
+  return 0;
 }
-function idx_by_keywords(array $headers,array $cands): ?int{
-  foreach($headers as $i=>$h){ foreach($cands as $cand){
-    $ok=true; foreach($cand as $p){ if(mb_strpos($h,norm($p))===false){$ok=false;break;} }
-    if($ok) return $i; } } return null;
+function idx_by_keywords(array $headers, array $cands): ?int {
+  foreach($headers as $i=>$h){
+    foreach($cands as $cand){
+      $ok = true;
+      foreach($cand as $p){ if(mb_strpos($h, norm($p))===false){ $ok=false; break; } }
+      if($ok) return $i;
+    }
+  }
+  return null;
 }
-function idx_by_keywords_excluding(array $headers,array $must,array $mustNot=[]): ?int{
-  foreach($headers as $i=>$h){ $ok=true;
-    foreach($must as $p){ if(mb_strpos($h,norm($p))===false){$ok=false;break;} }
+function idx_by_keywords_excluding(array $headers, array $must, array $mustNot=[]): ?int {
+  foreach($headers as $i=>$h){
+    $ok=true;
+    foreach($must as $p){ if(mb_strpos($h, norm($p))===false){ $ok=false; break; } }
     if(!$ok) continue;
-    foreach($mustNot as $bad){ if(mb_strpos($h,norm($bad))!==false){$ok=false;break;} }
+    foreach($mustNot as $bad){ if(mb_strpos($h, norm($bad))!==false){ $ok=false; break; } }
     if($ok) return $i;
-  } return null;
+  }
+  return null;
 }
 function parse_equip_code(string $s): string{
   $s = trim($s);
   if ($s === '') return '';
-  if (preg_match('/(\d{5,})/', $s, $m)) return $m[1];
+  if (preg_match('/(\d{5,})/', $s, $m)) return $m[1];       // pega 5+ dígitos de dentro do texto
   $only = preg_replace('/\D+/', '', $s);
-  if (strlen($only) >= 5) return $only; // evita virar "230"
-  return $s;
+  if (strlen($only) >= 5) return $only;                     // só aceita se tiver 5+ dígitos
+  return $s;                                                // evita virar "230" (ex.: "CS PUMA 230 VINHAÇA")
 }
 function parse_date_guess(string $s): ?array{
   $s=trim($s); if($s==='')return null;
   $fmts=['d/m/Y','d/m/y','Y-m-d','m/d/Y','m/d/y'];
-  foreach($fmts as $f){ $dt=DateTime::createFromFormat($f,$s);
-    if($dt && $dt->format($f)===$s){ return ['iso'=>$dt->format('Y-m-d'),'human'=>$dt->format('d/m/Y'),'ts'=>$dt->getTimestamp()]; }
+  foreach($fmts as $f){
+    $dt=DateTime::createFromFormat($f,$s);
+    if($dt && $dt->format($f)===$s){
+      return ['iso'=>$dt->format('Y-m-d'),'human'=>$dt->format('d/m/Y'),'ts'=>$dt->getTimestamp()];
+    }
   }
-  $ts=strtotime($s); if($ts!==false){ $dt=(new DateTime())->setTimestamp($ts);
+  $ts=strtotime($s);
+  if($ts!==false){ $dt=(new DateTime())->setTimestamp($ts);
     return ['iso'=>$dt->format('Y-m-d'),'human'=>$dt->format('d/m/Y'),'ts'=>$ts];
-  } return null;
+  }
+  return null;
 }
 function parse_float_ptbr($s){
   $s=trim((string)$s); if($s==='')return null;
@@ -78,6 +97,7 @@ function build_agg_from_official(array $items): array {
     $eqRaw = (string)($it['equipamento'] ?? '');
     $eq = parse_equip_code($eqRaw);
     if ($un === '' || $eq === '') continue;
+
     $out[$un][$eq] = [
       'ha_dia' => isset($it['ha_dia'])       ? (float)$it['ha_dia']       : 0.0,
       'hr_dia' => isset($it['hr_dia'])       ? (float)$it['hr_dia']       : 0.0,
@@ -89,42 +109,46 @@ function build_agg_from_official(array $items): array {
       'dias'   => null,
     ];
   }
-  // ordena só equipamentos numericamente; unidade fica na ordem que vamos fornecer na view
+  // ordenação estável por unidade/equipamento numérico
   foreach ($out as $un => $_) {
     uksort($out[$un], fn($a,$b)=>((int)preg_replace('/\D+/','',$a))<=>((int)preg_replace('/\D+/','',$b)));
   }
+  ksort($out);
   return $out;
-}
-function unit_order_from_official_rows(array $items): array {
-  $seen=[]; $order=[];
-  foreach ($items as $it) {
-    $u = (string)($it['unidade'] ?? '');
-    if ($u!=='' && !isset($seen[$u])) { $seen[$u]=true; $order[]=$u; }
-  }
-  return $order;
 }
 
 /* =============================================================================
  * Fallback CSV do SGPA (agregação simples ponderada por horas)
  * ========================================================================== */
 function load_rows_from_upload(string $field, array &$errors){
-  if (!isset($_FILES[$field]) || $_FILES[$field]['error']!==UPLOAD_ERR_OK) { $errors[]="Upload inválido para {$field}."; return null; }
+  if (!isset($_FILES[$field]) || $_FILES[$field]['error']!==UPLOAD_ERR_OK) {
+    $errors[]="Upload inválido para {$field}."; return null;
+  }
   $tmp = $_FILES[$field]['tmp_name'];
   $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
   if ($ext!=='csv'){ $errors[]="Use arquivo CSV (formato separado por delimitador)."; return null; }
+
   $raw = file($tmp, FILE_IGNORE_NEW_LINES);
   if ($raw===false || !count($raw)){ $errors[]="Arquivo vazio em {$field}."; return null; }
+
   $headerIndex = encontrar_indice_cabecalho($raw);
   $delim = detectar_delimitador($raw, $headerIndex);
-  $rows=[]; foreach($raw as $i=>$line){ $cells=str_getcsv($line,$delim); if($i===$headerIndex) $cells=array_map('trim_bom',$cells); $rows[]=$cells; }
+
+  $rows=[]; foreach($raw as $i=>$line){
+    $cells=str_getcsv($line,$delim);
+    if($i===$headerIndex) $cells=array_map('trim_bom',$cells);
+    $rows[]=$cells;
+  }
   return $rows;
 }
+
 function parse_sgpa_rows(array $rows, array &$periodo_out, array &$errors){
   $headerIndex=0;
   for($i=0;$i<min(6,count($rows));$i++){
     $line=implode(' ',$rows[$i]??[]);
     if(preg_match('/unidade|frota|equip|consumo|litros|l\/h|km\/l|opera|data/i',$line)){ $headerIndex=$i; break; }
   }
+
   $headers = array_map(fn($x)=>trim_bom((string)$x), $rows[$headerIndex] ?? []);
   $headersNorm = array_map('norm',$headers);
 
@@ -148,9 +172,11 @@ function parse_sgpa_rows(array $rows, array &$periodo_out, array &$errors){
   $minTs=null; $maxTs=null; $daysSet=[];
 
   for($i=$first;$i<count($rows);$i++){
-    $cells=$rows[$i]; if(!$cells || !array_filter($cells)) continue;
+    $cells=$rows[$i];
+    if(!$cells || !array_filter($cells)) continue;
+
     $unRaw=trim((string)($cells[$idxUn]??'')); 
-    $eqRaw=trim((string)($cells[$idxEq]??'')); 
+    $eqRaw=trim((string)($cells[$idxEq]??''));
     if ($unRaw==='' && $eqRaw==='') continue;
     if (preg_match('/total/i', implode(' ',$cells))) continue;
 
@@ -161,13 +187,24 @@ function parse_sgpa_rows(array $rows, array &$periodo_out, array &$errors){
     $tempo  = $idxTempo !== null ? parse_float_ptbr($cells[$idxTempo] ?? '') : 0.0;
     $vel    = $idxVel   !== null ? parse_float_ptbr($cells[$idxVel]   ?? '') : null;
     $rpm    = $idxRpm   !== null ? parse_float_ptbr($cells[$idxRpm]   ?? '') : null;
-    $consLH =                    parse_float_ptbr($cells[$idxCons]    ?? ''); if ($consLH===null) continue;
+    $consLH =                    parse_float_ptbr($cells[$idxCons]    ?? '');
+    if ($consLH===null) continue;
 
     $dataRaw=$idxData!==null ? trim((string)($cells[$idxData]??'')) : '';
     $pd = $dataRaw!=='' ? parse_date_guess($dataRaw) : null;
     if ($pd){ $daysSet[$pd['iso']]=true; $minTs=min($minTs??$pd['ts'],$pd['ts']); $maxTs=max($maxTs??$pd['ts'],$pd['ts']); }
 
-    $out[] = ['unidade'=>$un,'equipamento'=>$eq ?: $eqRaw,'area'=>(float)$area,'tempo'=>(float)$tempo,'vel'=>$vel,'rpm'=>$rpm,'consumo'=>(float)$consLH,'data_iso'=>$pd['iso'] ?? null];
+    $out[] = [
+      'unidade'     => $un,
+      'equipamento' => $eq ?: $eqRaw,
+      'area'        => (float)$area,
+      'tempo'       => (float)$tempo,
+      'vel'         => $vel,
+      'rpm'         => $rpm,
+      'consumo'     => (float)$consLH,
+      'data_iso'    => $pd['iso'] ?? null,
+    ];
+
     $lastUn=$un; $lastEq=$eq;
   }
 
@@ -178,50 +215,84 @@ function parse_sgpa_rows(array $rows, array &$periodo_out, array &$errors){
   ];
   return $out;
 }
-function aggregate_by_equipment(array $rows, int $diasGlobal): array{
+
+function aggregate_by_equipment(array $rows, int $diasGlobal): array {
   $acc=[];
   foreach($rows as $r){
-    $un=(string)($r['unidade']??''); $eq=(string)($r['equipamento']??''); if($un===''||$eq==='') continue;
-    $t=max(0.0,(float)($r['tempo']??0)); $a=(float)($r['area']??0);
-    $v=isset($r['vel'])?(float)$r['vel']:null; $rpm=isset($r['rpm'])?(float)$r['rpm']:null; $con=(float)($r['consumo']??0);
-    $day=!empty($r['data_iso'])?$r['data_iso']:null;
-    if(!isset($acc[$un][$eq])){ $acc[$un][$eq]=['area'=>0.0,'tempo'=>0.0,'vt'=>0.0,'vw'=>0.0,'rt'=>0.0,'rw'=>0.0,'ct'=>0.0,'cw'=>0.0,'days'=>[]]; }
-    $acc[$un][$eq]['area']+=$a; $acc[$un][$eq]['tempo']+=$t;
-    if($v!==null){$acc[$un][$eq]['vt']+=$v*$t;$acc[$un][$eq]['vw']+=$t;}
-    if($rpm!==null){$acc[$un][$eq]['rt']+=$rpm*$t;$acc[$un][$eq]['rw']+=$t;}
-    $acc[$un][$eq]['ct']+=$con*$t; $acc[$un][$eq]['cw']+=$t;
-    if($day) $acc[$un][$eq]['days'][$day]=true;
+    $un = (string)($r['unidade'] ?? '');
+    $eq = (string)($r['equipamento'] ?? '');
+    if($un===''||$eq==='') continue;
+
+    $t   = max(0.0, (float)($r['tempo'] ?? 0));
+    $a   = (float)($r['area'] ?? 0);
+    $v   = isset($r['vel']) ? (float)$r['vel'] : null;
+    $rpm = isset($r['rpm']) ? (float)$r['rpm'] : null;
+    $con = (float)($r['consumo'] ?? 0);
+    $day = !empty($r['data_iso']) ? $r['data_iso'] : null;
+
+    if(!isset($acc[$un][$eq])){
+      $acc[$un][$eq]=[
+        'area'=>0.0,'tempo'=>0.0,
+        'vt'=>0.0,'vw'=>0.0,   // velocidade ponderada
+        'rt'=>0.0,'rw'=>0.0,   // rpm ponderado
+        'ct'=>0.0,'cw'=>0.0,   // consumo ponderado
+        'days'=>[],
+      ];
+    }
+    $acc[$un][$eq]['area']  += $a;
+    $acc[$un][$eq]['tempo'] += $t;
+
+    if ($v !== null){   $acc[$un][$eq]['vt'] += $v * $t;   $acc[$un][$eq]['vw'] += $t; }
+    if ($rpm !== null){ $acc[$un][$eq]['rt'] += $rpm * $t; $acc[$un][$eq]['rw'] += $t; }
+    $acc[$un][$eq]['ct'] += $con * $t; $acc[$un][$eq]['cw'] += $t;
+
+    if ($day) $acc[$un][$eq]['days'][$day] = true;
   }
+
   $out=[];
   foreach($acc as $un=>$byEq){
     foreach($byEq as $eq=>$m){
-      $diasEquip=count($m['days']) ?: ($diasGlobal ?: 1);
-      $vel=$m['vw']>0?($m['vt']/$m['vw']):0.0; $rpm=$m['rw']>0?($m['rt']/$m['rw']):0.0; $con=$m['cw']>0?($m['ct']/$m['cw']):0.0;
-      $out[$un][$eq]=['ha_dia'=>$diasEquip>0?($m['area']/$diasEquip):0.0,'hr_dia'=>$diasEquip>0?($m['tempo']/$diasEquip):0.0,'vel'=>$vel,'rpm'=>$rpm,'cons'=>$con,'area'=>$m['area'],'tempo'=>$m['tempo'],'dias'=>$diasEquip];
+      $diasEquip = count($m['days']) ?: ($diasGlobal ?: 1);
+      $vel = $m['vw']>0 ? ($m['vt']/$m['vw']) : 0.0;
+      $rpm = $m['rw']>0 ? ($m['rt']/$m['rw']) : 0.0;
+      $con = $m['cw']>0 ? ($m['ct']/$m['cw']) : 0.0;
+
+      $out[$un][$eq] = [
+        'ha_dia' => $diasEquip>0 ? ($m['area']/$diasEquip)  : 0.0,
+        'hr_dia' => $diasEquip>0 ? ($m['tempo']/$diasEquip) : 0.0,
+        'vel'    => $vel,
+        'rpm'    => $rpm,
+        'cons'   => $con,
+        'area'   => $m['area'],
+        'tempo'  => $m['tempo'],
+        'dias'   => $diasEquip,
+      ];
     }
     uksort($out[$un], fn($a,$b)=>((int)preg_replace('/\D+/','',$a))<=>((int)preg_replace('/\D+/','',$b)));
   }
+  ksort($out);
   return $out;
-}
-function unit_order_from_csv_rows(array $rows): array{
-  $seen=[]; $order=[]; foreach($rows as $r){ $u=(string)($r['unidade']??''); if($u!=='' && !isset($seen[$u])){ $seen[$u]=true; $order[]=$u; } } return $order;
 }
 
 /* =============================================================================
- * Comparação entre períodos (com ordem opcional)
+ * Comparação entre períodos
  * ========================================================================== */
-function compare_periods(array $aggA, array $aggB, ?array $unit_order=null): array {
-  $unKeys = $unit_order ?: array_unique(array_merge(array_keys($aggA), array_keys($aggB)));
-  if (!$unit_order) sort($unKeys);
+function compare_periods(array $aggA, array $aggB): array {
+  $unKeys = array_unique(array_merge(array_keys($aggA), array_keys($aggB)));
+  sort($unKeys);
   $out=[];
   foreach($unKeys as $un){
     $eqKeys = array_unique(array_merge(array_keys($aggA[$un]??[]), array_keys($aggB[$un]??[])));
-    // ordena numeric-like
-    usort($eqKeys, fn($a,$b)=>((int)preg_replace('/\D+/','',$a))<=>((int)preg_replace('/\D+/','',$b)));
+    sort($eqKeys);
     foreach($eqKeys as $eq){
-      $A=$aggA[$un][$eq]??['ha_dia'=>0,'hr_dia'=>0,'vel'=>0,'rpm'=>0,'cons'=>0];
-      $B=$aggB[$un][$eq]??['ha_dia'=>0,'hr_dia'=>0,'vel'=>0,'rpm'=>0,'cons'=>0];
-      $out[$un][]=['equip'=>$eq,'A'=>$A,'B'=>$B,'var_cons'=>$B['cons']-$A['cons']];
+      $A = $aggA[$un][$eq] ?? ['ha_dia'=>0,'hr_dia'=>0,'vel'=>0,'rpm'=>0,'cons'=>0];
+      $B = $aggB[$un][$eq] ?? ['ha_dia'=>0,'hr_dia'=>0,'vel'=>0,'rpm'=>0,'cons'=>0];
+      $out[$un][] = [
+        'equip'   => $eq,
+        'A'       => $A,
+        'B'       => $B,
+        'var_cons'=> $B['cons'] - $A['cons'],
+      ];
     }
   }
   return $out;
@@ -231,25 +302,22 @@ function compare_periods(array $aggA, array $aggB, ?array $unit_order=null): arr
  * Estado / Processamento
  * ========================================================================== */
 $errors=[]; $periodoA=[]; $periodoB=[];
-$comparativo=null; $isOficial=false; $unitOrder=[];
+$comparativo=null; $isOficial=false;
 
 if ($_SERVER['REQUEST_METHOD']==='POST'){
   $isOficial = ($_POST['oficial_flag'] ?? '') === '1';
 
   if ($isOficial) {
+    // JSON (números exatos) enviado pelo parser do navegador
     $arrA = json_decode($_POST['json_a'] ?? '[]', true) ?: [];
     $arrB = json_decode($_POST['json_b'] ?? '[]', true) ?: [];
     $aggA = build_agg_from_official($arrA);
     $aggB = build_agg_from_official($arrB);
-    // ordem preservando aparição no XLSX (A depois B)
-    $unitOrder = array_values(array_unique(array_merge(
-      unit_order_from_official_rows($arrA),
-      unit_order_from_official_rows($arrB)
-    )));
-    $comparativo = compare_periods($aggA, $aggB, $unitOrder);
-    $periodoA = $periodoB = [];
+    $comparativo = compare_periods($aggA, $aggB);
+    $periodoA = $periodoB = []; // não exibimos período no modo oficial
 
   } else {
+    // Fallback CSV
     $rowsA = load_rows_from_upload('arquivo_a',$errors);
     $rowsB = load_rows_from_upload('arquivo_b',$errors);
     if (!$errors && $rowsA && $rowsB){
@@ -258,11 +326,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
       if (!$errors){
         $aggA = aggregate_by_equipment($normA, (int)($periodoA['dias'] ?? 0));
         $aggB = aggregate_by_equipment($normB, (int)($periodoB['dias'] ?? 0));
-        $unitOrder = array_values(array_unique(array_merge(
-          unit_order_from_csv_rows($normA),
-          unit_order_from_csv_rows($normB)
-        )));
-        $comparativo = compare_periods($aggA,$aggB,$unitOrder);
+        $comparativo = compare_periods($aggA,$aggB);
       }
     }
   }
@@ -274,6 +338,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
 require_once __DIR__ . '/../../../../app/includes/header.php';
 ?>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
 
 <link rel="stylesheet" href="/public/static/css/consumo_equip_comp.css">
 <div class="container">
@@ -322,28 +388,27 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
   </div>
 
   <?php if ($comparativo): ?>
-    <div class="card">
-      <div class="table-wrap" style="margin-top:8px">
-        <table class="table">
-          <thead>
-            <tr>
-              <th rowspan="2">UNIDADE</th>
-              <th rowspan="2">FROTA</th>
-              <th colspan="5" class="center">Mês Anterior</th>
-              <th colspan="5" class="center">Mês Atual</th>
-              <th rowspan="2" class="right">VAR<br>Cons. (l/h)</th>
-            </tr>
-            <tr>
-              <th class="right">ha/dia</th><th class="right">Hr. Efet./D</th>
-              <th class="right">Vel. Efe.</th><th class="right">RPM Méd.</th><th class="right">Cons. (l/h)</th>
-              <th class="right">ha/dia</th><th class="right">Hr. Efet./D</th>
-              <th class="right">Vel. Efe.</th><th class="right">RPM Méd.</th><th class="right">Cons. (l/h)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($unitOrder as $unidade): ?>
-              <?php $rows = $comparativo[$unidade] ?? []; if (!$rows) continue; ?>
-              <tr class="unit-row"><td colspan="13">Unidade: <?= htmlspecialchars($unidade) ?></td></tr>
+    <?php foreach ($comparativo as $unidade => $rows): ?>
+      <div class="card">
+        <div class="badge">Unidade: <?= htmlspecialchars($unidade) ?></div>
+        <div class="table-wrap" style="margin-top:8px">
+          <table class="table">
+            <thead>
+              <tr>
+                <th rowspan="2">UNIDADE</th>
+                <th rowspan="2">FROTA</th>
+                <th colspan="5" class="center">Período A</th>
+                <th colspan="5" class="center">Período B</th>
+                <th rowspan="2" class="right">VAR<br>Cons. (l/h)</th>
+              </tr>
+              <tr>
+                <th class="right">ha/dia</th><th class="right">Hr. Efet./D</th>
+                <th class="right">Vel. Efe.</th><th class="right">RPM Méd.</th><th class="right">Cons. (l/h)</th>
+                <th class="right">ha/dia</th><th class="right">Hr. Efet./D</th>
+                <th class="right">Vel. Efe.</th><th class="right">RPM Méd.</th><th class="right">Cons. (l/h)</th>
+              </tr>
+            </thead>
+            <tbody>
               <?php foreach ($rows as $r): ?>
                 <tr>
                   <td><?= htmlspecialchars($unidade) ?></td>
@@ -361,58 +426,89 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
                   <td class="right"><?= number_format($r['B']['rpm'],    1, ',', '.') ?></td>
                   <td class="right"><?= number_format($r['B']['cons'],   1, ',', '.') ?></td>
 
-                  <?php
-                    $delta = $r['var_cons'];
-                    $deltaClass = $delta>0 ? 'delta-pos' : ($delta<0 ? 'delta-neg' : 'delta-zero');
-                  ?>
-                  <td class="right var-cons <?= $deltaClass ?>">
+                  <?php $delta = $r['var_cons']; ?>
+                  <td class="right" style="<?= $delta>0?'color:#b00020':($delta<0?'color:#1b5e20':'') ?>">
                     <?= $delta>0?'+':'' ?><?= number_format($delta, 1, ',', '.') ?>
                   </td>
                 </tr>
               <?php endforeach; ?>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    <?php endforeach; ?>
   <?php else: ?>
     <div class="card"><em>Envie dois arquivos do SGPA e clique em “Comparar”.</em></div>
   <?php endif; ?>
 </div>
 
 <script>
-/* Parser do XLSX oficial (no navegador) */
+/* =============================================================================
+ * Parser do XLSX oficial (no navegador)
+ * - Expande merges
+ * - Mapeia cabeçalhos
+ * - Extrai apenas linhas de equipamento (ignora "Total")
+ * - Envia JSON compactado com números exatos
+ * ========================================================================== */
 (function(){
   const form    = document.querySelector('form.row');
   const chk     = document.getElementById('oficial_xlsx');
+  const hidFlag = document.getElementById('oficial_flag');
+  const hidA    = document.getElementById('json_a');
+  const hidB    = document.getElementById('json_b');
+
   const fA = form?.querySelector('input[type="file"][name="arquivo_a"]');
   const fB = form?.querySelector('input[type="file"][name="arquivo_b"]');
 
-  function norm(s){ return String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').replace(/\s+/g,' ').trim().toLowerCase(); }
-  function parseNum(v){ if (v===null||v===undefined||v==='') return null; if (typeof v==='number') return v; const s=String(v).trim(); const s2=s.replace(/\./g,'').replace(',', '.'); const n=Number(s2); return Number.isFinite(n)?n:null; }
-  function findHeaderRow(rows){ for (let i=0;i<Math.min(rows.length,20);i++){const r=rows[i]||[];const hasUn=r.some(c=>norm(c).includes('unidade'));const hasEq=r.some(c=>norm(c).includes('equipamento'));if(hasUn&&hasEq)return i;} return 0; }
+  function norm(s){
+    return String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'')
+      .replace(/\s+/g,' ').trim().toLowerCase();
+  }
+  function parseNum(v){
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') return v;
+    const s = String(v).trim();
+    const s2 = s.replace(/\./g,'').replace(',', '.');
+    const n = Number(s2);
+    return Number.isFinite(n) ? n : null;
+  }
+  function findHeaderRow(rows){
+    for (let i=0; i<Math.min(rows.length, 20); i++){
+      const r = rows[i] || [];
+      const hasUn = r.some(c => norm(c).includes('unidade'));
+      const hasEq = r.some(c => norm(c).includes('equipamento'));
+      if (hasUn && hasEq) return i;
+    }
+    return 0;
+  }
   function mapCols(header){
-    const _n = (s)=>String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').replace(/\s+/g,' ').trim().toLowerCase();
-    const get=(cands,exclude=[])=>{
-      const idx=header.findIndex(h=>{const H=_n(h); if(exclude.some(x=>H.includes(_n(x))))return false; if(cands.some(c=>H===_n(c))) return true; return cands.some(c=>H.includes(_n(c)));});
-      return (idx>=0?idx:null);
+    const _norm = (s) => String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').replace(/\s+/g,' ').trim().toLowerCase();
+    const get = (cands, exclude=[]) => {
+      const idx = header.findIndex(h => {
+        const H = _norm(h);
+        if (exclude.some(x => H.includes(_norm(x)))) return false;
+        if (cands.some(c => H === _norm(c))) return true;     // match exato
+        return cands.some(c => H.includes(_norm(c)));         // ou por inclusão
+      });
+      return (idx >= 0 ? idx : null);
     };
     return {
-      unidade:get(['unidade']),
-      frente:get(['frente']),
+      unidade: get(['unidade']),
+      frente:  get(['frente']),
       processo:get(['processo']),
-      modelo:get(['modelo equipamento','modelo']),
-      equip:get(['equipamento'], ['modelo']),
-      area:get(['área operacional (ha)','area operacional (ha)','área operacional','area operacional']),
-      ha_dia:get(['média (ha/dia)','media (ha/dia)']),
-      h_dia:get(['média (h/dia)','media (h/dia)']),
-      vel:get(['velocidade média efetivo','velocidade media efetivo','velocidade média','velocidade media']),
-      rpm:get(['rpm médio','rpm medio']),
-      cons_lh:get(['consumo médio efetivo (l/h)','consumo medio efetivo (l/h)','consumo (l/h)']),
+      modelo:  get(['modelo equipamento','modelo']),
+      equip:   get(['equipamento'], ['modelo']), // evita "Modelo Equipamento"
+
+      area:    get(['área operacional (ha)','area operacional (ha)','área operacional','area operacional']),
+      ha_dia:  get(['média (ha/dia)','media (ha/dia)']),
+      h_dia:   get(['média (h/dia)','media (h/dia)']),
+      vel:     get(['velocidade média efetivo','velocidade media efetivo','velocidade média','velocidade media']),
+      rpm:     get(['rpm médio','rpm medio']),
+      cons_lh: get(['consumo médio efetivo (l/h)','consumo medio efetivo (l/h)','consumo (l/h)']),
       cons_lha:get(['consumo médio efetivo (l/ha)','consumo medio efetivo (l/ha)']),
-      rop:get(['rendimento operacional produtivo','ha/h produtivo']),
-      tempo_h:get(['tempo efetivo (h)']),
-      h_equip:get(['media (h/equip)','média (h/equip)'])
+      rop:     get(['rendimento operacional produtivo','ha/h produtivo']),
+      tempo_h: get(['tempo efetivo (h)']),
+      h_equip: get(['media (h/equip)','média (h/equip)'])
     };
   }
   async function parseOfficialXLSX(file){
@@ -420,25 +516,38 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     const wb  = XLSX.read(buf, { type: 'array' });
     const sh  = wb.SheetNames[0];
     const ws  = wb.Sheets[sh];
+
+    // matriz crua
     const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });
+
+    // expande merges
     const merges = ws['!merges'] || [];
     merges.forEach(r => {
       const v = rows[r.s.r]?.[r.s.c];
-      for (let R=r.s.r; R<=r.e.r; R++){ for (let C=r.s.c; C<=r.e.c; C++){
-        if (!rows[R]) rows[R] = []; if (rows[R][C]==='' || rows[R][C]===undefined) rows[R][C] = v;
-      } }
+      for (let R=r.s.r; R<=r.e.r; R++){
+        for (let C=r.s.c; C<=r.e.c; C++){
+          if (!rows[R]) rows[R] = [];
+          if (rows[R][C]==='' || rows[R][C]===undefined) rows[R][C] = v;
+        }
+      }
     });
+
+    // cabeçalho
     const headerRow = findHeaderRow(rows);
     const header    = (rows[headerRow] || []).map(x => String(x||'').trim());
     const idx       = mapCols(header);
-    if (idx.unidade===null || idx.equip===null) throw new Error('Cabeçalho não encontrado (Unidade/Equipamento).');
+    if (idx.unidade===null || idx.equip===null) {
+      throw new Error('Cabeçalho não encontrado (Unidade/Equipamento).');
+    }
 
+    // linhas de equipamento (ignora "Total")
     const out = [];
     for (let i = headerRow+1; i < rows.length; i++){
       const r = rows[i] || [];
       const equipTxt = String(r[idx.equip]||'').trim();
       if (!equipTxt) continue;
       if (norm(equipTxt) === 'total') continue;
+
       out.push({
         unidade:  r[idx.unidade] ?? '',
         frente:   idx.frente!==null ? (r[idx.frente] ?? '') : '',
@@ -460,22 +569,27 @@ require_once __DIR__ . '/../../../../app/includes/header.php';
     return out;
   }
 
+  // intercepta submit quando "oficial" estiver marcado
   form.addEventListener('submit', async function(e){
-    const chk = document.getElementById('oficial_xlsx');
     if (!chk.checked) return; // modo CSV direto
     e.preventDefault();
-    const A = form.querySelector('input[name="arquivo_a"]')?.files?.[0];
-    const B = form.querySelector('input[name="arquivo_b"]')?.files?.[0];
+
+    const A = fA.files && fA.files[0];
+    const B = fB.files && fB.files[0];
     if (!A || !B) return;
+
     try{
       const [rowsA, rowsB] = await Promise.all([parseOfficialXLSX(A), parseOfficialXLSX(B)]);
       document.getElementById('json_a').value = JSON.stringify(rowsA);
       document.getElementById('json_b').value = JSON.stringify(rowsB);
       document.getElementById('oficial_flag').value = '1';
       form.submit();
-    }catch(err){ alert('Falha ao ler XLSX oficial: ' + (err?.message || err)); }
+    }catch(err){
+      alert('Falha ao ler XLSX oficial: ' + (err?.message || err));
+    }
   }, { passive:false });
 
+  // imprimir
   document.getElementById('btnPrint')?.addEventListener('click', ()=> window.print());
 })();
 </script>

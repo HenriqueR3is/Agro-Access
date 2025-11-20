@@ -3,6 +3,12 @@ date_default_timezone_set('America/Sao_Paulo');
 
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
+$stmt = $pdo->query("SELECT manutencao_ativa FROM configuracoes_sistema WHERE id = 1");
+$manutencao = $stmt->fetchColumn();
+if ($manutencao) {
+    header("Location: /maintenance");
+    exit;
+}
 
 // Segurança básica de sessão
 if (!isset($_SESSION['usuario_id'])) {
@@ -639,7 +645,7 @@ $total_monthly_entries  = array_sum(array_map(function($r) { return $r['total_en
                         <a href="/dashboard" class="btn btn-sm btn-outline-light">Back</a>
                     </div>
                 <?php endif; ?>
-                <a href="/" class="btn btn-sm btn-outline-light">
+                <a href="/logout" class="btn btn-sm btn-outline-light">
                     <i class="fas fa-sign-out-alt"></i> Sair
                 </a>
             </div>

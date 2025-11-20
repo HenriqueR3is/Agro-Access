@@ -1,158 +1,278 @@
-/* =========================================
-   consumo_equip_comp.css  (somente esta página)
-========================================= */
+/* ========================================================================
+   consumo_equip_comp.css (Estilos específicos para a página de consumo)
+======================================================================== */
 
-/* ---- Tokens ---- */
-:root{
-  --primary:#2b772f;
-  --primary-600:#256a29;
-  --accent:#f29f3c;
+/* ------------------------------------------------------------------------
+   Tokens (Variáveis CSS)
+------------------------------------------------------------------------ */
+:root {
+    /* Cores de Ação e Tema */
+    --primary: #2b772f;
+    --primary-600: #256a29;
+    --accent: #f29f3c;
 
-  --ink:#111827;            /* texto principal (bem escuro) */
-  --muted:#5f6b76;
+    /* Cores de Texto */
+    --ink: #111827;            /* Texto principal (bem escuro) */
+    --muted: #5f6b76;          /* Texto secundário/discreto */
 
-  --bg:#fafafa;
-  --card:#ffffff;
+    /* Cores de Fundo e Containers */
+    --bg: #fafafa;             /* Fundo da página */
+    --card: #ffffff;           /* Fundo dos painéis/cartões */
 
-  --border:#d1d5db;         /* linhas padrão */
-  --border-strong:#94a3b8;  /* separador vertical A|B */
+    /* Cores de Borda */
+    --border: #d1d5db;         /* Linhas padrão e bordas */
+    --border-strong: #94a3b8;  /* Separador vertical A|B */
 
-  --thead-bg:#263238;       /* cabeçalho bem escuro */
-  --thead-fg:#ffffff;
+    /* Cores da Tabela */
+    --thead-bg: #263238;       /* Fundo do cabeçalho */
+    --thead-fg: #ffffff;       /* Cor do texto do cabeçalho */
+    --row-odd: #f6faf6;        /* Fundo listrado (ímpar) */
+    --row-even: #ffffff;       /* Fundo listrado (par) */
 
-  --row-odd:#f6faf6;        /* listrado */
-  --row-even:#ffffff;
+    /* Variáveis ausentes no original, mas usadas no body */
+    --bg-light: var(--bg);
+    --text-color: var(--ink);
 }
 
-/* ---- Base ---- */
-*{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans","Liberation Sans",sans-serif;line-height:1.4;background:var(--bg)}
-img,svg{display:block;max-width:100%}
-
-/* ---- Layout ---- */
-.container{max-width:1400px;margin:0 auto;padding:12px}
-.container>h2{margin:4px 0 12px;font-weight:800}
-
-.card{
-  background:var(--card);
-  border:1px solid #eee;border-radius:12px;
-  box-shadow:0 1px 2px rgba(0,0,0,.04);
-  padding:12px;margin-bottom:16px
+/* ------------------------------------------------------------------------
+   Base (Reset e Tipografia)
+------------------------------------------------------------------------ */
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--bg-light);
+    color: var(--text-color);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
-.badge{display:inline-block;background:#eef3f2;color:var(--ink);padding:4px 10px;border-radius:8px;font-weight:600;margin-bottom:8px}
-small.hint{color:var(--muted);display:block;margin-top:4px}
-
-.row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end}
-.row .actions{margin-left:auto;display:flex;gap:8px}
-
-/* ---- Inputs de arquivo ---- */
-.row input[type="file"]{
-  border:1px solid #e3e3e3;background:#fff;padding:6px;border-radius:10px;font-size:14px;color:var(--ink);
+* {
+    box-sizing: border-box;
 }
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+img,
+svg {
+    display: block;
+    max-width: 100%;
+}
+
+/* ------------------------------------------------------------------------
+   Layout
+------------------------------------------------------------------------ */
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 12px;
+}
+
+.container>h2 {
+    margin: 4px 0 12px;
+    font-weight: 800;
+}
+
+.card {
+    background: var(--card);
+    border: 1px solid #eee;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.badge {
+    display: inline-block;
+    background: #eef3f2;
+    color: var(--ink);
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+small.hint {
+    color: var(--muted);
+    display: block;
+    margin-top: 4px;
+}
+
+.row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.row .actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+}
+
+/* ------------------------------------------------------------------------
+   Inputs de Arquivo
+------------------------------------------------------------------------ */
+
+.row input[type="file"] {
+    border: 1px solid #e3e3e3;
+    background: #fff;
+    padding: 6px;
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--ink);
+}
+
+/* Estilização do botão interno do input file */
 .row input[type="file"]::file-selector-button,
-.row input[type="file"]::-webkit-file-upload-button{
-  margin-right:10px;padding:8px 12px;border:none;border-radius:8px;
-  background:var(--accent);color:#fff;font-weight:700;cursor:pointer;
-  transition:transform .08s, filter .15s;
+.row input[type="file"]::-webkit-file-upload-button {
+    margin-right: 10px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform .08s, filter .15s;
 }
+
 .row input[type="file"]::file-selector-button:hover,
-.row input[type="file"]::-webkit-file-upload-button:hover{ filter:brightness(1.05); }
+.row input[type="file"]::-webkit-file-upload-button:hover {
+    filter: brightness(1.05);
+}
+
 .row input[type="file"]::file-selector-button:active,
-.row input[type="file"]::-webkit-file-upload-button:active{ transform:translateY(1px); }
-
-/* ---- Botões ---- */
-.actions button{
-  appearance:none;border:0;border-radius:10px;padding:10px 14px;
-  font-weight:700;cursor:pointer;transition:filter .15s, transform .02s, box-shadow .15s;
-}
-.actions button[type="submit"]{
-  background:var(--primary);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);
-}
-.actions button[type="submit"]:hover{ filter:brightness(1.06); }
-.actions button[type="submit"]:active{ transform:translateY(1px); }
-
-#btnPrint{
-  background:#fff;color:#334155;border:1px solid var(--border);
-}
-#btnPrint:hover{ background:#f8fafc; }
-
-/* ---- Tabela ---- */
-.table-wrap{
-  flex:1 1 auto;overflow-y:auto;overflow-x:hidden;
-  border:1px solid var(--border);border-radius:10px;background:#fff
+.row input[type="file"]::-webkit-file-upload-button:active {
+    transform: translateY(1px);
 }
 
-.table{
-  border-collapse:separate;border-spacing:0;width:100%;
-}
-.table th,.table td{
-  padding:8px 10px;border-bottom:1px solid var(--border);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  color:var(--ink);
-}
-.table thead th{
-  background:var(--thead-bg);color:var(--thead-fg);
-  font-weight:700;text-align:center;
+/* ------------------------------------------------------------------------
+   Botões
+------------------------------------------------------------------------ */
+
+.actions button {
+    appearance: none;
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: filter .15s, transform .02s, box-shadow .15s;
 }
 
-/* alinhamentos */
-.table .center{ text-align:center; }
-.table .right{ text-align:right; font-variant-numeric: tabular-nums; }
+.actions button[type="submit"] {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+}
 
-/* listrado (bem visível) */
-.table tbody tr:nth-child(odd){ background:var(--row-odd); }
-.table tbody tr:nth-child(even){ background:var(--row-even); }
+.actions button[type="submit"]:hover {
+    filter: brightness(1.06);
+}
 
-/* ---- Separador vertical entre Período A (colunas 3–7) e Período B (8–12) ---- */
+.actions button[type="submit"]:active {
+    transform: translateY(1px);
+}
+
+#btnPrint {
+    background: #fff;
+    color: #334155;
+    border: 1px solid var(--border);
+}
+
+#btnPrint:hover {
+    background: #f8fafc;
+}
+
+/* ------------------------------------------------------------------------
+   Tabela
+------------------------------------------------------------------------ */
+
+.table-wrap {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+}
+
+.table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+}
+
+.table th,
+.table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--ink);
+}
+
+.table thead th {
+    background: var(--thead-bg);
+    color: var(--thead-fg);
+    font-weight: 700;
+    text-align: center;
+}
+
+/* Alinhamentos Específicos */
+.table .center {
+    text-align: center;
+}
+
+.table .right {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Efeito Listrado (Zebra) */
+.table tbody tr:nth-child(odd) {
+    background: var(--row-odd);
+}
+
+.table tbody tr:nth-child(even) {
+    background: var(--row-even);
+}
+
+/* ------------------------------------------------------------------------
+   Separador Vertical (Período A | Período B)
+------------------------------------------------------------------------ */
+
 /* Cabeçalho linha 1: o segundo grupo (Período B, colspan=5) ganha a borda à esquerda */
-.table thead tr:first-child th[colspan="5"]:last-of-type{
-  border-left:2px solid var(--border-strong);
+.table thead tr:first-child th[colspan="5"]:last-of-type {
+    border-left: 2px solid var(--border-strong);
 }
+
 /* Cabeçalho linha 2 + corpo: 8ª coluna é a primeira do bloco B */
 .table thead tr:nth-child(2) th:nth-child(8),
-.table tbody td:nth-child(8){
-  border-left:2px solid var(--border-strong);
+.table tbody td:nth-child(8) {
+    border-left: 2px solid var(--border-strong);
 }
 
-/* ---- Impressão ---- */
-@media print{
-  .no-print{ display:none !important; }
-  .table thead tr:first-child th[colspan="5"]:last-of-type,
-  .table thead tr:nth-child(2) th:nth-child(8),
-  .table tbody td:nth-child(8){
-    border-left-color:#000;
-  }
-}
+/* ------------------------------------------------------------------------
+   Impressão
+------------------------------------------------------------------------ */
 
-/* Linha de agrupamento por unidade (uma faixa entre blocos) */
-.table tr.unit-row td{
-  background:#e8f1ee;
-  color:#1f2937;
-  font-weight:700;
-  border-top:2px solid #cbd5e1;
-  border-bottom:1px solid #d1d5db;
-}
+@media print {
+    /* Elementos que devem sumir na impressão */
+    .no-print {
+        display: none !important;
+    }
 
-/* Destaque do VAR Cons. (l/h) */
-.var-cons{
-  font-weight: 800;
-  font-size: 15px;          /* ↑ um pouco o tamanho */
-  letter-spacing: .1px;
-  border-left: 2px solid #cbd5e1; /* continuação do separador vertical */
-  background: #f8fafc;      /* leve fundo neutro */
-}
-
-/* Cores por estado (aproveita a classe que mandamos no PHP) */
-.var-cons.delta-pos{ color:#b00020; background:#fdecea; }  /* piorou */
-.var-cons.delta-neg{ color:#1b5e20; background:#eaf7ef; }  /* melhorou */
-.var-cons.delta-zero{ color:#334155; background:#eef2f7; } /* igual */
-
-/* Em impressão, mantém o destaque */
-@media print{
-  .var-cons{
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+    /* Força a cor da borda do separador para preto na impressão */
+    .table thead tr:first-child th[colspan="5"]:last-of-type,
+    .table thead tr:nth-child(2) th:nth-child(8),
+    .table tbody td:nth-child(8) {
+        border-left-color: #000;
+    }
 }

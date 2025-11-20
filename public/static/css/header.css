@@ -345,3 +345,399 @@ a.is-disabled-click { opacity:.7; }
     scrollbar-width: thin; /* barra fina */
     scrollbar-color: #43a047 #1b5e20; /* polegar e trilho */
 }
+
+/* =========================
+   SIDEBAR E SUBMENU - CORRIGIDO
+   ========================= */
+
+.sidebar {
+    background: linear-gradient(180deg, #1b5e20, #2e7d32);
+    color: #fff;
+    width: 280px;
+    padding: 15px 12px;
+    border-radius: 12px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    font-family: "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 70px;
+    align-self: flex-start;
+    height: auto;
+}
+
+/* NAVEGAÇÃO PRINCIPAL */
+.sidebar-nav {
+    flex: 1;
+    overflow: visible;
+    padding: 10px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* GRUPOS DE MENU PRINCIPAIS */
+.has-submenu {
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.has-submenu:hover {
+    background: rgba(255,255,255,0.2);
+    transform: translateX(3px);
+    border-color: rgba(255,255,255,0.3);
+}
+
+.arrow {
+    transition: transform 0.3s ease;
+    font-size: 12px;
+    color: #c8e6c9;
+}
+
+.has-submenu.open .arrow {
+    transform: rotate(180deg);
+}
+
+/* SUBMENUS - CORREÇÃO COMPLETA */
+.submenu {
+    max-height: 0;
+    overflow: hidden;
+    border-left: 3px solid rgba(76, 175, 80, 0.5);
+    margin-left: 10px;
+    padding-left: 10px;
+    transition: max-height 0.4s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* CORREÇÃO PARA MÚLTIPLOS SUBMENUS */
+.has-submenu.open + .submenu {
+    max-height: 800px; /* Valor suficiente para caber todos os itens */
+    overflow: visible;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    padding: 8px 4%;
+}
+
+/* ITENS DO SUBMENU */
+.submenu a {
+    font-size: 14px;
+    padding: 10px 15px 10px 20px;
+    margin: 2px 0;
+    color: #c8e6c9;
+    background: rgba(255,255,255,0.05);
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: block;
+    border: 1px solid transparent;
+    position: relative;
+}
+
+.submenu a:hover {
+    background: #66bb6a;
+    color: #fff;
+    transform: translateX(8px);
+}
+
+
+
+
+/* =========================
+   MENU HAMBURGER ANIMADO
+   ========================= */
+
+.menu-toggle {
+    background: none;
+    border: none;
+    color: #1b5e20;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 1001;
+}
+
+.menu-toggle:hover {
+    background: rgba(27, 94, 32, 0.1);
+    transform: scale(1.1);
+}
+
+.menu-toggle:active {
+    transform: scale(0.95);
+}
+
+/* Estados do ícone hamburger */
+.menu-toggle .fa-bars {
+    transition: all 0.3s ease;
+}
+
+.menu-toggle.active .fa-bars {
+    transform: rotate(90deg);
+    opacity: 0;
+}
+
+.menu-toggle .fa-times {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.menu-toggle.active .fa-times {
+    transform: translate(-50%, -50%) rotate(0deg);
+    opacity: 1;
+}
+
+/* Overlay para mobile */
+.mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 998;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.mobile-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Sidebar para mobile */
+@media (max-width: 991px) {
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: -100%;
+        width: 280px;
+        height: 100vh;
+        z-index: 999;
+        border-radius: 0;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+        transform: translateX(-20px);
+        opacity: 0;
+    }
+
+    .sidebar.active {
+        left: 0;
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    .sidebar-nav {
+        overflow-y: auto;
+        max-height: calc(100vh - 180px);
+    }
+
+    /* Animação dos itens do menu */
+    .sidebar.active .sidebar-nav > * {
+        animation: slideInRight 0.5s ease forwards;
+    }
+
+    .sidebar.active .sidebar-nav > *:nth-child(1) { animation-delay: 0.1s; }
+    .sidebar.active .sidebar-nav > *:nth-child(2) { animation-delay: 0.15s; }
+    .sidebar.active .sidebar-nav > *:nth-child(3) { animation-delay: 0.2s; }
+    .sidebar.active .sidebar-nav > *:nth-child(4) { animation-delay: 0.25s; }
+    .sidebar.active .sidebar-nav > *:nth-child(5) { animation-delay: 0.3s; }
+    .sidebar.active .sidebar-nav > *:nth-child(6) { animation-delay: 0.35s; }
+    .sidebar.active .sidebar-nav > *:nth-child(7) { animation-delay: 0.4s; }
+
+    @keyframes slideInRight {
+        from {
+            opacity: 0;
+            transform: translateX(-30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    /* Perfil com animação */
+    .sidebar.active .sidebar-profile-footer {
+        animation: slideInUp 0.6s ease 0.5s forwards;
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    @keyframes slideInUp {
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+}
+
+/* Para desktop - sidebar normal */
+@media (min-width: 992px) {
+    .menu-toggle {
+        display: none;
+    }
+    
+    .mobile-overlay {
+        display: none;
+    }
+}
+
+/* Melhorias no header para mobile */
+@media (max-width: 991px) {
+    .header {
+        padding: 10px 15px;
+        position: relative;
+        z-index: 1000;
+        background: white;
+    }
+
+    .logo {
+        font-size: 1.3rem;
+    }
+}
+
+
+
+
+
+/* =========================
+   BOTÃO OCULTAR SIDEBAR - DESKTOP
+   ========================= */
+
+.sidebar-toggle-desktop {
+    position: absolute;
+    top: 15px;
+    right: -15px;
+    width: 30px;
+    height: 30px;
+    background: #1b5e20;
+    border: 2px solid white;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.sidebar-toggle-desktop:hover {
+    background: #4caf50;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.sidebar-toggle-desktop:active {
+    transform: scale(0.95);
+}
+
+/* Sidebar colapsada */
+.sidebar.collapsed {
+    width: 70px !important;
+    transition: all 0.3s ease;
+}
+
+.sidebar.collapsed .sidebar-nav {
+    overflow: hidden;
+}
+
+.sidebar.collapsed .has-submenu {
+    padding: 12px 8px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .has-submenu span:not(.arrow) {
+    display: none;
+}
+
+.sidebar.collapsed .arrow {
+    display: none;
+}
+
+.sidebar.collapsed .submenu {
+    display: none !important;
+}
+
+.sidebar.collapsed .sidebar-profile-footer {
+    flex-direction: column;
+    padding: 10px;
+    text-align: center;
+}
+
+.sidebar.collapsed .profile-info-footer {
+    display: none;
+}
+
+.sidebar.collapsed .profile-picture-footer {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 5px;
+}
+
+/* Ajustes quando sidebar está colapsada */
+.sidebar.collapsed + .main-content {
+    margin-left: 70px;
+    transition: margin-left 0.3s ease;
+}
+
+/* Para mobile, esconder o toggle desktop */
+@media (max-width: 991px) {
+    .sidebar-toggle-desktop {
+        display: none;
+    }
+    
+    .sidebar.collapsed {
+        width: 280px !important;
+    }
+    
+    .sidebar.collapsed .has-submenu span:not(.arrow) {
+        display: block;
+    }
+    
+    .sidebar.collapsed .profile-info-footer {
+        display: flex;
+    }
+}
+
+/* Ajuste do main content */
+.main-content {
+    transition: margin-left 0.3s ease;
+    margin-left: 280px;
+}
+
+/* Quando sidebar está colapsada no desktop */
+@media (min-width: 992px) {
+    .sidebar:not(.collapsed) {
+        width: 280px;
+    }
+    
+    .sidebar.collapsed {
+        width: 70px;
+    }
+    
+    .sidebar.collapsed + .main-content {
+        margin-left: 70px;
+    }
+}

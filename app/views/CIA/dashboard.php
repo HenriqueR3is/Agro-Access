@@ -2,10 +2,9 @@
 session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 
-if (!isset($_SESSION['usuario_id'])) {
-    header('Location: /login');
-    exit();
-}
+// VERIFICAÇÃO SIMPLES - substitui o código antigo
+require_once __DIR__ . '/../../helpers/SimpleAuth.php';
+canAccessPage('dashboard:view'); // Use a permissão correta para o dashboard
 
 require_once __DIR__ . '/../../../app/includes/header.php';
 require_once __DIR__.'/../../../app/lib/Audit.php';
@@ -40,7 +39,7 @@ require_once __DIR__.'/../../../app/lib/Audit.php';
     --shadow-dark: 0 8px 30px rgba(0, 0, 0, 0.15);
     --transition-speed: 0.3s;
     --border-radius: 8px;
-    --sidebar-width: 260px;
+    --sidebar-width: 290px;
     --header-height: 60px;
 }
 

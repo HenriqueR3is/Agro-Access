@@ -23,5 +23,12 @@ try {
     $pdo->exec("SET character_set_connection = utf8mb4");
     $pdo->exec("SET character_set_results = utf8mb4");
 } catch (PDOException $e) {
-    exit('Erro de conexão: ' . $e->getMessage());
+    header('Content-Type: application/json');
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Erro de conexão com o banco de dados.',
+        'error'   => $e->getMessage()
+    ]);
+    exit;
 }

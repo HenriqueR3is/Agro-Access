@@ -3,6 +3,13 @@ session_start();
 require_once __DIR__ . '/../../../config/db/conexao.php';
 require_once __DIR__.'/../../../app/lib/Audit.php';
 
+$stmt = $pdo->query("SELECT manutencao_ativa FROM configuracoes_sistema WHERE id = 1");
+$manutencao = $stmt->fetchColumn();
+if ($manutencao) {
+    header("Location: /maintenance");
+    exit;
+}
+
 $tipoSess = strtolower($_SESSION['usuario_tipo'] ?? '');
 $ADMIN_LIKE = ['admin','cia_admin','cia_dev'];
 
