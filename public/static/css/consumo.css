@@ -1,0 +1,395 @@
+/* ========================================================================
+   Estilos Globais (Tokens, Reset, Estrutura) e Tabela de Consumo por Frente
+======================================================================== */
+
+/* ------------------------------------------------------------------------
+   Tokens (Variáveis CSS)
+------------------------------------------------------------------------ */
+:root {
+    --primary: #2b772f;      /* Cor principal (verde) */
+    --primary-600: #256a29;  /* Tonalidade mais escura */
+    --accent: #f29f3c;       /* Cor de destaque (laranja) */
+
+    --ink: #333;             /* Texto principal */
+    --header: #263238;       /* Fundo de cabeçalhos escuros */
+    --muted: #f6faf6;        /* Fundo claro para elementos discretos */
+}
+
+/* ------------------------------------------------------------------------
+   Reset/Base Leve
+------------------------------------------------------------------------ */
+* {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    /* Variáveis ausentes no original, mas que devem ser definidas */
+    --bg-light: #f5f5f5;
+    --text-color: var(--ink);
+
+    background-color: var(--bg-light);
+    color: var(--text-color);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ------------------------------------------------------------------------
+   Estrutura Geral
+------------------------------------------------------------------------ */
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 12px;
+}
+
+.container > h2 {
+    margin: 4px 0 12px;
+    font-weight: 800;
+}
+
+.card {
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.row .actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+}
+
+small.hint {
+    color: #5f6b76;
+    display: block;
+    margin-top: 4px;
+}
+
+/* ------------------------------------------------------------------------
+   Componentes (Kicker, Badge, Navegação)
+------------------------------------------------------------------------ */
+.kicker {
+    background: var(--accent);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-weight: 700;
+    display: inline-block;
+    margin: 18px 0 8px;
+}
+
+.badge {
+    display: inline-block;
+    background: #eef3f2;
+    color: var(--ink);
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.frentes-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.frentes-nav .chip {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid #dbe6db;
+    background: #f6faf6;
+    color: #264;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.frentes-nav .chip:hover {
+    background: #eef6ee;
+}
+
+/* ------------------------------------------------------------------------
+   Input de Arquivo
+------------------------------------------------------------------------ */
+
+.row input[type="file"] {
+    border: 1px solid #e3e3e3;
+    background: #fff;
+    padding: 6px;
+    border-radius: 10px;
+    font-size: 14px;
+}
+
+/* Estilização do botão embutido */
+.row input[type="file"]::file-selector-button,
+.row input[type="file"]::-webkit-file-upload-button {
+    margin-right: 10px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform .08s, background .15s, box-shadow .15s;
+}
+
+.row input[type="file"]::file-selector-button:hover,
+.row input[type="file"]::-webkit-file-upload-button:hover {
+    background: #d6851f; /* Cor mais escura para o hover */
+}
+
+.row input[type="file"]::file-selector-button:active,
+.row input[type="file"]::-webkit-file-upload-button:active {
+    transform: translateY(1px);
+}
+
+/* ------------------------------------------------------------------------
+   Tabela de Consumo por Frente (frente-card / export-sandbox)
+------------------------------------------------------------------------ */
+
+/* Wrapper da tabela nos cards */
+.table-wrap {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    background: #fff;
+}
+
+/* Garante layout fixo nas tabelas do card e do PDF */
+.frente-card .table,
+#export-sandbox .table {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+}
+
+/* Cabeçalho compacto, sem quebra e com ellipsis */
+.frente-card .table thead th,
+#export-sandbox .table thead th {
+    background: var(--header);
+    color: #fff;
+    text-align: center;
+    padding: 6px 8px;       /* Menor altura */
+    font-size: 12px;        /* Mais compacto */
+    line-height: 1.1;       /* Bem baixinho */
+    white-space: nowrap;    /* NÃO quebra */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Células base */
+.frente-card .table th,
+.frente-card .table td,
+#export-sandbox .table th,
+#export-sandbox .table td {
+    padding: 6px 8px;
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Alinhamento numérico e dígitos monoespaçados */
+.frente-card .table td.right,
+.frente-card .table th.right,
+#export-sandbox .table td.right,
+#export-sandbox .table th.right {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* -------------------- Larguras de Colunas (Somam ~100%) ----------------- */
+
+/* 1: Equip. */
+.frente-card .table th:nth-child(1), .frente-card .table td:nth-child(1),
+#export-sandbox .table th:nth-child(1), #export-sandbox .table td:nth-child(1) {
+    width: 14% !important;
+    text-align: left;
+}
+
+/* 2: Operador */
+.frente-card .table th:nth-child(2), .frente-card .table td:nth-child(2),
+#export-sandbox .table th:nth-child(2), #export-sandbox .table td:nth-child(2) {
+    width: 24% !important;
+    text-align: left;
+}
+
+/* 3: Área */
+.frente-card .table th:nth-child(3), .frente-card .table td:nth-child(3),
+#export-sandbox .table th:nth-child(3), #export-sandbox .table td:nth-child(3) {
+    width: 14% !important;
+}
+
+/* 4: Horas */
+.frente-card .table th:nth-child(4), .frente-card .table td:nth-child(4),
+#export-sandbox .table th:nth-child(4), #export-sandbox .table td:nth-child(4) {
+    width: 12% !important;
+}
+
+/* 5: Vel */
+.frente-card .table th:nth-child(5), .frente-card .table td:nth-child(5),
+#export-sandbox .table th:nth-child(5), #export-sandbox .table td:nth-child(5) {
+    width: 14% !important;
+}
+
+/* 6: RPM */
+.frente-card .table th:nth-child(6), .frente-card .table td:nth-child(6),
+#export-sandbox .table th:nth-child(6), #export-sandbox .table td:nth-child(6) {
+    width: 11% !important;
+}
+
+/* 7: Cons. */
+.frente-card .table th:nth-child(7), .frente-card .table td:nth-child(7),
+#export-sandbox .table th:nth-child(7), #export-sandbox .table td:nth-child(7) {
+    width: 12% !important;
+}
+
+/* -------------------- Estilos de Linha e Subtotal -------------------- */
+
+/* Listrado e estados */
+.frente-card .table tbody tr:nth-child(even) {
+    background: #fafafa;
+}
+
+/* Subtotal em uma única linha e ocupando a largura toda */
+.subtotal-row td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    font-weight: 700;
+    background: #f7f7f7;
+}
+
+/* Quando renderizado no export-sandbox (PDF) */
+#export-sandbox .subtotal-row td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* -------------------- Cores de Meta por Célula -------------------- */
+
+.table td.meta-ok {
+    background: #4eff74;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.table td.meta-warn {
+    background: #fff78e;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.table td.meta-bad {
+    background: #ff5959;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+/* Garante texto preto e legível nas células coloridas */
+.table td.meta-ok,
+.table td.meta-warn,
+.table td.meta-bad {
+    color: #000 !important;
+    -webkit-text-fill-color: #000 !important;
+}
+
+/* Se houver elementos dentro da célula, herdam o preto */
+.table td.meta-ok *,
+.table td.meta-warn *,
+.table td.meta-bad * {
+    color: inherit !important;
+}
+
+/* ------------------------------------------------------------------------
+   Select Estilizado (Metas de Foco: #foco)
+------------------------------------------------------------------------ */
+
+#foco {
+    /* remove UI nativa */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+
+    /* caixa */
+    min-width: 240px;
+    padding: 8px 40px 8px 12px;
+    border: 1px solid #dbe6db;
+    border-radius: 10px;
+    background-color: #fff;
+    color: #263238;
+    font-weight: 600;
+    line-height: 1.2;
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+
+    /* seta custom (SVG inline) */
+    background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M7 10l5 5 5-5' stroke='%23263238' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px 16px;
+
+    /* leve sombra interna opcional */
+    box-shadow: inset 0 1px 0 rgba(0, 0, 0, .02);
+}
+
+/* hover/focus/disabled */
+#foco:hover {
+    border-color: #cbd8cb;
+}
+
+#foco:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(242, 159, 60, .22);
+}
+
+#foco:disabled {
+    background-color: #f5f7f5;
+    color: #7b8790;
+    cursor: not-allowed;
+}
+
+/* remove a setinha do IE/Edge legado */
+#foco::-ms-expand {
+    display: none;
+}
+
+/* opções (o que dá pra estilizar de forma consistente) */
+#foco option {
+    color: #263238;
+    font-weight: 600;
+}
+
+/* ------------------------------------------------------------------------
+   Impressão
+------------------------------------------------------------------------ */
+
+/* Print util */
+@media print {
+    .no-print {
+        display: none !important
+    }
+}

@@ -1,0 +1,301 @@
+:root {
+    --primary-green: #2e7d32;
+    --light-green: #4caf50;
+    --dark-green: #1b5e20;
+    --background-color: #f0f4f8;
+    --card-bg: #ffffff;
+    --text-color: #333;
+    --light-text: #666;
+    --border-color: #e0e0e0;
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --transition-speed: 0.4s;
+    --error-bg: #ffebee;
+    --success-bg: #e8f5e9;
+    --action-btn-bg: #0288d1;
+    --action-btn-hover: #01579b;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--background-color);
+    margin: 0;
+    color: var(--text-color);
+}
+
+h2 {
+    font-size: 2em;
+    color: var(--primary-green);
+    border-bottom: 3px solid var(--primary-green);
+    padding-bottom: 10px;
+    margin: 25px 0;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.card {
+    background-color: var(--card-bg);
+    padding: 30px;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    margin-bottom: 25px;
+    transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.form-card {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.filters-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+}
+
+.filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.filter-item label {
+    font-weight: 600;
+    color: var(--light-text);
+}
+
+.filter-item input[type="number"],
+.filter-item input[type="date"],
+.filter-item select,
+.filter-item textarea {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-family: 'Poppins', sans-serif;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    background-color: #f9f9f9;
+}
+
+.filter-item input[type="number"]:focus,
+.filter-item input[type="date"]:focus,
+.filter-item select:focus,
+.filter-item textarea:focus {
+    outline: none;
+    border-color: var(--primary-green);
+    box-shadow: 0 0 8px rgba(46, 125, 50, 0.2);
+}
+
+.filter-item textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.button-excel {
+    background-color: var(--primary-green);
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 600;
+    transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+    display: block;
+    margin: 20px auto 0;
+}
+
+.button-excel:hover {
+    background-color: var(--dark-green);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.alert-message {
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.alert-message.error {
+    background-color: var(--error-bg);
+    color: #c62828;
+}
+
+.alert-message.success {
+    background-color: var(--success-bg);
+    color: var(--dark-green);
+}
+
+.tab-navigation {
+    display: flex;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 20px;
+}
+
+.tab-button {
+    padding: 12px 25px;
+    cursor: pointer;
+    background-color: #f0f0f0;
+    border: none;
+    border-radius: 8px 8px 0 0;
+    margin-right: 5px;
+    font-weight: 600;
+    color: var(--light-text);
+    transition: all 0.3s ease;
+}
+
+.tab-button.active {
+    background-color: var(--card-bg);
+    border-bottom: 2px solid var(--primary-green);
+    color: var(--primary-green);
+    transform: translateY(2px);
+}
+
+.tab-button:hover:not(.active) {
+    background-color: #e5e5e5;
+}
+
+.tab-content {
+    display: none;
+    animation: fadeIn 0.5s ease forwards;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.02);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+th, td {
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.3s ease;
+}
+
+th {
+    background-color: var(--dark-green);
+    color: white;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+tr:nth-child(even) {
+    background-color: #f8f8f8;
+}
+
+tr:hover {
+    background-color: #eef5f9;
+}
+
+.action-btn {
+    background-color: var(--action-btn-bg);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+}
+
+.action-btn:hover {
+    background-color: var(--action-btn-hover);
+    transform: scale(1.1);
+}
+
+.action-btn i {
+    font-size: 1.2em;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    margin: 5% auto;
+    padding: 20px;
+    border-radius: 12px;
+    max-width: 800px;
+    box-shadow: var(--shadow);
+    animation: fadeIn 0.3s ease;
+}
+
+.close-btn {
+    float: right;
+    font-size: 1.5em;
+    cursor: pointer;
+    color: var(--light-text);
+}
+
+.close-btn:hover {
+    color: var(--primary-green);
+}
+
+.signature-credit {
+    text-align: center;
+    margin-top: 30px;
+    color: var(--light-text);
+    font-size: 0.9em;
+}
+
+.signature-credit .sig-name {
+    font-weight: 600;
+    color: var(--primary-green);
+}
+
+/* Select2 Styling */
+.select2-container--default .select2-selection--single {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    height: 38px;
+    background-color: #f9f9f9;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 36px;
+    padding-left: 10px;
+    color: var(--text-color);
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 36px;
+}
+
+.select2-container--default .select2-selection--single:focus {
+    border-color: var(--primary-green);
+    box-shadow: 0 0 8px rgba(46, 125, 50, 0.2);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.form-card, .table-container {
+    animation: fadeIn 0.5s ease forwards;
+}

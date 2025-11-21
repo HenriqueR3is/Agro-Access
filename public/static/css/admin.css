@@ -1,0 +1,84 @@
+/* --- CSS PARA LAYOUT DA PÁGINA DE GERENCIAMENTO --- */
+.grid-container-manage {
+    display: grid;
+    grid-template-columns: 1fr 2fr; /* Coluna menor para o form, maior para a tabela */
+    gap: 2rem;
+    align-items: flex-start;
+}
+
+.form-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 1rem;
+}
+
+@media (max-width: 992px) {
+    .grid-container-manage {
+        grid-template-columns: 1fr; /* Em telas menores, os quadros ficam um sobre o outro */
+    }
+}
+
+/* --- CSS PARA OS MODAIS (ESCONDER POR PADRÃO) --- */
+.modal {
+    display: none; /* Esconde os modais por padrão */
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal.active {
+    display: flex; /* A classe 'active' que o JS adiciona irá mostrar o modal */
+    align-items: center;
+    justify-content: center;
+}
+
+.signature-credit {
+  width: 100%;
+  text-align: center;
+  padding: 18px 10px;
+  font-family: 'Poppins', sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+.sig-text {
+  font-size: 15px;
+  color: #2c3e50;
+  font-weight: 400;
+  display: inline-block;
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.sig-text::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0%;
+  height: 2px;
+  background: linear-gradient(90deg, #0ebc73, #0d8d52);
+  transform: translateX(-50%);
+  transition: width 0.5s ease;
+  border-radius: 2px;
+}
+
+.signature-credit:hover .sig-text::after {
+  width: 100%;
+}
+
+.sig-name {
+  font-weight: 600;
+  color: #0ebc73;
+  transition: color .3s ease;
+}
+
+.signature-credit:hover .sig-name {
+  color: #0d8d52;
+}
+

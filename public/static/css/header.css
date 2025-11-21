@@ -1,0 +1,743 @@
+        /* =========================
+           SIDEBAR E SUBMENU
+           ========================= */
+        .sidebar {
+            background: linear-gradient(180deg, #1b5e20, #2e7d32);
+            color: #fff;
+            width: 240px;
+            padding: 10px 9px;
+            border-radius: 12px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+            font-family: "Segoe UI", sans-serif;
+        }
+        .sidebar-nav a {
+            display: block;
+            padding: 12px 15px;
+            color: #e0e0e0;
+            text-decoration: none;
+            border-radius: 8px;
+            margin: 5px 0;
+            transition: all 0.3s ease;
+            font-size: 15px;
+            font-weight: 500;
+        }
+        .sidebar-nav a:hover { background: rgba(255,255,255,0.15); transform: translateX(5px); }
+        .sidebar-nav a.active { background: #4caf50; font-weight: bold; color: #fff; box-shadow: 0 0 10px rgba(76,175,80,0.6); }
+        .has-submenu {
+            padding: 12px 15px; background: rgba(255,255,255,0.1); border-radius: 8px;
+            margin: 8px 0; color: #fff; font-weight: bold; cursor: pointer; position: relative; transition: all 0.3s ease;
+        }
+        .has-submenu:hover { background: rgba(255,255,255,0.2); transform: scale(1.02); }
+        .has-submenu::after { content: "▸"; position: absolute; right: 15px; transition: transform 0.3s ease; }
+        .has-submenu.open::after { transform: rotate(90deg); }
+.submenu {
+    
+    max-height: 0;
+    overflow: clip;
+    display: flex;
+    flex-direction: column;
+
+    border-left: 2px solid rgba(255,255,255,0.2);
+    padding-left: 5px;
+
+}
+.submenu-animated {
+    transition: max-height 0.4s ease;
+}
+        .submenu a { font-size: 14px; padding: 10px 15px; margin: 3px 0; color: #c8e6c9; background: rgba(255,255,255,0.05); border-radius: 6px; transition: all 0.3s ease; }
+        .submenu a:hover { background: #66bb6a; color: #fff; transform: translateX(8px); }
+
+
+
+/* =========================
+   ESTILOS DO HEADER
+   ========================= */
+
+.header {
+    background-color: #ffffff;
+    color: #333;
+    padding: 10px 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: space-between; /* Empurra os grupos para as extremidades */
+    align-items: center;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+/* Novo container para o logo e atalhos, alinhados à esquerda */
+.header-left {
+    display: flex;
+    align-items: center;
+    /* Alinha o logo e os atalhos como um grupo */
+    gap: 20px; 
+}
+
+/* Container para os atalhos de ícones - Agora centralizados */
+.header-shortcuts {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-right: auto;
+    padding-left: 20px;
+    padding-top: 5px;
+}
+
+/* Estilo do Logo */
+.logo {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #1b5e20;
+}
+
+.shortcut-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: #666;
+    padding: 8px 10px;
+    border-radius: 8px;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+    text-align: center;
+}
+
+.shortcut-link:hover {
+    background-color: #f0f0f0;
+    color: #1b5e20;
+    transform: translateY(-2px);
+}
+
+.shortcut-link i {
+    font-size: 1.2rem;
+    margin-bottom: 5px;
+}
+
+.shortcut-link small {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Estilo do botão de logout */
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.logout-btn {
+    color: #666;
+}
+
+.logout-btn:hover {
+    color: #d9534f;
+}
+
+/* Responsividade para telas menores */
+@media (max-width: 991px) {
+    .header-shortcuts {
+        display: none;
+    }
+
+    .header-left {
+        gap: 10px;
+    }
+}
+
+a.is-disabled { opacity:.45; pointer-events:none; }
+a.is-disabled-click { opacity:.7; }
+
+.toast-403 {
+  position: fixed;
+  left: 50%;
+  top: 18px;                    /* aparece na parte superior */
+  transform: translateX(-50%) translateY(-8px);
+  background: #222;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,.25);
+  opacity: 0;
+  z-index: 3000;
+  transition: opacity .18s ease, transform .18s ease, top .18s ease;
+  pointer-events: none;         /* não bloqueia cliques */
+}
+.toast-403.show {
+  opacity: 1;
+  top: 28px;                    /* leve slide-down */
+  transform: translateX(-50%) translateY(0);
+}
+/* ===============================================
+  AJUSTES PARA UM PERFIL MODERNO E COMPACTO (TOM AVERMELHADO)
+  =============================================== */
+
+
+
+/* O estilo do .sidebar-nav deve ter flex-grow: 1 para ocupar o espaço restante */
+.sidebar-nav {
+    flex-grow: 1;
+    /* ... mantenha os outros estilos do sidebar-nav ... */
+}
+
+/* Estilos para o bloco de perfil com visual compacto */
+.sidebar-profile-footer {
+    margin-top: auto; /* garante que fique grudado no final */
+    display: flex;
+    align-items: center;
+    gap: 15px; /* Aumentei o espaço para um visual mais clean */
+    padding: 18px; /* Aumentei o padding para um visual mais robusto */
+    border-top: 2px solid rgba(255, 255, 255, 0.15); /* Linha de separação mais visível */
+    background-color: #8b1323; /* Vermelho mais escuro para o bloco */
+    margin-top: auto;
+    box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.4); /* Sombra mais intensa */
+    transition: background-color 0.4s ease, box-shadow 0.4s ease;
+    position: relative; /* Para o efeito de brilho */
+    overflow: hidden; /* Para garantir que o brilho não vaze */
+}
+
+.sidebar-profile-footer:hover {
+    background-color: #a71d31; /* Fica um pouco mais claro no hover */
+    box-shadow: 0 -8px 25px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+}
+
+/* Efeito de brilho sutil ao passar o mouse */
+.sidebar-profile-footer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+    transition: left 0.5s ease;
+}
+
+.sidebar-profile-footer:hover::before {
+    left: 100%;
+}
+
+
+.profile-picture-footer {
+    width: 50px; /* Tamanho da foto um pouco maior */
+    height: 50px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 3px solid #e74c3c; /* Borda da foto em um vermelho vibrante */
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease, border-color 0.3s ease;
+    flex-shrink: 0;
+}
+
+.profile-picture-footer img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-picture-footer:hover {
+    transform: scale(1.1); /* Um pouco mais de zoom no hover */
+    border-color: #c0392b; /* Borda mais escura no hover */
+}
+
+.profile-info-footer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+    flex-grow: 1; /* Permite que o texto ocupe mais espaço */
+}
+
+.profile-name-footer {
+    font-size: 1rem; /* Nome um pouco maior */
+    font-weight: 700;
+    color: #fce4ec; /* Um rosa avermelhado claro para o nome */
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 3px;
+}
+
+.profile-role-footer {
+    font-size: 0.85rem; /* Cargo um pouco maior */
+    color: #ef9a9a; /* Um vermelho claro suave para o cargo */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Estilos para os badges - com um visual moderno e elegante */
+.badges-container-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Espaçamento entre os badges */
+    margin-top: 8px;
+    flex-wrap: wrap; /* Permite que os badges quebrem a linha se houver muitos */
+}
+
+.badge-icon {
+    font-size: 1.1rem; /* Ícones maiores */
+    color: #ffeb3b; /* Amarelo dourado para os ícones - destaque elegante */
+    text-shadow: 0 0 8px rgba(255, 235, 59, 0.6);
+    transition: transform 0.3s ease, text-shadow 0.3s ease, color 0.3s ease;
+    cursor: help;
+    padding: 3px;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.badge-icon:hover {
+    transform: translateY(-3px) scale(1.2); /* Sutil efeito de "flutuar" e zoom */
+    text-shadow: 0 0 12px rgba(255, 235, 59, 1);
+    color: #ffe082; /* Fica um pouco mais claro no hover */
+}
+
+/* Adicionando um pequeno indicador de hover aos badges */
+.badge-icon::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%) scaleX(0);
+    width: 80%;
+    height: 2px;
+    background-color: #ffeb3b;
+    transition: transform 0.3s ease;
+}
+
+.badge-icon:hover::after {
+    transform: translateX(-50%) scaleX(1);
+}
+
+/* Exemplo de uma imagem para o perfil (opcional) */
+/* .profile-picture-footer img {
+    content: url('sua-imagem-de-perfil.jpg'); 
+} */
+
+/* ===== Scrollbar customizado (Chrome, Edge, Safari) ===== */
+.sidebar::-webkit-scrollbar {
+    width: 5px; /* mais fininha e elegante */
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: #2e7d32; /* trilho verde escuro */
+    border-radius: 10px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.25); /* profundidade */
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #4caf50, #2e7d32); /* verde degradê */
+    border-radius: 10px;
+    border: 2px solid #2e7d32; /* dá aquele efeito "separado do fundo" */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); /* glow sutil */
+    transition: all 0.3s ease;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #66bb6a, #43a047); /* verde mais claro */
+    box-shadow: 0 0 8px rgba(102, 187, 106, 0.8); /* brilho no hover */
+}
+
+/* ===== Scrollbar no Firefox ===== */
+.sidebar {
+    scrollbar-width: thin; /* barra fina */
+    scrollbar-color: #43a047 #1b5e20; /* polegar e trilho */
+}
+
+/* =========================
+   SIDEBAR E SUBMENU - CORRIGIDO
+   ========================= */
+
+.sidebar {
+    background: linear-gradient(180deg, #1b5e20, #2e7d32);
+    color: #fff;
+    width: 280px;
+    padding: 15px 12px;
+    border-radius: 12px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    font-family: "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 70px;
+    align-self: flex-start;
+    height: auto;
+}
+
+/* NAVEGAÇÃO PRINCIPAL */
+.sidebar-nav {
+    flex: 1;
+    overflow: visible;
+    padding: 10px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* GRUPOS DE MENU PRINCIPAIS */
+.has-submenu {
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.has-submenu:hover {
+    background: rgba(255,255,255,0.2);
+    transform: translateX(3px);
+    border-color: rgba(255,255,255,0.3);
+}
+
+.arrow {
+    transition: transform 0.3s ease;
+    font-size: 12px;
+    color: #c8e6c9;
+}
+
+.has-submenu.open .arrow {
+    transform: rotate(180deg);
+}
+
+/* SUBMENUS - CORREÇÃO COMPLETA */
+.submenu {
+    max-height: 0;
+    overflow: hidden;
+    border-left: 3px solid rgba(76, 175, 80, 0.5);
+    margin-left: 10px;
+    padding-left: 10px;
+    transition: max-height 0.4s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* CORREÇÃO PARA MÚLTIPLOS SUBMENUS */
+.has-submenu.open + .submenu {
+    max-height: 800px; /* Valor suficiente para caber todos os itens */
+    overflow: visible;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    padding: 8px 4%;
+}
+
+/* ITENS DO SUBMENU */
+.submenu a {
+    font-size: 14px;
+    padding: 10px 15px 10px 20px;
+    margin: 2px 0;
+    color: #c8e6c9;
+    background: rgba(255,255,255,0.05);
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: block;
+    border: 1px solid transparent;
+    position: relative;
+}
+
+.submenu a:hover {
+    background: #66bb6a;
+    color: #fff;
+    transform: translateX(8px);
+}
+
+
+
+
+/* =========================
+   MENU HAMBURGER ANIMADO
+   ========================= */
+
+.menu-toggle {
+    background: none;
+    border: none;
+    color: #1b5e20;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 1001;
+}
+
+.menu-toggle:hover {
+    background: rgba(27, 94, 32, 0.1);
+    transform: scale(1.1);
+}
+
+.menu-toggle:active {
+    transform: scale(0.95);
+}
+
+/* Estados do ícone hamburger */
+.menu-toggle .fa-bars {
+    transition: all 0.3s ease;
+}
+
+.menu-toggle.active .fa-bars {
+    transform: rotate(90deg);
+    opacity: 0;
+}
+
+.menu-toggle .fa-times {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.menu-toggle.active .fa-times {
+    transform: translate(-50%, -50%) rotate(0deg);
+    opacity: 1;
+}
+
+/* Overlay para mobile */
+.mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 998;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.mobile-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Sidebar para mobile */
+@media (max-width: 991px) {
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: -100%;
+        width: 280px;
+        height: 100vh;
+        z-index: 999;
+        border-radius: 0;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+        transform: translateX(-20px);
+        opacity: 0;
+    }
+
+    .sidebar.active {
+        left: 0;
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    .sidebar-nav {
+        overflow-y: auto;
+        max-height: calc(100vh - 180px);
+    }
+
+    /* Animação dos itens do menu */
+    .sidebar.active .sidebar-nav > * {
+        animation: slideInRight 0.5s ease forwards;
+    }
+
+    .sidebar.active .sidebar-nav > *:nth-child(1) { animation-delay: 0.1s; }
+    .sidebar.active .sidebar-nav > *:nth-child(2) { animation-delay: 0.15s; }
+    .sidebar.active .sidebar-nav > *:nth-child(3) { animation-delay: 0.2s; }
+    .sidebar.active .sidebar-nav > *:nth-child(4) { animation-delay: 0.25s; }
+    .sidebar.active .sidebar-nav > *:nth-child(5) { animation-delay: 0.3s; }
+    .sidebar.active .sidebar-nav > *:nth-child(6) { animation-delay: 0.35s; }
+    .sidebar.active .sidebar-nav > *:nth-child(7) { animation-delay: 0.4s; }
+
+    @keyframes slideInRight {
+        from {
+            opacity: 0;
+            transform: translateX(-30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    /* Perfil com animação */
+    .sidebar.active .sidebar-profile-footer {
+        animation: slideInUp 0.6s ease 0.5s forwards;
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    @keyframes slideInUp {
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+}
+
+/* Para desktop - sidebar normal */
+@media (min-width: 992px) {
+    .menu-toggle {
+        display: none;
+    }
+    
+    .mobile-overlay {
+        display: none;
+    }
+}
+
+/* Melhorias no header para mobile */
+@media (max-width: 991px) {
+    .header {
+        padding: 10px 15px;
+        position: relative;
+        z-index: 1000;
+        background: white;
+    }
+
+    .logo {
+        font-size: 1.3rem;
+    }
+}
+
+
+
+
+
+/* =========================
+   BOTÃO OCULTAR SIDEBAR - DESKTOP
+   ========================= */
+
+.sidebar-toggle-desktop {
+    position: absolute;
+    top: 15px;
+    right: -15px;
+    width: 30px;
+    height: 30px;
+    background: #1b5e20;
+    border: 2px solid white;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.sidebar-toggle-desktop:hover {
+    background: #4caf50;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.sidebar-toggle-desktop:active {
+    transform: scale(0.95);
+}
+
+/* Sidebar colapsada */
+.sidebar.collapsed {
+    width: 70px !important;
+    transition: all 0.3s ease;
+}
+
+.sidebar.collapsed .sidebar-nav {
+    overflow: hidden;
+}
+
+.sidebar.collapsed .has-submenu {
+    padding: 12px 8px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .has-submenu span:not(.arrow) {
+    display: none;
+}
+
+.sidebar.collapsed .arrow {
+    display: none;
+}
+
+.sidebar.collapsed .submenu {
+    display: none !important;
+}
+
+.sidebar.collapsed .sidebar-profile-footer {
+    flex-direction: column;
+    padding: 10px;
+    text-align: center;
+}
+
+.sidebar.collapsed .profile-info-footer {
+    display: none;
+}
+
+.sidebar.collapsed .profile-picture-footer {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 5px;
+}
+
+/* Ajustes quando sidebar está colapsada */
+.sidebar.collapsed + .main-content {
+    margin-left: 70px;
+    transition: margin-left 0.3s ease;
+}
+
+/* Para mobile, esconder o toggle desktop */
+@media (max-width: 991px) {
+    .sidebar-toggle-desktop {
+        display: none;
+    }
+    
+    .sidebar.collapsed {
+        width: 280px !important;
+    }
+    
+    .sidebar.collapsed .has-submenu span:not(.arrow) {
+        display: block;
+    }
+    
+    .sidebar.collapsed .profile-info-footer {
+        display: flex;
+    }
+}
+
+/* Ajuste do main content */
+.main-content {
+    transition: margin-left 0.3s ease;
+    margin-left: 280px;
+}
+
+/* Quando sidebar está colapsada no desktop */
+@media (min-width: 992px) {
+    .sidebar:not(.collapsed) {
+        width: 280px;
+    }
+    
+    .sidebar.collapsed {
+        width: 70px;
+    }
+    
+    .sidebar.collapsed + .main-content {
+        margin-left: 70px;
+    }
+}

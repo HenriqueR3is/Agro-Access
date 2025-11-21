@@ -1,0 +1,11 @@
+RewriteEngine On
+
+# Definir login.php como página inicial
+DirectoryIndex login.php
+
+# Redirecionar acesso à raiz para login.php
+RewriteRule ^$ login.php [L]
+
+RewriteRule ^curso_agrodash/login$ curso_agrodash/login.php [L]
+
+RewriteRule ^curso_agrodash/validar2$ curso_agrodash/validar_certificado.php [L]

@@ -1,0 +1,102 @@
+RewriteEngine On
+RewriteBase /
+
+# ============================
+# Sirva arquivos/pastas reais normalmente
+# ============================
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# ============================
+# Rotas amigáveis (páginas principais)
+# ============================
+RewriteRule ^$ index.php [L]
+RewriteRule ^login$ index.php [L]
+RewriteRule ^dashboard$ app/views/CIA/dashboard.php [L]
+RewriteRule ^user_dashboard$ app/views/user/user_dashboard.php [L]
+RewriteRule ^admin_dashboard$ app/views/admin/admin_dashboard.php [L]
+RewriteRule ^admin_users$ app/views/admin/admin_users.php [L]
+RewriteRule ^admin_fleet$ app/views/admin/admin_fleet.php [L]
+RewriteRule ^fazendas$ app/views/admin/admin_farms.php [L]
+RewriteRule ^comparativo$ app/views/CIA/relatorios/comparativo.php [L]
+RewriteRule ^consumo$ app/views/CIA/relatorios/consumo.php [L]
+RewriteRule ^consumo_equip$ app/views/CIA/relatorios/consumo_equip_comp.php [L]
+RewriteRule ^horasoperacionais$ app/views/CIA/relatorios/horas_operacionais.php [L]
+
+# ============================
+# Endpoints (APIs)
+# ============================
+RewriteRule ^apontamentos$ app/views/user/fetch_apontamentos.php [L]
+RewriteRule ^equipamentos$ app/views/user/get_equipamentos.php [L]
+RewriteRule ^get_fazendas$ app/views/user/get_fazendas.php [L]
+RewriteRule ^ctt$ app/views/user/ctt.php [L]
+RewriteRule ^get_fazenda_por_id$ app/views/admin/get_fazenda_por_id.php [L]
+RewriteRule ^fleet_actions$ app/views/admin/fleet_actions.php [L]
+RewriteRule ^salvafda$ app/views/admin/salvar_fazenda.php [L]
+RewriteRule ^importar_fazendas$ app/views/admin/importar_fazendas_csv.php [L]
+RewriteRule ^metas$ app/views/admin/admin_metas.php [L]
+RewriteRule ^visaogeral$ app/views/admin/admin_rela.php [L]
+RewriteRule ^audit_logs$ app/views/admin/audit_logs.php [L,QSA]
+RewriteRule ^aponta$ app/views/admin/admin_aponta.php [L]
+RewriteRule ^maintenance$ app/views/maintenance.php [L]
+RewriteRule ^configuracoes$ app/views/admin/config.php [L]
+RewriteRule ^permissions$ app/views/admin/permissions.php [L]
+
+RewriteRule ^logout$ app/views/logout.php [L]
+
+
+
+RewriteRule ^permissions/?$ app/routes/permissions.php [L,QSA]
+RewriteRule ^permissions/update/?$ app/routes/permissions.php [L,QSA]
+RewriteRule ^permissions/reset/?$ app/routes/permissions.php [L,QSA]
+
+# Se o arquivo ou diretório não existir, redirecionar para index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [L,QSA]
+
+# =====================================================
+# 🚀 MÓDULO DE TREINAMENTO AGRODASH (CURSO)
+# =====================================================
+
+
+
+# 2️⃣ Rotas internas do módulo de curso
+RewriteRule ^curso_agrodash/login$ curso_agrodash/login.php [L]
+RewriteRule ^curso_agrodash/validar_login$ curso_agrodash/validar_login.php [L]
+RewriteRule ^curso_agrodash/curso$ curso_agrodash/curso.php [L]
+RewriteRule ^curso_agrodash/certificado$ curso_agrodash/certificado.php [L]
+RewriteRule ^curso_agrodash/dashcurso$ curso_agrodash/dashboard.php [L]
+RewriteRule ^curso_agrodash/migra$ curso_agrodash/migrar_certificados_antigos.php [L]
+RewriteRule ^curso_agrodash/validar$ curso_agrodash/validar_certificado.php [L]
+RewriteRule ^curso_agrodash/admin$ curso_agrodash/admin_dashboard.php [L]
+RewriteRule ^curso_agrodash/cont$ curso_agrodash/admin_conteudos.php [L]
+
+RewriteRule ^curso_agrodash/migra$ curso_agrodash/migracao_progresso.php [L]
+
+
+
+# 3️⃣ Permitir acesso a arquivos estáticos
+RewriteRule ^curso_agrodash/css/(.*)$ curso_agrodash/css/$1 [L]
+RewriteRule ^curso_agrodash/js/(.*)$ curso_agrodash/js/$1 [L]
+RewriteRule ^curso_agrodash/imagens/(.*)$ curso_agrodash/imagens/$1 [L]
+RewriteRule ^curso_agrodash/videos/(.*)$ curso_agrodash/videos/$1 [L]
+RewriteRule ^curso_agrodash/ajax/(.*)$ curso_agrodash/ajax/$1 [L]
+
+# 4️⃣ Bloquear acesso a diretórios sensíveis
+RewriteRule ^curso_agrodash/(config|sql|dados|includes|private|logs|backup)/(.*)$ - [F,L,NC]
+
+# ============================
+# Página 404 personalizada
+# ============================
+ErrorDocument 404 /erro404.html
+
+# ============================
+# Bloquear acessos fora das rotas definidas
+# ============================
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ erro404.html [L]
+
+

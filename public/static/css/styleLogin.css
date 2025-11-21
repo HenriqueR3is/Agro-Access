@@ -1,0 +1,338 @@
+/*==================================================
+  CSS da Página de Login - Agronomia Ultra Moderna
+==================================================*/
+
+/* Importação de fontes e ícones (mantendo Roboto para clareza, adicionando Poppins para títulos) */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Poppins:wght@600;700;800&display=swap');
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
+
+/* Variáveis para cores e transições (atualizadas) */
+:root {
+    --green-dark: #1a4a1d;           /* Verde mais profundo e elegante */
+    --green-primary: #3cb86e;        /* Verde principal vibrante */
+    --green-light: #7de09e;          /* Verde claro para brilhos */
+    --bg-main: #e8f5e9;              /* Fundo super claro */
+    --text-color: #263238;           /* Cinza escuro premium */
+    --text-muted: #546e7a;           /* Cinza para texto secundário */
+    --card-bg: #ffffff;              /* Fundo do card branco puro */
+    --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.12);
+    --shadow-deep: 0 15px 40px rgba(0, 0, 0, 0.2);
+    --transition-fast: 0.25s ease-out;
+    --transition-medium: 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* -------------------------------------------
+  Configurações Globais e Corpo da Página
+------------------------------------------- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: 16px;
+}
+
+body.login-body {
+    font-family: 'Roboto', sans-serif;
+    color: var(--text-color);
+    background: linear-gradient(145deg, #81c784 0%, #388e3c 100%); /* Gradiente mais vivo */
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden; /* Garante que as animações de fundo não causem scroll */
+    position: relative;
+    animation: backgroundFlow 30s infinite alternate cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Animação de fundo mais complexa */
+@keyframes backgroundFlow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Efeito de "cana" no fundo */
+body.login-body::before,
+body.login-body::after {
+    content: '';
+    position: absolute;
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><path fill="%23ffffff" fill-opacity="0.08" d="M0 0h50v50H0zM50 50h50v50H50z"/></svg>');
+    opacity: 0.4;
+    z-index: 1;
+    pointer-events: none;
+    animation: paralaxCanes 60s infinite linear;
+}
+
+body.login-body::before {
+    width: 150%;
+    height: 150%;
+    top: -25%;
+    left: -25%;
+    transform: rotate(15deg);
+    background-size: 150px;
+    animation-delay: 0s;
+}
+
+body.login-body::after {
+    width: 120%;
+    height: 120%;
+    bottom: -10%;
+    right: -10%;
+    transform: rotate(-30deg);
+    background-size: 100px;
+    animation-delay: 10s; /* Atraso para camadas diferentes */
+}
+
+@keyframes paralaxCanes {
+    0% { transform: translate(0, 0) rotate(var(--initial-rotation, 0deg)); }
+    100% { transform: translate(200px, 200px) rotate(var(--final-rotation, 0deg)); }
+}
+/* Define rotações iniciais/finais via JS ou variáveis customizadas se necessário para mais complexidade */
+
+
+/* -------------------------------------------
+  Container Principal (Formulário)
+------------------------------------------- */
+.login-container {
+    background-color: var(--card-bg);
+    border-radius: 20px;
+    box-shadow: var(--shadow-soft);
+    padding: 3rem; /* Padding padrão para desktop */
+    width: 90%;
+    max-width: 450px;
+    text-align: center;
+    position: relative;
+    z-index: 10;
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+    animation: fadeInSlideUpScale 0.9s var(--transition-medium) forwards;
+    transition: box-shadow var(--transition-medium); /* Transição para sombra ao hover */
+}
+
+.login-container:hover {
+    box-shadow: var(--shadow-deep);
+}
+
+@keyframes fadeInSlideUpScale {
+    0% { opacity: 0; transform: translateY(50px) scale(0.9); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* -------------------------------------------
+  Cabeçalho
+------------------------------------------- */
+.login-header {
+    margin-bottom: 2.5rem;
+}
+
+.login-header svg {
+    color: var(--green-primary);
+    width: 75px;
+    height: 75px;
+    margin-bottom: 0.75rem;
+    animation: leafGrowAndSway 3s infinite ease-in-out;
+    transform-origin: center bottom; /* Ponto de pivô para o balanço */
+}
+
+@keyframes leafGrowAndSway {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    25% { transform: scale(1.1) rotate(5deg); }
+    75% { transform: scale(1.1) rotate(-5deg); }
+}
+
+.login-header h1 {
+    font-family: 'Poppins', sans-serif;
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: var(--green-dark);
+    margin: 0;
+    letter-spacing: -1.5px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.05); /* Sombra suave no texto */
+}
+
+.login-header p {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    animation: textFadeIn 1s ease-out 0.4s forwards;
+    opacity: 0;
+}
+
+@keyframes textFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* -------------------------------------------
+  Formulário e Inputs
+------------------------------------------- */
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.input-group {
+    text-align: left;
+    position: relative;
+}
+
+.input-group label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 0.6rem;
+    transition: color var(--transition-fast);
+}
+
+.input-group input {
+    width: 100%;
+    padding: 1.1rem 1.4rem;
+    font-size: 1rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    background-color: var(--bg-light);
+    transition: all var(--transition-fast);
+    outline: none;
+    color: var(--text-color);
+}
+
+.input-group input:focus {
+    border-color: var(--green-primary);
+    box-shadow: 0 0 0 4px rgba(60, 184, 110, 0.25);
+    background-color: var(--card-bg);
+}
+
+/* Efeito de "borda animada" ao focar */
+.input-group input:focus + label {
+    color: var(--green-primary);
+}
+
+.error-message {
+    color: #ef4444; /* Vermelho de erro mais forte */
+    font-size: 0.875rem;
+    margin-top: 0.75rem;
+    text-align: center;
+    font-weight: 500;
+    animation: errorShake 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55); /* Mais expressivo */
+    opacity: 0;
+    animation-fill-mode: forwards;
+}
+
+@keyframes errorShake {
+    0% { transform: translateX(0); opacity: 0; }
+    20% { transform: translateX(-8px); opacity: 1; }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+    100% { transform: translateX(0); opacity: 1; }
+}
+
+/* -------------------------------------------
+  Botão de Login
+------------------------------------------- */
+.btn-login {
+    width: 100%;
+    padding: 1.1rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--card-bg);
+    background-color: var(--green-primary);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all var(--transition-medium);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+    transform: translateZ(0); /* Força aceleração de hardware */
+}
+
+.btn-login:hover {
+    background-color: var(--green-dark);
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 12px 25px rgba(60, 184, 110, 0.4);
+}
+
+.btn-login:active {
+    transform: translateY(-1px) scale(0.99);
+    box-shadow: 0 5px 15px rgba(60, 184, 110, 0.2);
+}
+
+/* Efeito de brilho "swipe" no botão */
+.btn-login::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: all 0.7s cubic-bezier(0.165, 0.84, 0.44, 1);
+    transform: skewX(-20deg); /* Efeito de inclinação */
+}
+
+.btn-login:hover::after {
+    left: 100%;
+}
+
+
+/* -------------------------------------------
+  Responsividade - Otimizações para Mobile e PC
+------------------------------------------- */
+@media (max-width: 768px) {
+    body.login-body {
+        /* Ajuste sutil do gradiente para mobile */
+        background: linear-gradient(160deg, #9ccc65 0%, #689f38 100%);
+        align-items: flex-start; /* Alinha o card mais ao topo no mobile */
+        padding-top: 5vh; /* Espaço do topo */
+    }
+
+    .login-container {
+        padding: 2rem 1.25rem;
+        max-width: 95%; /* Ocupa mais espaço horizontalmente no mobile */
+        margin-top: 0; /* Remove margem extra */
+        transform: translateY(0) scale(1); /* Desativa animação de escala e translateY para mobile */
+        animation: fadeInUp 0.8s ease-out forwards; /* Usa apenas fade-in para mobile */
+    }
+
+    .login-header h1 {
+        font-size: 2.2rem;
+        letter-spacing: -1px;
+    }
+
+    .login-header p {
+        font-size: 0.95rem;
+    }
+
+    .login-header svg {
+        width: 65px;
+        height: 65px;
+    }
+
+    .input-group input {
+        padding: 1rem 1.1rem;
+        font-size: 0.95rem;
+    }
+
+    .btn-login {
+        padding: 0.9rem;
+        font-size: 0.95rem;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .login-container {
+        padding: 2.8rem 2rem;
+        max-width: 420px;
+    }
+    .login-header h1 {
+        font-size: 2.5rem;
+    }
+}
+

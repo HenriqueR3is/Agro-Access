@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Frota - Solinftec</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --accent: #e74c3c;
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --light: #ecf0f1;
+            --dark: #34495e;
+            --gray: #95a5a6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: var(--dark);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 30px 0;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            animation: pulse 15s infinite linear;
+        }
+
+        @keyframes pulse {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo i {
+            font-size: 2.5rem;
+        }
+
+        .logo h1 {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .date-info {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-weight: 500;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 3fr;
+            gap: 20px;
+        }
+
+        .filters {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .filters h2 {
+            margin-bottom: 20px;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-group {
+            margin-bottom: 20px;
+        }
+
+        .filter-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .filter-group select, .filter-group input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: var(--light);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .filter-group select:focus, .filter-group input:focus {
+            outline: none;
+            border-color: var(--secondary);
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--secondary);
+            color: white;
+            flex: 1;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--gray);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #7f8c8d;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #27ae60;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .card-header h3 {
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+        }
+
+        .icon-blue {
+            background: var(--secondary);
+        }
+
+        .icon-green {
+            background: var(--success);
+        }
+
+        .icon-red {
+            background: var(--accent);
+        }
+
+        .icon-orange {
+            background: var(--warning);
+        }
+
+        .icon-purple {
+            background: #9b59b6;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 10px 0;
+        }
+
+        .stat-desc {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .chart-container {
+            height: 250px;
+            position: relative;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .data-table th, .data-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .data-table th {
+            background: var(--light);
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .data-table tr:hover {
+            background: #f9f9f9;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-active {
+            background: rgba(46, 204, 113, 0.2);
+            color: var(--success);
+        }
+
+        .status-inactive {
+            background: rgba(231, 76, 60, 0.2);
+            color: var(--accent);
+        }
+
+        .status-maintenance {
+            background: rgba(243, 156, 18, 0.2);
+            color: var(--warning);
+        }
+
+        .map-container {
+            height: 300px;
+            background: #eef2f7;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .map-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--gray);
+            font-size: 1.2rem;
+        }
+
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            color: var(--gray);
+            font-size: 0.9rem;
+            padding: 20px 0;
+        }
+
+        .import-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .import-section h2 {
+            margin-bottom: 15px;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .file-input {
+            flex: 1;
+        }
+
+        .file-input input {
+            width: 100%;
+        }
+
+        .fleet-summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .summary-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+
+        .summary-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 5px 0;
+        }
+
+        .summary-label {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .time-display {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .progress-bar {
+            height: 10px;
+            background: #ecf0f1;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 5px;
+            transition: width 0.5s ease;
+        }
+
+        .fleet-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .fleet-table th, .fleet-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .fleet-table th {
+            background: var(--light);
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .fleet-table tr:hover {
+            background: #f9f9f9;
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .filters {
+                position: static;
+            }
+            
+            .fleet-summary {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+            }
+            
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .fleet-summary {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            font-size: 1.2rem;
+            color: var(--gray);
+        }
+
+        .loading i {
+            margin-right: 10px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .motor-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .motor-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .motor-on {
+            background-color: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+        
+        .motor-off {
+            background-color: var(--accent);
+        }
+        
+        .time-breakdown {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+        }
+        
+        .time-segment {
+            text-align: center;
+            flex: 1;
+        }
+        
+        .time-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin: 5px 0;
+        }
+        
+        .time-label {
+            color: var(--gray);
+            font-size: 0.8rem;
+        }
+        
+        .debug-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-tractor"></i>
+                    <h1>Dashboard de Frota - Solinftec</h1>
+                </div>
+                <div class="date-info">
+                    <i class="far fa-calendar-alt"></i>
+                    <span id="current-date">Carregando...</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="import-section">
+            <h2><i class="fas fa-file-import"></i> Importar Dados</h2>
+            <div class="file-input-container">
+                <div class="file-input">
+                    <input type="file" id="csv-file" accept=".csv">
+                </div>
+                <button class="btn btn-success" id="import-btn">
+                    <i class="fas fa-upload"></i> Importar CSV
+                </button>
+            </div>
+            <p id="file-info" style="margin-top: 10px; color: var(--gray); font-size: 0.9rem;">
+                Nenhum arquivo selecionado
+            </p>
+        </div>
+
+        <div class="fleet-summary">
+            <div class="summary-card">
+                <div class="summary-value" id="total-equipment">0</div>
+                <div class="summary-label">Total de Equipamentos</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value" id="active-equipment">0</div>
+                <div class="summary-label">Equipamentos Ativos</div>
+            </div>
+            <div class="summary-card">
+                <div class="time-display" id="total-operation-time">0h 0m</div>
+                <div class="summary-label">Tempo Total de Operação</div>
+            </div>
+            <div class="summary-card">
+                <div class="time-display" id="motor-on-time">0h 0m</div>
+                <div class="summary-label">Tempo com Motor Ligado</div>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            <div class="filters">
+                <h2><i class="fas fa-filter"></i> Filtros</h2>
+                
+                <div class="filter-group">
+                    <label for="equipment">Equipamento</label>
+                    <select id="equipment">
+                        <option value="all">Todos os Equipamentos</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="status">Estado Operacional</label>
+                    <select id="status">
+                        <option value="all">Todos os Estados</option>
+                        <option value="PARADA">Parada</option>
+                        <option value="OPERANDO">Operando</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="motor">Motor Ligado</label>
+                    <select id="motor">
+                        <option value="all">Todos</option>
+                        <option value="Sim">Sim</option>
+                        <option value="Nao">Não</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="operation">Operação</label>
+                    <select id="operation">
+                        <option value="all">Todas as Operações</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="time-range">Período</label>
+                    <select id="time-range">
+                        <option value="all">Todo o Período</option>
+                        <option value="hour">Última Hora</option>
+                        <option value="day">Último Dia</option>
+                        <option value="week">Última Semana</option>
+                    </select>
+                </div>
+                
+                <div class="filter-buttons">
+                    <button class="btn btn-primary" id="apply-filters">
+                        <i class="fas fa-check"></i> Aplicar Filtros
+                    </button>
+                    <button class="btn btn-secondary" id="reset-filters">
+                        <i class="fas fa-redo"></i> Limpar
+                    </button>
+                </div>
+                
+                <div class="debug-info" id="debug-info" style="display: none;">
+                    <strong>Debug Info:</strong> <span id="debug-text"></span>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-tachometer-alt"></i> Status do Equipamento</h3>
+                        <div class="card-icon icon-blue">
+                            <i class="fas fa-tractor"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="equipment-status">-</div>
+                    <div class="stat-desc">Estado atual do equipamento</div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-gas-pump"></i> Status do Motor</h3>
+                        <div class="card-icon icon-green">
+                            <i class="fas fa-engine"></i>
+                        </div>
+                    </div>
+                    <div class="motor-status">
+                        <span class="motor-indicator" id="motor-indicator"></span>
+                        <span class="stat-value" id="motor-status">-</span>
+                    </div>
+                    <div class="stat-desc">Motor ligado/desligado</div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-cogs"></i> RPM do Motor</h3>
+                        <div class="card-icon icon-orange">
+                            <i class="fas fa-gauge-high"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="rpm-value">-</div>
+                    <div class="stat-desc">Rotação por minuto</div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-gauge-high"></i> Velocidade</h3>
+                        <div class="card-icon icon-red">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="speed-value">-</div>
+                    <div class="stat-desc">Velocidade em km/h</div>
+                </div>
+
+                <div class="card full-width">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-pie"></i> Distribuição da Frota</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="fleet-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card full-width">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-line"></i> Atividade ao Longo do Tempo</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="activity-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card full-width">
+                    <div class="card-header">
+                        <h3><i class="fas fa-clock"></i> Análise de Tempo de Operação</h3>
+                    </div>
+                    <div class="time-breakdown">
+                        <div class="time-segment">
+                            <div class="time-value" id="operation-time">0h 0m</div>
+                            <div class="time-label">Tempo Operando</div>
+                        </div>
+                        <div class="time-segment">
+                            <div class="time-value" id="idle-time">0h 0m</div>
+                            <div class="time-label">Tempo Parado</div>
+                        </div>
+                        <div class="time-segment">
+                            <div class="time-value" id="maintenance-time">0h 0m</div>
+                            <div class="time-label">Tempo em Manutenção</div>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="operation-progress" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="card full-width">
+                    <div class="card-header">
+                        <h3><i class="fas fa-table"></i> Frota Detalhada</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="fleet-table">
+                            <thead>
+                                <tr>
+                                    <th>Equipamento</th>
+                                    <th>Descrição</th>
+                                    <th>Status</th>
+                                    <th>Motor</th>
+                                    <th>Tempo Operação</th>
+                                    <th>Tempo Motor Ligado</th>
+                                    <th>Eficiência</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fleet-table-body">
+                                <tr>
+                                    <td colspan="7" style="text-align: center;">Importe um arquivo CSV para visualizar os dados</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card full-width">
+                    <div class="card-header">
+                        <h3><i class="fas fa-map-marked-alt"></i> Localização da Frota</h3>
+                    </div>
+                    <div class="map-container">
+                        <div class="map-placeholder">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span>Mapa de localização da frota</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Dashboard de Frota - Solinftec &copy; 2023</p>
+        </div>
+    </div>
+
+    <script>
+        // Dados de exemplo para demonstração
+        const sampleData = [
+            {
+                "Equipamento": "13100243",
+                "Data/Hora": "13/10/2025 00:00:04",
+                "Codigo Frente (Digitada)": "null",
+                "Corte Base Automatico/Manual": "null",
+                "Descricao Equipamento": "TRATOR VINHAÇA LOCALIZADA",
+                "Estado": "PARADA",
+                "Estado Operacional": "PARADA",
+                "Esteira Ligada": "null",
+                "Grupo": "PCT - VINHAÇA LOCALIZADA",
+                "Grupo Operacao": "MANUTENCAO",
+                "Horimetro": "7492.9",
+                "Implemento Ligado": "Nao",
+                "Latitude": "-22,87724685668947",
+                "Longitude": "-52,178400675455734",
+                "Motor Ligado": "Nao",
+                "Operacao": "AGUARD MANUTENCAO -",
+                "Operador": "MOTORISTA GENÉRICO",
+                "Pressao de Corte": "null",
+                "RPM Extrator": "null",
+                "RPM Motor": "0",
+                "RTK": "Nao",
+                "Tipo de Equipamento": "TRATOR DE PNEU LEVE/MAG 100",
+                "Trabalhando Frente Dividida": "null",
+                "Trabalhando em Fila": "null",
+                "Velocidade": "0",
+                "Implemento": "15380024"
+            },
+            {
+                "Equipamento": "13100243",
+                "Data/Hora": "13/10/2025 00:01:04",
+                "Codigo Frente (Digitada)": "null",
+                "Corte Base Automatico/Manual": "null",
+                "Descricao Equipamento": "TRATOR VINHAÇA LOCALIZADA",
+                "Estado": "PARADA",
+                "Estado Operacional": "PARADA",
+                "Esteira Ligada": "null",
+                "Grupo": "PCT - VINHAÇA LOCALIZADA",
+                "Grupo Operacao": "MANUTENCAO",
+                "Horimetro": "7492.9",
+                "Implemento Ligado": "Nao",
+                "Latitude": "-22,87729454040529",
+                "Longitude": "-52,17836252848308",
+                "Motor Ligado": "Nao",
+                "Operacao": "AGUARD MANUTENCAO -",
+                "Operador": "MOTORISTA GENÉRICO",
+                "Pressao de Corte": "null",
+                "RPM Extrator": "null",
+                "RPM Motor": "0",
+                "RTK": "Nao",
+                "Tipo de Equipamento": "TRATOR DE PNEU LEVE/MAG 100",
+                "Trabalhando Frente Dividida": "null",
+                "Trabalhando em Fila": "null",
+                "Velocidade": "0",
+                "Implemento": "15380024"
+            },
+            {
+                "Equipamento": "13100243",
+                "Data/Hora": "13/10/2025 07:30:04",
+                "Codigo Frente (Digitada)": "A001",
+                "Corte Base Automatico/Manual": "Auto",
+                "Descricao Equipamento": "TRATOR VINHAÇA LOCALIZADA",
+                "Estado": "OPERANDO",
+                "Estado Operacional": "OPERANDO",
+                "Esteira Ligada": "null",
+                "Grupo": "PCT - VINHAÇA LOCALIZADA",
+                "Grupo Operacao": "OPERACAO",
+                "Horimetro": "7493.2",
+                "Implemento Ligado": "Sim",
+                "Latitude": "-22,87729454040529",
+                "Longitude": "-52,17836252848308",
+                "Motor Ligado": "Sim",
+                "Operacao": "APLICACAO VINHACA",
+                "Operador": "MOTORISTA GENÉRICO",
+                "Pressao de Corte": "150",
+                "RPM Extrator": "null",
+                "RPM Motor": "2100",
+                "RTK": "Nao",
+                "Tipo de Equipamento": "TRATOR DE PNEU LEVE/MAG 100",
+                "Trabalhando Frente Dividida": "null",
+                "Trabalhando em Fila": "null",
+                "Velocidade": "8.5",
+                "Implemento": "15380024"
+            },
+            {
+                "Equipamento": "13100244",
+                "Data/Hora": "13/10/2025 07:15:04",
+                "Codigo Frente (Digitada)": "B002",
+                "Corte Base Automatico/Manual": "Manual",
+                "Descricao Equipamento": "COLHEITADEIRA CANA",
+                "Estado": "OPERANDO",
+                "Estado Operacional": "OPERANDO",
+                "Esteira Ligada": "Sim",
+                "Grupo": "PCT - COLHEITA",
+                "Grupo Operacao": "OPERACAO",
+                "Horimetro": "5234.7",
+                "Implemento Ligado": "Sim",
+                "Latitude": "-22,878123456789",
+                "Longitude": "-52,179123456789",
+                "Motor Ligado": "Sim",
+                "Operacao": "COLHEITA CANA",
+                "Operador": "OPERADOR ESPECIALIZADO",
+                "Pressao de Corte": "180",
+                "RPM Extrator": "1200",
+                "RPM Motor": "1850",
+                "RTK": "Sim",
+                "Tipo de Equipamento": "COLHEITADEIRA AUTOPROPELIDA",
+                "Trabalhando Frente Dividida": "Nao",
+                "Trabalhando em Fila": "Sim",
+                "Velocidade": "5.2",
+                "Implemento": "15380025"
+            }
+        ];
+
+        // Variáveis globais
+        let equipmentData = [];
+        let filteredData = [];
+        let activityChart;
+        let fleetChart;
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            // Configurar data atual
+            const now = new Date();
+            document.getElementById('current-date').textContent = now.toLocaleDateString('pt-BR');
+            
+            // Configurar eventos
+            document.getElementById('import-btn').addEventListener('click', importCSV);
+            document.getElementById('apply-filters').addEventListener('click', applyFilters);
+            document.getElementById('reset-filters').addEventListener('click', resetFilters);
+            
+            // Carregar dados de exemplo para demonstração
+            loadSampleData();
+        });
+
+        // Função para importar CSV
+        function importCSV() {
+            const fileInput = document.getElementById('csv-file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Por favor, selecione um arquivo CSV para importar.');
+                return;
+            }
+            
+            document.getElementById('file-info').textContent = `Arquivo: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+            
+            Papa.parse(file, {
+                header: true,
+                delimiter: ';',
+                complete: function(results) {
+                    if (results.errors.length > 0) {
+                        console.error('Erros no parsing:', results.errors);
+                        alert('Ocorreram erros ao processar o arquivo CSV. Verifique o console para detalhes.');
+                    }
+                    
+                    equipmentData = results.data.filter(row => row.Equipamento); // Remove linhas vazias
+                    filteredData = [...equipmentData];
+                    
+                    updateFilters();
+                    updateDashboard();
+                    updateFleetAnalysis();
+                    
+                    // Animar cards após carregamento
+                    animateCards();
+                },
+                error: function(error) {
+                    console.error('Erro ao ler o arquivo:', error);
+                    alert('Erro ao ler o arquivo CSV. Verifique o formato do arquivo.');
+                }
+            });
+        }
+
+        // Função para carregar dados de exemplo
+        function loadSampleData() {
+            equipmentData = sampleData;
+            filteredData = [...equipmentData];
+            updateFilters();
+            updateDashboard();
+            updateFleetAnalysis();
+            animateCards();
+        }
+
+        // Função para atualizar os filtros com base nos dados
+        function updateFilters() {
+            const equipmentSelect = document.getElementById('equipment');
+            const operationSelect = document.getElementById('operation');
+            
+            // Limpar opções existentes
+            equipmentSelect.innerHTML = '<option value="all">Todos os Equipamentos</option>';
+            operationSelect.innerHTML = '<option value="all">Todas as Operações</option>';
+            
+            // Coletar valores únicos
+            const equipments = [...new Set(equipmentData.map(item => `${item['Descricao Equipamento']} (${item.Equipamento})`))];
+            const operations = [...new Set(equipmentData.map(item => item.Operacao))];
+            
+            // Adicionar opções
+            equipments.forEach(eq => {
+                const option = document.createElement('option');
+                option.value = eq;
+                option.textContent = eq;
+                equipmentSelect.appendChild(option);
+            });
+            
+            operations.forEach(op => {
+                if (op && op !== 'null') {
+                    const option = document.createElement('option');
+                    option.value = op;
+                    option.textContent = op;
+                    operationSelect.appendChild(option);
+                }
+            });
+        }
+
+        // Função para aplicar filtros
+        function applyFilters() {
+            const equipmentFilter = document.getElementById('equipment').value;
+            const statusFilter = document.getElementById('status').value;
+            const motorFilter = document.getElementById('motor').value;
+            const operationFilter = document.getElementById('operation').value;
+            const timeFilter = document.getElementById('time-range').value;
+            
+            // Debug info
+            let debugText = `Filtros aplicados: Equipamento=${equipmentFilter}, Status=${statusFilter}, Motor=${motorFilter}, Operação=${operationFilter}, Tempo=${timeFilter}`;
+            
+            filteredData = equipmentData.filter(item => {
+                // Filtro de equipamento
+                if (equipmentFilter !== 'all') {
+                    const equipmentName = `${item['Descricao Equipamento']} (${item.Equipamento})`;
+                    if (equipmentName !== equipmentFilter) {
+                        debugText += `\n- Equipamento filtrado: ${equipmentName} != ${equipmentFilter}`;
+                        return false;
+                    }
+                }
+                
+                // Filtro de estado
+                if (statusFilter !== 'all' && item['Estado Operacional'] !== statusFilter) {
+                    debugText += `\n- Estado filtrado: ${item['Estado Operacional']} != ${statusFilter}`;
+                    return false;
+                }
+                
+                // Filtro de motor - CORREÇÃO: usando a coluna correta
+                if (motorFilter !== 'all') {
+                    const motorValue = item['Motor Ligado'];
+                    if (motorFilter === 'Sim' && motorValue !== 'Sim') {
+                        debugText += `\n- Motor filtrado: ${motorValue} != Sim`;
+                        return false;
+                    }
+                    if (motorFilter === 'Nao' && motorValue !== 'Nao') {
+                        debugText += `\n- Motor filtrado: ${motorValue} != Nao`;
+                        return false;
+                    }
+                }
+                
+                // Filtro de operação
+                if (operationFilter !== 'all' && item.Operacao !== operationFilter) {
+                    debugText += `\n- Operação filtrada: ${item.Operacao} != ${operationFilter}`;
+                    return false;
+                }
+                
+                // Filtro de tempo (simplificado para demonstração)
+                if (timeFilter !== 'all') {
+                    // Em uma implementação real, isso seria baseado nas datas reais
+                    // Aqui estamos apenas simulando
+                    const random = Math.random();
+                    if (timeFilter === 'hour' && random > 0.3) return false;
+                    if (timeFilter === 'day' && random > 0.5) return false;
+                    if (timeFilter === 'week' && random > 0.7) return false;
+                }
+                
+                return true;
+            });
+            
+            // Mostrar debug info
+            document.getElementById('debug-text').textContent = debugText;
+            document.getElementById('debug-info').style.display = 'block';
+            
+            updateDashboard();
+            updateFleetAnalysis();
+        }
+
+        // Função para resetar filtros
+        function resetFilters() {
+            document.getElementById('equipment').value = 'all';
+            document.getElementById('status').value = 'all';
+            document.getElementById('motor').value = 'all';
+            document.getElementById('operation').value = 'all';
+            document.getElementById('time-range').value = 'all';
+            
+            filteredData = [...equipmentData];
+            document.getElementById('debug-info').style.display = 'none';
+            
+            updateDashboard();
+            updateFleetAnalysis();
+        }
+
+        // Função para atualizar o dashboard
+        function updateDashboard() {
+            if (filteredData.length === 0) {
+                // Mostrar estado vazio
+                document.getElementById('equipment-status').textContent = 'N/A';
+                document.getElementById('motor-status').textContent = 'N/A';
+                document.getElementById('motor-indicator').className = 'motor-indicator';
+                document.getElementById('rpm-value').textContent = 'N/A';
+                document.getElementById('speed-value').textContent = 'N/A';
+                
+                if (activityChart) {
+                    activityChart.destroy();
+                }
+                return;
+            }
+            
+            // Atualizar estatísticas principais
+            const latestRecord = filteredData[filteredData.length - 1];
+            document.getElementById('equipment-status').textContent = latestRecord['Estado Operacional'] || 'N/A';
+            
+            // Atualizar status do motor com indicador visual
+            const motorStatus = latestRecord['Motor Ligado'];
+            document.getElementById('motor-status').textContent = motorStatus === 'Sim' ? 'Ligado' : 'Desligado';
+            document.getElementById('motor-indicator').className = 
+                motorStatus === 'Sim' ? 'motor-indicator motor-on' : 'motor-indicator motor-off';
+            
+            document.getElementById('rpm-value').textContent = (latestRecord['RPM Motor'] || '0') + ' RPM';
+            document.getElementById('speed-value').textContent = (latestRecord.Velocidade || '0') + ' km/h';
+            
+            // Atualizar gráfico
+            updateActivityChart();
+        }
+
+        // Função para atualizar a análise da frota
+        function updateFleetAnalysis() {
+            // Calcular totais da frota
+            const uniqueEquipment = [...new Set(filteredData.map(item => item.Equipamento))];
+            const activeEquipment = [...new Set(filteredData
+                .filter(item => item['Estado Operacional'] === 'OPERANDO')
+                .map(item => item.Equipamento))];
+            
+            document.getElementById('total-equipment').textContent = uniqueEquipment.length;
+            document.getElementById('active-equipment').textContent = activeEquipment.length;
+            
+            // Calcular tempos de operação - CORREÇÃO: usando dados filtrados
+            const operationTime = calculateOperationTime();
+            document.getElementById('total-operation-time').textContent = formatTime(operationTime.total);
+            document.getElementById('motor-on-time').textContent = formatTime(operationTime.motorOn);
+            
+            // Atualizar análise de tempo
+            document.getElementById('operation-time').textContent = formatTime(operationTime.operating);
+            document.getElementById('idle-time').textContent = formatTime(operationTime.idle);
+            document.getElementById('maintenance-time').textContent = formatTime(operationTime.maintenance);
+            
+            // Atualizar barra de progresso
+            const totalTime = operationTime.operating + operationTime.idle + operationTime.maintenance;
+            const operationPercent = totalTime > 0 ? (operationTime.operating / totalTime) * 100 : 0;
+            document.getElementById('operation-progress').style.width = `${operationPercent}%`;
+            
+            // Atualizar tabela da frota
+            updateFleetTable();
+            
+            // Atualizar gráfico da frota
+            updateFleetChart();
+        }
+
+        // Função para calcular tempos de operação - CORREÇÃO: cálculo correto do tempo
+        function calculateOperationTime() {
+            // Agrupar dados por equipamento
+            const equipmentGroups = {};
+            
+            filteredData.forEach(record => {
+                const equipmentId = record.Equipamento;
+                if (!equipmentGroups[equipmentId]) {
+                    equipmentGroups[equipmentId] = [];
+                }
+                equipmentGroups[equipmentId].push(record);
+            });
+            
+            // Calcular tempos para cada equipamento
+            let totalTime = 0;
+            let motorOnTime = 0;
+            let operatingTime = 0;
+            let idleTime = 0;
+            let maintenanceTime = 0;
+            
+            Object.values(equipmentGroups).forEach(records => {
+                // Ordenar registros por data/hora
+                records.sort((a, b) => new Date(a['Data/Hora']) - new Date(b['Data/Hora']));
+                
+                // Calcular tempo real entre registros
+                for (let i = 0; i < records.length - 1; i++) {
+                    const currentRecord = records[i];
+                    const nextRecord = records[i + 1];
+                    
+                    const currentTime = new Date(currentRecord['Data/Hora']);
+                    const nextTime = new Date(nextRecord['Data/Hora']);
+                    
+                    // Tempo em minutos entre registros
+                    const timeDiff = (nextTime - currentTime) / (1000 * 60);
+                    
+                    // Se o tempo for razoável (menos de 10 minutos), consideramos como intervalo válido
+                    if (timeDiff > 0 && timeDiff < 10) {
+                        totalTime += timeDiff;
+                        
+                        // Se o motor estava ligado no registro atual, conta o tempo
+                        if (currentRecord['Motor Ligado'] === 'Sim') {
+                            motorOnTime += timeDiff;
+                        }
+                        
+                        // Classificar o tempo por estado operacional
+                        if (currentRecord['Estado Operacional'] === 'OPERANDO') {
+                            operatingTime += timeDiff;
+                        } else if (currentRecord.Operacao && currentRecord.Operacao.includes('MANUTENCAO')) {
+                            maintenanceTime += timeDiff;
+                        } else {
+                            idleTime += timeDiff;
+                        }
+                    }
+                }
+            });
+            
+            return {
+                total: totalTime,
+                motorOn: motorOnTime,
+                operating: operatingTime,
+                idle: idleTime,
+                maintenance: maintenanceTime
+            };
+        }
+
+        // Função para formatar tempo (minutos para horas e minutos)
+        function formatTime(minutes) {
+            const hours = Math.floor(minutes / 60);
+            const mins = Math.round(minutes % 60);
+            return `${hours}h ${mins}m`;
+        }
+
+        // Função para atualizar a tabela da frota
+        function updateFleetTable() {
+            const tableBody = document.getElementById('fleet-table-body');
+            tableBody.innerHTML = '';
+            
+            // Agrupar dados por equipamento
+            const equipmentGroups = {};
+            
+            filteredData.forEach(record => {
+                const equipmentId = record.Equipamento;
+                if (!equipmentGroups[equipmentId]) {
+                    equipmentGroups[equipmentId] = [];
+                }
+                equipmentGroups[equipmentId].push(record);
+            });
+            
+            // Calcular métricas para cada equipamento
+            Object.entries(equipmentGroups).forEach(([equipmentId, records]) => {
+                // Ordenar registros por data/hora
+                records.sort((a, b) => new Date(a['Data/Hora']) - new Date(b['Data/Hora']));
+                
+                // Encontrar registro mais recente
+                const latestRecord = records[records.length - 1];
+                
+                // Calcular tempos reais
+                let totalTime = 0;
+                let motorOnTime = 0;
+                let operatingTime = 0;
+                
+                for (let i = 0; i < records.length - 1; i++) {
+                    const currentRecord = records[i];
+                    const nextRecord = records[i + 1];
+                    
+                    const currentTime = new Date(currentRecord['Data/Hora']);
+                    const nextTime = new Date(nextRecord['Data/Hora']);
+                    
+                    // Tempo em minutos entre registros
+                    const timeDiff = (nextTime - currentTime) / (1000 * 60);
+                    
+                    // Se o tempo for razoável (menos de 10 minutos), consideramos como intervalo válido
+                    if (timeDiff > 0 && timeDiff < 10) {
+                        totalTime += timeDiff;
+                        
+                        // Se o motor estava ligado no registro atual, conta o tempo
+                        if (currentRecord['Motor Ligado'] === 'Sim') {
+                            motorOnTime += timeDiff;
+                        }
+                        
+                        // Tempo operando
+                        if (currentRecord['Estado Operacional'] === 'OPERANDO') {
+                            operatingTime += timeDiff;
+                        }
+                    }
+                }
+                
+                // Calcular eficiência
+                const efficiency = totalTime > 0 ? Math.round((operatingTime / totalTime) * 100) : 0;
+                
+                const row = document.createElement('tr');
+                
+                // Status do motor com indicador
+                const motorStatus = latestRecord['Motor Ligado'];
+                const motorDisplay = motorStatus === 'Sim' ? 
+                    '<span class="motor-indicator motor-on"></span> Ligado' : 
+                    '<span class="motor-indicator motor-off"></span> Desligado';
+                
+                // Determinar classe de status
+                let statusClass = 'status-inactive';
+                if (latestRecord['Estado Operacional'] === 'OPERANDO') {
+                    statusClass = 'status-active';
+                } else if (latestRecord.Operacao && latestRecord.Operacao.includes('MANUTENCAO')) {
+                    statusClass = 'status-maintenance';
+                }
+                
+                row.innerHTML = `
+                    <td>${equipmentId}</td>
+                    <td>${latestRecord['Descricao Equipamento'] || 'N/A'}</td>
+                    <td><span class="status-badge ${statusClass}">${latestRecord['Estado Operacional'] || 'N/A'}</span></td>
+                    <td>${motorDisplay}</td>
+                    <td>${formatTime(operatingTime)}</td>
+                    <td>${formatTime(motorOnTime)}</td>
+                    <td>${efficiency}%</td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Função para atualizar o gráfico da frota
+        function updateFleetChart() {
+            const ctx = document.getElementById('fleet-chart').getContext('2d');
+            
+            // Destruir gráfico existente
+            if (fleetChart) {
+                fleetChart.destroy();
+            }
+            
+            // Agrupar dados por tipo de equipamento
+            const equipmentTypes = {};
+            
+            filteredData.forEach(record => {
+                const type = record['Tipo de Equipamento'] || 'Desconhecido';
+                if (!equipmentTypes[type]) {
+                    equipmentTypes[type] = 0;
+                }
+                equipmentTypes[type]++;
+            });
+            
+            // Preparar dados para o gráfico
+            const labels = Object.keys(equipmentTypes);
+            const data = Object.values(equipmentTypes);
+            const backgroundColors = [
+                '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6',
+                '#1abc9c', '#d35400', '#c0392b', '#16a085', '#8e44ad'
+            ];
+            
+            // Criar o gráfico
+            fleetChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value} equipamentos (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Função para atualizar o gráfico de atividade
+        function updateActivityChart() {
+            const ctx = document.getElementById('activity-chart').getContext('2d');
+            
+            // Destruir gráfico existente
+            if (activityChart) {
+                activityChart.destroy();
+            }
+            
+            // Preparar dados para o gráfico
+            const timeLabels = [];
+            const speedData = [];
+            const rpmData = [];
+            
+            // Usar dados filtrados
+            const chartData = filteredData;
+            
+            // Para demonstração, criar dados baseados nos dados reais
+            chartData.forEach((item, index) => {
+                // Usar timestamp real se disponível
+                const timestamp = item['Data/Hora'] || ` ${index % 24}:${(index % 60).toString().padStart(2, '0')}`;
+                timeLabels.push(timestamp);
+                
+                // Usar valores reais
+                speedData.push(parseFloat(item.Velocidade) || 0);
+                rpmData.push(parseFloat(item['RPM Motor']) || 0);
+            });
+            
+            // Criar o gráfico
+            activityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [
+                        {
+                            label: 'Velocidade (km/h)',
+                            data: speedData,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'RPM do Motor',
+                            data: rpmData,
+                            borderColor: '#e74c3c',
+                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tempo'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Valores'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Função para animar os cards
+        function animateCards() {
+            const cards = document.querySelectorAll('.card');
+            cards.forEach((card, index) => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                
+                setTimeout(() => {
+                    card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, index * 100);
+            });
+        }
+    </script>
+</body>
+</html>
