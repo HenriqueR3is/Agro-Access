@@ -581,8 +581,12 @@ require_once __DIR__ . '/../../../app/includes/header.php';
                             </div>
                             
                             <div class="form-group form-checkbox">
-                                <input type="checkbox" id="ativo" name="ativo" checked>
-                                <label for="ativo">Usuário Ativo</label>
+                                <input type="checkbox" id="edit_ativo" name="ativo">
+                                <label for="edit_ativo">Usuário Ativo</label>
+                                
+                                <button type="button" class="btn-reset" id="btnResetPassword" title="Resetar Senha para Padrão (Mudar@123)">
+                                    <i class="fas fa-key"></i>   Resetar senha
+                                </button>
                             </div>
                             
                             <div class="form-row">
@@ -659,6 +663,9 @@ require_once __DIR__ . '/../../../app/includes/header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // VARIÁVEL GLOBAL PARA O BOTÃO DE RESET
+    let currentEditUserId = null;
+
     // Busca em tempo real
     const searchInput = document.getElementById('searchInput');
     const searchLoading = document.getElementById('searchLoading');
@@ -718,6 +725,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function closeModal(modal) {
         modal.classList.remove('active');
         document.body.style.overflow = '';
+        // Limpa o ID atual ao fechar para segurança
+        if(modal === userModal) currentEditUserId = null;
     }
 
     // Helper de alerta visual
@@ -745,17 +754,26 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('userForm').reset();
         document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
         document.getElementById('ativo').checked = true;
+        
+        // Esconde o botão de reset na tela de adicionar (pois não tem usuário criado ainda)
+        const btnReset = document.getElementById('btnResetPassword');
+        if(btnReset) btnReset.style.display = 'none';
+
         openModal(userModal);
     });
 
-    // Abrir modal "Editar" - CORRIGIDO
+    // Abrir modal "Editar"
     document.addEventListener('click', function(e) {
         if (e.target.closest('.edit-user')) {
             const btn = e.target.closest('.edit-user');
             const userId = btn.getAttribute('data-id');
 
+            // Mostrar o botão de reset na edição
+            const btnReset = document.getElementById('btnResetPassword');
+            if(btnReset) btnReset.style.display = 'inline-block';
+
             // Buscar dados reais do usuário
-            fetch(`/app/views/admin/get_user.php?id=${userId}`, { 
+            fetch(`app/views/admin/get_user.php?id=${userId}`, { 
                 credentials: 'same-origin' 
             })
             .then(res => {
@@ -772,10 +790,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('modalTitle').textContent = 'Editar Usuário';
                 document.getElementById('formAction').value = 'edit_user';
                 document.getElementById('userId').value = data.user.id;
+                
+                // --- AQUI ESTÁ O SEGREDO: GUARDA O ID NA VARIÁVEL GLOBAL ---
+                currentEditUserId = data.user.id; 
+                // -----------------------------------------------------------
+
                 document.getElementById('nome').value = data.user.nome;
                 document.getElementById('email').value = data.user.email;
                 document.getElementById('tipo').value = data.user.tipo;
-                document.getElementById('ativo').checked = data.user.ativo == 1;
+                document.getElementById('edit_ativo').checked = data.user.ativo == 1; // Corrigido ID do checkbox
 
                 // Limpa senha
                 document.getElementById('senha').value = '';
@@ -858,46 +881,96 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-const userForm = document.getElementById('userForm');
-if (userForm) {
-    userForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(this);
-        const submitBtn = this.querySelector('button[type="submit"]');
-        const originalText = submitBtn.innerHTML;
-        
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
-        submitBtn.disabled = true;
+    // LÓGICA DO BOTÃO DE RESETAR SENHA (CHAVE LARANJA)
+    const btnReset = document.getElementById('btnResetPassword');
+    if(btnReset) {
+        btnReset.addEventListener('click', function(e) {
+            // Impede qualquer submit de form
+            e.preventDefault(); 
+            e.stopPropagation();
 
-        fetch('', {
-            method: 'POST',
-            body: formData,
-            credentials: 'same-origin',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'  // Adicione isso aqui
+            if (!currentEditUserId) {
+                alert('Erro: Nenhum usuário selecionado ou modal não carregou corretamente.');
+                return;
             }
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                showAlert('success', data.message);
-                closeModal(userModal);
-                setTimeout(() => window.location.reload(), 800);
-            } else {
-                showAlert('danger', data.error || 'Erro desconhecido');
+
+            if (!confirm('⚠️ RESET DE SENHA\n\nTem certeza que deseja resetar a senha para "Mudar@123"?\n\nO usuário será OBRIGADO a trocá-la no próximo login.')) {
+                return;
             }
-        })
-        .catch(err => {
-            console.error('Erro:', err);
-            showAlert('danger', 'Erro de rede ao salvar usuário');
-        })
-        .finally(() => {
-            submitBtn.innerHTML = originalText;
-            submitBtn.disabled = false;
+
+            // Botão em loading
+            const originalContent = this.innerHTML;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            this.disabled = true;
+
+            // Chama o PHP de Reset
+            fetch('app/views/admin/reset_user_password.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: currentEditUserId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Sucesso! Senha resetada para Mudar@123');
+                } else {
+                    alert('❌ Erro: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro de conexão.');
+            })
+            .finally(() => {
+                // Volta o botão ao normal
+                this.innerHTML = originalContent;
+                this.disabled = false;
+            });
         });
-    });
-}
+    }
+
+    // Submit do formulário de Usuário
+    const userForm = document.getElementById('userForm');
+    if (userForm) {
+        userForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+            submitBtn.disabled = true;
+
+            fetch('', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                    closeModal(userModal);
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    showAlert('danger', data.error || 'Erro desconhecido');
+                }
+            })
+            .catch(err => {
+                console.error('Erro:', err);
+                showAlert('danger', 'Erro de rede ao salvar usuário');
+            })
+            .finally(() => {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
+        });
+    }
+
     // Submit do formulário de exclusão com AJAX
     const deleteForm = document.getElementById('deleteForm');
     if (deleteForm) {
@@ -916,8 +989,8 @@ if (userForm) {
                 body: formData,
                 credentials: 'same-origin',
                 headers: {
-                'X-Requested-With': 'XMLHttpRequest'  // Adicione isso aqui
-            }
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
             })
             .then(res => res.json())
             .then(data => {
@@ -927,8 +1000,8 @@ if (userForm) {
                     setTimeout(() => window.location.reload(), 800);
                 } else {
                     showAlert('danger', data.error || 'Erro desconhecido');
-                closeModal(confirmModal);
-                submitBtn.innerHTML = originalText;
+                    closeModal(confirmModal);
+                    submitBtn.innerHTML = originalText;
                     submitBtn.disabled = false;
                 }
             })

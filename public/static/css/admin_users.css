@@ -2488,3 +2488,36 @@ table td {
         opacity: 0;
     }
 }
+
+.btn-reset {
+    background-color: #f59e0b; /* Laranja alerta */
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.2s;
+    margin-left: 5px;
+}
+.btn-reset:hover {
+    background-color: #d97706;
+    transform: scale(1.05);
+}
+
+/* Transforma o container em Flexbox */
+.form-checkbox {
+    display: flex;
+    align-items: center; /* Centraliza verticalmente */
+    width: 100%;         /* Garante que o container ocupe a largura toda */
+}
+
+/* O Pulo do Gato: Empurra o botão para a direita */
+.form-checkbox .btn-reset {
+    margin-left: auto; /* Isso força o botão a ir para o extremo oposto */
+}
+
+/* Opcional: Dá um espacinho entre o checkbox e o texto */
+.form-checkbox label {
+    margin-left: 8px;
+    cursor: pointer;
+}
