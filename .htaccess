@@ -11,7 +11,10 @@ RewriteRule ^ - [L]
 # ============================
 # Rotas amigáveis (páginas principais)
 # ============================
+RewriteRule ^mudar_senha$ mudar_senha.php [L]
+RewriteRule ^mudar_senha.php$ mudar_senha.php [L]
 RewriteRule ^$ index.php [L]
+RewriteRule ^login$ index.php [L]
 RewriteRule ^login$ index.php [L]
 RewriteRule ^dashboard$ app/views/CIA/dashboard.php [L]
 RewriteRule ^user_dashboard$ app/views/user/user_dashboard.php [L]

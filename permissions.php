@@ -169,7 +169,7 @@ function createTableAndDefaults($pdo, $roles, $categories) {
 function getDefaultPermissions() {
     return [
         // Admin - Acesso total
-        ['admin', 'dashboard:view', 'DashBoard Principal', 'Gestão', 1],
+                ['admin', 'dashboard:view', 'DashBoard Principal', 'Gestão', 1],
         ['admin', 'users:crud', 'Gestão de Usuários (CRUD)', 'Gestão', 1],
         ['admin', 'equip:crud', 'Gestão de Frota (CRUD)', 'Gestão', 1],
         ['admin', 'fazendas:crud', 'Gestão de Fazendas/Unidades', 'Gestão', 1],
@@ -181,7 +181,7 @@ function getDefaultPermissions() {
         ['admin', 'visaogeral:view', 'Visão Geral', 'Relatórios', 1],
         ['admin', 'user_dashboard:view', 'Dashboard do Usuário', 'Dashboards', 1],
         ['admin', 'audit:view', 'Visualização de Auditoria', 'Desenvolvimento', 1],
-        ['admin', 'dashboard:view', 'Dashboard CIA', 'Dashboards', 1],
+                ['admin', 'dashboard:view', 'Dashboard CIA', 'Dashboards', 1],
 
         // CIA Admin - Acesso quase total
         
@@ -198,9 +198,13 @@ function getDefaultPermissions() {
         ['cia_admin', 'dashboard:view', 'Dashboard CIA', 'Dashboards', 1],
 
         // CIA User - Acesso limitado
-        ['cia_user', 'dashboard:view', 'Dashboard CIA', 'Dashboards', 1],
+        ['cia_user', 'metas:view', 'Visualização de Metas', 'Gestão', 1],
         ['cia_user', 'comparativo:view', 'Comparativo de Produção', 'Relatórios', 1],
         ['cia_user', 'consumo:view', 'Consumo, Velocidade & RPM', 'Relatórios', 1],
+        ['cia_user', 'apontamentos:view', 'Visualização de Apontamentos', 'Relatórios', 1],
+        ['cia_user', 'visaogeral:view', 'Visão Geral', 'Relatórios', 1],
+        ['cia_user', 'user_dashboard:view', 'Dashboard do Usuário', 'Dashboards', 1],
+        ['cia_user', 'dashboard:view', 'Dashboard CIA', 'Dashboards', 1],
         // Operador - Acesso mínimo
         ['operador', 'user_dashboard:view', 'Dashboard do Usuário', 'Dashboards', 1],
         ['operador', 'dashboard:view', 'Dashboard CIA', 'Dashboards', 1],

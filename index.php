@@ -1,7 +1,4 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
 session_start();
 require_once __DIR__ . '/config/db/conexao.php';
 
@@ -80,9 +77,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt->execute([$username]);
         $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        // Verifica a senha com password_verify
+// Verifica a senha com password_verify
         if ($usuario && password_verify($senha, $usuario['senha'])) {
-            // Criar sessão
+            
+            // --- 1. VERIFICAÇÃO DE PRIMEIRO ACESSO (PRIORIDADE MÁXIMA) ---
+            // Se for o primeiro acesso, não cria sessão completa, apenas a temporária
+            if ($usuario['primeiro_acesso'] == 1) {
+                session_regenerate_id(true); // Segurança contra sequestro de sessão
+                $_SESSION['usuario_id_temp'] = $usuario['id']; // ID temporário para a troca
+                
+                session_write_close(); // Força salvar a sessão antes de ir
+
+                header("Location: mudar_senha.php");
+                exit; // Mata o script aqui
+            }
+
+            // --- 2. LOGIN SUCESSO (Se não precisou mudar senha) ---
+            
+            // Criar sessão completa
             $_SESSION['usuario_id'] = $usuario['id'];
             $_SESSION['usuario_nome'] = $usuario['nome'];
             $_SESSION['usuario_tipo'] = $usuario['tipo'];
@@ -98,20 +110,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 ];
                 
                 setcookie('user_remember', json_encode($cookie_data), time() + (30 * 24 * 60 * 60), "/", "", false, true);
-                
-                // Também salvar último username em cookie separado
                 setcookie('last_username', $username, time() + (30 * 24 * 60 * 60), "/");
             } else {
-                // Se não marcou lembrar, limpar cookie existente
                 setcookie('user_remember', '', time() - 3600, "/");
             }
 
-            // Salvar último login no cache da sessão
+            // Salvar último login e username
             $_SESSION['ultimo_login'] = date('d/m/Y H:i:s');
-            
-            // Salvar username em cookie para preenchimento automático
             setcookie('last_username', $username, time() + (365 * 24 * 60 * 60), "/");
 
+            // --- 3. REDIRECIONAMENTO FINAL ---
             redirectToDashboard($usuario['tipo']);
 
         } else {

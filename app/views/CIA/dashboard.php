@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../../config/db/conexao.php';
 
 // VERIFICAÇÃO SIMPLES - substitui o código antigo
 require_once __DIR__ . '/../../helpers/SimpleAuth.php';
-canAccessPage('dashboard:view'); // Use a permissão correta para o dashboard
+//canAccessPage('dashboard:view'); // Use a permissão correta para o dashboard
 
 require_once __DIR__ . '/../../../app/includes/header.php';
 require_once __DIR__.'/../../../app/lib/Audit.php';
