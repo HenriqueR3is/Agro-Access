@@ -51,7 +51,8 @@ $categories = [
         'equip:crud' => 'Gestão de Frota (CRUD)',
         'fazendas:crud' => 'Gestão de Fazendas/Unidades',
         'metas:view' => 'Visualização de Metas',
-        'metas:edit' => 'Edição de Metas'
+        'metas:edit' => 'Edição de Metas',
+        'atalhos:edit' => 'Edição de Atalhos'
     ],
     'Relatórios' => [
         'comparativo:view' => 'Comparativo de Produção',
@@ -175,6 +176,7 @@ function getDefaultPermissions() {
         ['admin', 'fazendas:crud', 'Gestão de Fazendas/Unidades', 'Gestão', 1],
         ['admin', 'metas:view', 'Visualização de Metas', 'Gestão', 1],
         ['admin', 'metas:edit', 'Edição de Metas', 'Gestão', 1],
+        ['admin', 'atalhos:edit', 'Edição de Atalhos', 'Gestão', 1],
         ['admin', 'comparativo:view', 'Comparativo de Produção', 'Relatórios', 1],
         ['admin', 'consumo:view', 'Consumo, Velocidade & RPM', 'Relatórios', 1],
         ['admin', 'apontamentos:view', 'Visualização de Apontamentos', 'Relatórios', 1],
@@ -190,6 +192,7 @@ function getDefaultPermissions() {
         ['cia_admin', 'fazendas:crud', 'Gestão de Fazendas/Unidades', 'Gestão', 1],
         ['cia_admin', 'metas:view', 'Visualização de Metas', 'Gestão', 1],
         ['cia_admin', 'metas:edit', 'Edição de Metas', 'Gestão', 1],
+        ['cia_admin', 'atalhos:edit', 'Edição de Atalhos', 'Gestão', 1],
         ['cia_admin', 'comparativo:view', 'Comparativo de Produção', 'Relatórios', 1],
         ['cia_admin', 'consumo:view', 'Consumo, Velocidade & RPM', 'Relatórios', 1],
         ['cia_admin', 'apontamentos:view', 'Visualização de Apontamentos', 'Relatórios', 1],

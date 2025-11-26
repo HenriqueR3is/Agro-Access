@@ -163,6 +163,12 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                 <small>Usuários</small>
             </a>
             <?php endif; ?>
+            <?php if (userCan('atalhos:edit', $userRole, $pdo)): ?>
+            <a href="/admin_atalhos" class="shortcut-link">
+                <i class="fa-solid fa-share-from-square"></i>
+                <small>Atalhos</small>
+            </a>
+            <?php endif; ?>
         </div>
         <!-- Alterado para usar logout.php -->
         <a href="/logout" class="logout-btn" onclick="return confirmLogout()">
@@ -342,7 +348,8 @@ document.addEventListener('DOMContentLoaded', function() {
         'user_dashboard.php': 'user_dashboard:view',
         'audit_logs.php': 'audit:view',
         'aponta.php': 'audit:view',
-        'ctt.php': 'audit:view'
+        'ctt.php': 'audit:view',
+        'admin_atalhos.php' : 'atalhos:edit'
     };
 
     function checkPageAccess() {
