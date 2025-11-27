@@ -73,168 +73,143 @@ $curso_info = null;
 $modulos_info = [];
 $progresso_modulos = [];
 $prova_final_info = [ 'tentativas' => 0, 'bloqueado_ate' => null, 'aprovado' => false ];
-$data_inicio_curso = null; // Nova variável para armazenar a data de início
+$data_inicio_curso = null;
 $db_error_message = null;
 
-try {
-    // Buscar informações do curso
-    $stmt_curso = $pdo->prepare("SELECT * FROM cursos WHERE id = ?");
-    $stmt_curso->execute([$curso_id]);
-    $curso_info = $stmt_curso->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$curso_info) {
-        header("Location: dashboard.php");
-        exit;
-    }
+// Buscar informações do curso
+$stmt_curso = $pdo->prepare("SELECT * FROM cursos WHERE id = ?");
+$stmt_curso->execute([$curso_id]);
+$curso_info = $stmt_curso->fetch(PDO::FETCH_ASSOC);
 
-    // Buscar data de início do curso (se a coluna existir)
-    $check_column = $pdo->query("SHOW COLUMNS FROM progresso_curso LIKE 'inicio_curso'");
-    if ($check_column->rowCount() > 0) {
-        $stmt_inicio = $pdo->prepare("SELECT inicio_curso FROM progresso_curso 
-                                     WHERE usuario_id = ? AND curso_id = ? 
-                                     ORDER BY id LIMIT 1");
-        $stmt_inicio->execute([$usuario_id, $curso_id]);
-        $resultado_inicio = $stmt_inicio->fetch(PDO::FETCH_ASSOC);
-        $data_inicio_curso = $resultado_inicio['inicio_curso'] ?? null;
-    }
-
-    // Buscar nome do usuário
-    $stmt_user = $pdo->prepare("SELECT nome, email, tipo FROM usuarios WHERE id = ?");
-    $stmt_user->execute([$usuario_id]);
-    $user_data = $stmt_user->fetch(PDO::FETCH_ASSOC);
-    $username = $user_data['nome'] ?? ($_SESSION['usuario_nome'] ?? 'Usuário');
-    $user_email = $user_data['email'] ?? '';
-    $user_tipo = $user_data['tipo'] ?? 'operador';
-
-    // Buscar módulos do curso
-    $stmt_modulos = $pdo->prepare("SELECT * FROM modulos WHERE curso_id = ? ORDER BY ordem ASC");
-    $stmt_modulos->execute([$curso_id]);
-    $modulos_db = $stmt_modulos->fetchAll(PDO::FETCH_ASSOC);
-
-    // Buscar progresso dos módulos (específico por curso)
-    $check_curso_column = $pdo->query("SHOW COLUMNS FROM progresso_curso LIKE 'curso_id'");
-    $has_curso_column = $check_curso_column->rowCount() > 0;
-
-    if ($has_curso_column) {
-        $stmt_progresso = $pdo->prepare("SELECT item_id, data_conclusao FROM progresso_curso WHERE usuario_id = ? AND curso_id = ? AND tipo = 'modulo'");
-        $stmt_progresso->execute([$usuario_id, $curso_id]);
-    } else {
-        $stmt_progresso = $pdo->prepare("SELECT item_id, data_conclusao FROM progresso_curso WHERE usuario_id = ? AND tipo = 'modulo'");
-        $stmt_progresso->execute([$usuario_id]);
-    }
-    
-    foreach ($stmt_progresso->fetchAll(PDO::FETCH_ASSOC) as $mod) {
-        $progresso_modulos[$mod['item_id']] = [
-            'concluido' => true,
-            'data_conclusao' => $mod['data_conclusao']
-        ];
-    }
-
-    // Buscar progresso da prova (específico por curso)
-    $item_id_final = 'final-curso-' . $curso_id;
-    $stmt_prova = $pdo->prepare("SELECT * FROM progresso_curso WHERE usuario_id = ? AND curso_id = ? AND tipo = 'prova' AND item_id = ?");
-    $stmt_prova->execute([$usuario_id, $curso_id, $item_id_final]);
-    if ($prova_db = $stmt_prova->fetch()) {
-        $prova_final_info = $prova_db;
-        $prova_final_info['aprovado'] = (bool)$prova_db['aprovado'];
-        $prova_final_info['tentativas'] = intval($prova_db['tentativas']);
-    } else {
-        // Se não existe, inicializar com valores padrão
-        $prova_final_info = [ 
-            'tentativas' => 0, 
-            'bloqueado_ate' => null, 
-            'aprovado' => false,
-            'nota' => 0
-        ];
-    }
-
-    // Buscar conteúdos de cada módulo
-    $modulos_info = [];
-    foreach ($modulos_db as $modulo) {
-        $stmt_conteudos = $pdo->prepare("SELECT * FROM conteudos WHERE modulo_id = ? ORDER BY ordem ASC");
-        $stmt_conteudos->execute([$modulo['id']]);
-        $conteudos = $stmt_conteudos->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Processar conteúdos do quiz
-        $conteudos_processados = [];
-        
-        foreach ($conteudos as $conteudo) {
-            // Processar quebras de linha no conteúdo
-            if (!empty($conteudo['conteudo'])) {
-                $conteudo['conteudo'] = nl2br(htmlspecialchars($conteudo['conteudo']));
-            }
-            
-            // Verificar se é um quiz e processar as perguntas
-            if ($conteudo['tipo'] === 'quiz' && !empty($conteudo['perguntas_quiz'])) {
-                try {
-                    $perguntas = json_decode($conteudo['perguntas_quiz'], true);
-                    if (json_last_error() === JSON_ERROR_NONE && is_array($perguntas) && count($perguntas) > 0) {
-                        $conteudo['perguntas_array'] = $perguntas;
-                        $conteudo['total_perguntas'] = count($perguntas);
-                        $conteudo['is_quiz'] = true;
-                        $conteudo['is_prova_fixacao'] = true;
-                        
-                        // Debug: verificar se as perguntas estão sendo processadas
-                        error_log("Quiz encontrado: " . $conteudo['titulo'] . " com " . count($perguntas) . " perguntas");
-                    } else {
-                        $conteudo['is_quiz'] = false;
-                        error_log("Quiz inválido ou sem perguntas: " . $conteudo['titulo']);
-                    }
-                } catch (Exception $e) {
-                    $conteudo['is_quiz'] = false;
-                    error_log("Erro ao processar quiz: " . $e->getMessage());
-                }
-            } else {
-                $conteudo['is_quiz'] = false;
-            }
-            $conteudos_processados[] = $conteudo;
-        }
-        
-        $modulos_info[$modulo['id']] = [
-            'id' => $modulo['id'],
-            'nome' => $modulo['titulo'],
-            'descricao' => $modulo['descricao'],
-            'concluido' => isset($progresso_modulos[$modulo['id']]),
-            'duracao' => $modulo['duracao'] ?? '30 min',
-            'icone' => $modulo['icone'] ?? 'fas fa-book',
-            'data_conclusao' => $progresso_modulos[$modulo['id']]['data_conclusao'] ?? null,
-            'conteudos' => $conteudos_processados
-        ];
-    }
-
-    // Buscar conquistas do usuário
-    $check_table = $pdo->query("SHOW TABLES LIKE 'conquistas_usuario'");
-    if ($check_table->rowCount() > 0) {
-        if ($has_curso_column) {
-            $stmt_conquistas = $pdo->prepare("SELECT conquista_id, data_conquista FROM conquistas_usuario WHERE usuario_id = ? AND curso_id = ?");
-            $stmt_conquistas->execute([$usuario_id, $curso_id]);
-        } else {
-            $stmt_conquistas = $pdo->prepare("SELECT conquista_id, data_conquista FROM conquistas_usuario WHERE usuario_id = ?");
-            $stmt_conquistas->execute([$usuario_id]);
-        }
-        $conquistas = $stmt_conquistas->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        $conquistas = [];
-    }
-
-} catch(PDOException $e) {
-    $username = $_SESSION['usuario_nome'] ?? 'Usuário';
-    $db_error_message = "Erro ao carregar o progresso do curso: " . $e->getMessage();
-    error_log("Erro no curso.php: " . $e->getMessage());
+if (!$curso_info) {
+    header("Location: dashboard.php");
+    exit;
 }
 
-// Conquistas disponíveis
-$conquistas_disponiveis = [
-    'primeiro_modulo' => ['nome' => 'Iniciante', 'icone' => 'fas fa-seedling', 'descricao' => 'Completou o primeiro módulo'],
-    'metade_curso' => ['nome' => 'Em Progresso', 'icone' => 'fas fa-trophy', 'descricao' => 'Completou 50% do curso'],
-    'curso_concluido' => ['nome' => 'Concluído', 'icone' => 'fas fa-graduation-cap', 'descricao' => 'Finalizou todos os módulos'],
-    'prova_aprovada' => ['nome' => 'Aprovado', 'icone' => 'fas fa-award', 'descricao' => 'Aprovado na prova final'],
-    'nota_maxima' => ['nome' => 'Excelência', 'icone' => 'fas fa-star', 'descricao' => 'Nota máxima na prova'],
-];
+// Buscar nome do usuário
+$stmt_user = $pdo->prepare("SELECT nome, email, tipo FROM usuarios WHERE id = ?");
+$stmt_user->execute([$usuario_id]);
+$user_data = $stmt_user->fetch(PDO::FETCH_ASSOC);
+$username = $user_data['nome'] ?? ($_SESSION['usuario_nome'] ?? 'Usuário');
+$user_tipo = $user_data['tipo'] ?? 'operador';
+
+// Buscar módulos do curso
+$stmt_modulos = $pdo->prepare("SELECT * FROM modulos WHERE curso_id = ? ORDER BY ordem ASC");
+$stmt_modulos->execute([$curso_id]);
+$modulos_db = $stmt_modulos->fetchAll(PDO::FETCH_ASSOC);
+
+// Buscar progresso dos módulos
+$check_curso_column = $pdo->query("SHOW COLUMNS FROM progresso_curso LIKE 'curso_id'");
+$has_curso_column = $check_curso_column->rowCount() > 0;
+
+if ($has_curso_column) {
+    $stmt_progresso = $pdo->prepare("SELECT item_id, data_conclusao FROM progresso_curso WHERE usuario_id = ? AND curso_id = ? AND tipo = 'modulo'");
+    $stmt_progresso->execute([$usuario_id, $curso_id]);
+} else {
+    $stmt_progresso = $pdo->prepare("SELECT item_id, data_conclusao FROM progresso_curso WHERE usuario_id = ? AND tipo = 'modulo'");
+    $stmt_progresso->execute([$usuario_id]);
+}
+
+foreach ($stmt_progresso->fetchAll(PDO::FETCH_ASSOC) as $mod) {
+    $progresso_modulos[$mod['item_id']] = [
+        'concluido' => true,
+        'data_conclusao' => $mod['data_conclusao']
+    ];
+}
+
+// Buscar progresso da prova final
+$item_id_final = 'final-curso-' . $curso_id;
+$stmt_prova = $pdo->prepare("SELECT * FROM progresso_curso WHERE usuario_id = ? AND curso_id = ? AND tipo = 'prova' AND item_id = ?");
+$stmt_prova->execute([$usuario_id, $curso_id, $item_id_final]);
+if ($prova_db = $stmt_prova->fetch()) {
+    $prova_final_info = $prova_db;
+    $prova_final_info['aprovado'] = (bool)$prova_db['aprovado'];
+    $prova_final_info['tentativas'] = intval($prova_db['tentativas']);
+} else {
+    $prova_final_info = [ 
+        'tentativas' => 0, 
+        'bloqueado_ate' => null, 
+        'aprovado' => false,
+        'nota' => 0
+    ];
+}
+
+// Buscar conteúdos de cada módulo
+$modulos_info = [];
+foreach ($modulos_db as $modulo) {
+    $stmt_conteudos = $pdo->prepare("SELECT * FROM conteudos WHERE modulo_id = ? ORDER BY ordem ASC");
+    $stmt_conteudos->execute([$modulo['id']]);
+    $conteudos = $stmt_conteudos->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Processar conteúdos normais
+    $conteudos_processados = [];
+    
+    foreach ($conteudos as $conteudo) {
+        // Processar quebras de linha no conteúdo
+        if (!empty($conteudo['conteudo'])) {
+            $conteudo['conteudo'] = nl2br(htmlspecialchars($conteudo['conteudo']));
+        }
+        
+        $conteudos_processados[] = $conteudo;
+    }
+    
+    $modulos_info[$modulo['id']] = [
+        'id' => $modulo['id'],
+        'nome' => $modulo['titulo'],
+        'descricao' => $modulo['descricao'],
+        'concluido' => isset($progresso_modulos[$modulo['id']]),
+        'duracao' => $modulo['duracao'] ?? '30 min',
+        'icone' => $modulo['icone'] ?? 'fas fa-book',
+        'data_conclusao' => $progresso_modulos[$modulo['id']]['data_conclusao'] ?? null,
+        'conteudos' => $conteudos_processados
+    ];
+}
+
+// Buscar prova final do curso
+$prova_final_db = null;
+$perguntas_final_formatadas = [];
+try {
+    $stmt_prova_final = $pdo->prepare("
+        SELECT pf.* 
+        FROM provas_finais pf 
+        WHERE pf.curso_id = ?
+    ");
+    $stmt_prova_final->execute([$curso_id]);
+    $prova_final_db = $stmt_prova_final->fetch(PDO::FETCH_ASSOC);
+    
+    if ($prova_final_db) {
+        // Buscar perguntas da prova final
+        $stmt_perguntas_final = $pdo->prepare("
+            SELECT * 
+            FROM prova_final_perguntas 
+            WHERE prova_id = ? 
+            ORDER BY ordem ASC
+        ");
+        $stmt_perguntas_final->execute([$prova_final_db['id']]);
+        $perguntas_final_db = $stmt_perguntas_final->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Formatar perguntas para o JavaScript
+        foreach ($perguntas_final_db as $pergunta) {
+            $opcoes = json_decode($pergunta['opcoes'], true);
+            if (is_array($opcoes)) {
+                $perguntas_final_formatadas[] = [
+                    'pergunta' => $pergunta['pergunta'],
+                    'opcoes' => $opcoes,
+                    'resposta_correta' => (int)$pergunta['resposta_correta'],
+                    'explicacao' => $pergunta['explicacao'] ?? ''
+                ];
+            }
+        }
+    }
+} catch (PDOException $e) {
+    error_log("Erro ao carregar prova final: " . $e->getMessage());
+}
 
 // Calcular estatísticas
 $total_modulos = count($modulos_info);
-$modulos_concluidos = count(array_filter($modulos_info, fn($mod) => $mod['concluido']));
+$modulos_concluidos = count(array_filter($modulos_info, function($mod) { 
+    return $mod['concluido']; 
+}));
 $todos_modulos_concluidos = $modulos_concluidos === $total_modulos;
 $progresso_porcentagem = $total_modulos > 0 ? ($modulos_concluidos / $total_modulos) * 100 : 0;
 $pontos_xp = ($modulos_concluidos * 100) + ($prova_final_info['aprovado'] ? 500 : 0);
@@ -246,14 +221,15 @@ $initial_state = [
     'usuario_id' => $usuario_id,
     'usuario_nome' => $username,
     'usuario_tipo' => $user_tipo,
-    'usuario_email' => $user_email ?? '',
     'data_inicio_curso' => $data_inicio_curso,
-    'progresso_modulos' => array_keys(array_filter($progresso_modulos, fn($mod) => $mod['concluido'])),
+    'progresso_modulos' => array_keys(array_filter($progresso_modulos, function($mod) { 
+        return $mod['concluido']; 
+    })),
     'total_modulos' => $total_modulos,
     'modulos_info' => $modulos_info,
     'prova_final_info' => $prova_final_info,
-    'conquistas' => $conquistas,
-    'conquistas_disponiveis' => $conquistas_disponiveis
+    'prova_final_perguntas' => $perguntas_final_formatadas,
+    'prova_final_config' => $prova_final_db
 ];
 ?>
 <!DOCTYPE html>
@@ -266,6 +242,218 @@ $initial_state = [
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/curso_style.css">
     <style>
+        /* Estilos para a prova final integrada */
+        .prova-final-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .prova-header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+            border-radius: 12px;
+            margin-bottom: 25px;
+        }
+
+        .prova-header h2 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .prova-info {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+
+        .pergunta {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .pergunta:hover {
+            border-color: #3498db;
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.1);
+        }
+
+        .pergunta-cabecalho {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .pergunta-numero {
+            background: #3498db;
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .pergunta-texto {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2c3e50;
+            line-height: 1.4;
+        }
+
+        .opcoes {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .opcao {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .opcao:hover {
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
+
+        .opcao input[type="radio"] {
+            display: none;
+        }
+
+        .opcao-letra {
+            background: #6c757d;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+            transition: background 0.3s ease;
+        }
+
+        .opcao input[type="radio"]:checked + label .opcao-letra {
+            background: #27ae60;
+        }
+
+        .opcao-texto {
+            flex: 1;
+            font-size: 1rem;
+            color: #495057;
+        }
+
+        .prova-actions {
+            padding: 25px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .progresso-respostas {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        .progresso-respostas span {
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .resultado-prova {
+            background: linear-gradient(135deg, #f8fff9 0%, #e8f5e9 100%);
+            padding: 25px;
+            border-radius: 12px;
+            border-left: 6px solid #32CD32;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .resultado-prova.reprovado {
+            background: linear-gradient(135deg, #fff8f8 0%, #ffebee 100%);
+            border-left-color: #e74c3c;
+        }
+
+        .resultado-titulo {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .resultado-prova.reprovado .resultado-titulo {
+            color: #e74c3c;
+        }
+
+        .resultado-nota {
+            font-size: 48px;
+            font-weight: 800;
+            margin: 20px 0;
+            color: #32CD32;
+        }
+
+        .resultado-prova.reprovado .resultado-nota {
+            color: #e74c3c;
+        }
+
+
+        .codigo-validacao {
+    background: #e8f5e9;
+    border: 2px solid #4caf50;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 20px 0;
+    text-align: center;
+}
+
+.codigo-validacao code {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #2e7d32;
+    margin: 10px 0;
+    background: white;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px dashed #4caf50;
+}
+
+.codigo-validacao small {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+
+
+
+
         .badge-conquista {
             display: inline-flex;
             align-items: center;
@@ -484,10 +672,10 @@ $initial_state = [
             font-size: 18px;
         }
 
-        .toast.success { background: #ffffffff; }
+        .toast.success { background: #4CAF50; }
         .toast.error { background: #e74c3c; }
-        .toast.info { background: #f8f8f8ff; }
-        .toast.warning { background: #fffbebff; color: #222; }
+        .toast.info { background: #3498db; }
+        .toast.warning { background: #f39c12; }
 
         .toast-close {
             background: transparent;
@@ -1360,24 +1548,14 @@ $initial_state = [
             <img src="imagem/logo.png" alt="Logo AgroDash" />
             <h1>AgroDash</h1>
         </div>
-        <div class="header-search">
-            <i class="fas fa-search"></i>
-            <input type="text" placeholder="Buscar lição ou módulo..." id="search-input">
-        </div>
         <div class="user-profile">
             <span class="user-name">Olá, <?= htmlspecialchars($username) ?></span> 
             <div class="user-xp">
                 <i class="fas fa-star"></i>
                 <span><?= $pontos_xp ?> XP</span>
             </div>
-            <?php if ($user_tipo === 'cia_dev' || $user_tipo === 'admin'): ?>
-                <a href="admin/admin_dashboard.php" class="admin-btn">
-                    <i class="fas fa-cog"></i> Painel Admin
-                </a>
-            <?php endif; ?>
             <img src="imagem/avatar.png" alt="Avatar" class="user-avatar" />
             <a href="dashboard.php" class="dashboard-icon" title="Voltar aos Cursos"><i class="fas fa-th"></i></a>
-            <a href="logout.php" class="logout-icon" title="Sair"><i class="fas fa-sign-out-alt"></i></a>
         </div>
     </header>
 
@@ -1386,8 +1564,6 @@ $initial_state = [
             <p class="menu-titulo">Navegação</p>
             <ul id="menu-principal">
                 <li id="menu-dashboard" class="ativo" data-nav="dashboard"><i class="fas fa-chart-bar"></i><span>Dashboard</span></li>
-                <li id="menu-conquistas" data-nav="conquistas"><i class="fas fa-trophy"></i><span>Conquistas</span></li>
-                <li id="menu-estatisticas" data-nav="estatisticas"><i class="fas fa-chart-line"></i><span>Estatísticas</span></li>
             </ul>
             <p class="menu-titulo"><?= htmlspecialchars($curso_info['titulo'] ?? 'Curso') ?></p>
             <ul id="menu-modulos">
@@ -1420,7 +1596,6 @@ $initial_state = [
         </nav>
         
         <div class="sidebar-footer">
-            <!-- SEMPRE mostrar botão do certificado se aprovado, sem classe 'oculto' -->
             <?php if ($prova_final_info['aprovado']): ?>
                 <a href="certificado.php?curso_id=<?= $curso_id ?>" class="btn-certificado">
                     <i class="fas fa-certificate"></i> Ver Certificado
@@ -1557,39 +1732,17 @@ $initial_state = [
                                     <?php endif; ?>
                                 <?php endif; ?>
                             </div>
-                            
-                            <div class="conquistas-rapidas">
-                                <h4>Suas Conquistas</h4>
-                                <div class="conquistas-grid">
-                                    <?php 
-                                    $conquistas_usuario = array_column($conquistas, 'conquista_id');
-                                    foreach ($conquistas_disponiveis as $key => $conquista): 
-                                        $conquistada = in_array($key, $conquistas_usuario);
-                                    ?>
-                                        <div class="conquista-item <?= $conquistada ? 'conquistada' : '' ?>">
-                                            <div class="conquista-icone">
-                                                <i class="<?= $conquista['icone'] ?>"></i>
-                                            </div>
-                                            <div class="conquista-nome"><?= $conquista['nome'] ?></div>
-                                            <?php if (!$conquistada): ?>
-                                                <div class="conquista-bloqueada"><i class="fas fa-lock"></i></div>
-                                            <?php endif; ?>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
             </div>
             
             <div id="modulo-view-container" class="oculto"></div>
-            <div id="conquistas-view" class="oculto"></div>
-            <div id="estatisticas-view" class="oculto"></div>
+            <div id="prova-final-view" class="oculto"></div>
         </div>
     </main>
     
-    <div id="toast-container"></div>
+   <div id="toast-container"></div>
 
     <div id="templates" class="oculto">
         <!-- Templates serão gerados dinamicamente pelo JavaScript -->
@@ -1745,335 +1898,743 @@ $initial_state = [
         </div>
     </div>
 
-    <script>
-    // Funções JavaScript para renderizar quizzes e conteúdo formatado
-    function renderizarQuiz(conteudo) {
-        console.log('Iniciando renderização do quiz:', conteudo);
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const mainContent = document.querySelector('.main-content');
+        const cursoState = JSON.parse(mainContent.dataset.initialState);
+        const dashboardView = document.getElementById('dashboard-view');
+        const moduloViewContainer = document.getElementById('modulo-view-container');
+        const provaFinalView = document.getElementById('prova-final-view');
         
-        // Verificar se existem perguntas válidas
-        if (!conteudo.perguntas_array || !Array.isArray(conteudo.perguntas_array) || conteudo.perguntas_array.length === 0) {
-            console.error('Quiz sem perguntas válidas:', conteudo);
-            return `
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <strong>Quiz não configurado:</strong> Este quiz não possui perguntas válidas.
-                </div>
-            `;
-        }
+        // Sistema de navegação
+        document.body.addEventListener('click', function(e) {
+            // Navegação da Sidebar
+            const navItem = e.target.closest('[data-nav]');
+            if (navItem) {
+                const navTipo = navItem.dataset.nav;
+                if (navTipo === 'dashboard') {
+                    carregarDashboard();
+                } else if (navTipo === 'modulo') {
+                    carregarModulo(navItem.dataset.moduloId);
+                } else if (navTipo === 'prova') {
+                    carregarProvaFinal();
+                }
+                return;
+            }
 
-        // Validar cada pergunta
-        const perguntasValidas = conteudo.perguntas_array.filter(pergunta => {
-            return pergunta.pergunta && 
-                   Array.isArray(pergunta.opcoes) && 
-                   pergunta.opcoes.length >= 2 &&
-                   typeof pergunta.resposta === 'number' &&
-                   pergunta.resposta >= 0 && 
-                   pergunta.resposta < pergunta.opcoes.length;
+            // Botões "Continuar/Revisar" Módulo
+            const btnCarregarModulo = e.target.closest('.btn-carregar-modulo');
+            if (btnCarregarModulo) {
+                carregarModulo(btnCarregarModulo.dataset.moduloId);
+                return;
+            }
+
+            // Prova Final do Dashboard
+            const btnProvaDashboard = e.target.closest('#iniciar-prova-final-dashboard');
+            if (btnProvaDashboard) {
+                carregarProvaFinal();
+                return;
+            }
         });
 
-        if (perguntasValidas.length === 0) {
-            return `
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <strong>Quiz inválido:</strong> Nenhuma pergunta válida encontrada.
-                </div>
-            `;
+        function carregarDashboard() {
+            mostrarView('dashboard');
+            atualizarDashboard();
         }
 
-        console.log('Perguntas válidas encontradas:', perguntasValidas.length);
+        function carregarModulo(moduloId) {
+            const modulo = cursoState.modulos_info[moduloId];
+            if (!modulo) return;
 
-        // Armazenar dados do quiz globalmente para acesso posterior
-        if (!window.quizData) window.quizData = {};
-        window.quizData[conteudo.id] = perguntasValidas;
-
-        let html = `
-            <div class="quiz-container" id="quiz-container-${conteudo.id}">
-                <div class="quiz-info">
-                    <p><strong>Instruções:</strong> Responda todas as perguntas abaixo. Você precisa de 70% de acertos para aprovação.</p>
-                    <div class="quiz-stats">
-                        <span><i class="fas fa-question-circle"></i> ${perguntasValidas.length} pergunta(s)</span>
-                        <span><i class="fas fa-trophy"></i> 70% para aprovação</span>
-                    </div>
+            moduloViewContainer.innerHTML = `
+                <div class="modulo-header">
+                    <h2><i class="${modulo.icone}"></i> ${modulo.nome}</h2>
+                    <p class="modulo-descricao">${modulo.descricao}</p>
                 </div>
-                
-                <form class="quiz-form" id="quiz-form-${conteudo.id}">
-        `;
+                <div class="conteudos-lista">
+                    ${modulo.conteudos.map((conteudo, index) => `
+                        <div class="conteudo-item">
+                            <h4>${conteudo.titulo}</h4>
+                            <div class="conteudo-texto">${conteudo.conteudo}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            mostrarView('modulo');
+        }
 
-        perguntasValidas.forEach((pergunta, index) => {
-            console.log('Renderizando pergunta:', pergunta);
+        function carregarProvaFinal() {
+            // Verificar se todos os módulos estão concluídos
+            if (!verificarModulosConcluidos()) {
+                showToast('Complete todos os módulos antes de fazer a prova final.', 'error');
+                return;
+            }
+
+            // Verificar se já foi aprovado
+            if (cursoState.prova_final_info.aprovado) {
+                showToast('Você já foi aprovado na prova final!', 'info');
+                return;
+            }
+
+            // Verificar tentativas
+            if (cursoState.prova_final_info.tentativas >= 2) {
+                showToast('Você já utilizou todas as tentativas disponíveis.', 'error');
+                return;
+            }
+
+            renderizarProvaFinal();
+        }
+
+        function verificarModulosConcluidos() {
+            return cursoState.progresso_modulos.length === cursoState.total_modulos;
+        }
+
+        function renderizarProvaFinal() {
+            const perguntas = cursoState.prova_final_perguntas;
             
-            html += `
-                <div class="pergunta" id="pergunta-${conteudo.id}-${index}">
-                    <div class="pergunta-cabecalho">
-                        <span class="numero">${index + 1}</span>
-                        <span class="texto">${pergunta.pergunta}</span>
+            if (perguntas.length === 0) {
+                provaFinalView.innerHTML = `
+                    <div class="alert alert-error">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Prova Final Não Disponível</h3>
+                        <p>Não há questões configuradas para a prova final deste curso.</p>
+                        <button class="btn btn-primary" onclick="carregarDashboard()">
+                            <i class="fas fa-arrow-left"></i> Voltar ao Dashboard
+                        </button>
                     </div>
-                    <div class="opcoes">
+                `;
+                mostrarView('prova');
+                return;
+            }
+
+            let html = `
+                <div class="progresso-respostas" id="progresso-respostas">
+                    Respondidas: <span id="contador-respostas">0</span>/<span id="total-perguntas">${perguntas.length}</span>
+                </div>
+
+                <div class="prova-final-container">
+                    <div class="prova-header">
+                        <h2><i class="fas fa-graduation-cap"></i> Prova Final</h2>
+                        <div class="curso-info">${cursoState.curso_info.titulo}</div>
+                    </div>
+
+                    <div class="prova-info">
+                        <h3><i class="fas fa-info-circle"></i> Instruções da Prova</h3>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <i class="fas fa-question-circle"></i>
+                                <strong>Total de Questões:</strong> ${perguntas.length}
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-trophy"></i>
+                                <strong>Nota Mínima:</strong> 70%
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-clock"></i>
+                                <strong>Tempo Estimado:</strong> 30 minutos
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-check-circle"></i>
+                                <strong>Status:</strong> Disponível
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="form-prova-final">
             `;
 
-            pergunta.opcoes.forEach((opcao, opcaoIndex) => {
-                const opcaoId = `q${conteudo.id}_p${index}_o${opcaoIndex}`;
+            // Renderizar perguntas
+            perguntas.forEach((pergunta, index) => {
                 html += `
-                    <div class="opcao">
-                        <input type="radio" id="${opcaoId}" 
-                               name="pergunta_${index}" value="${opcaoIndex}"
-                               onchange="validarQuiz(${conteudo.id})">
-                        <label for="${opcaoId}">
-                            <span class="opcao-letra">${String.fromCharCode(65 + opcaoIndex)}</span>
-                            <span class="opcao-texto">${opcao}</span>
-                        </label>
+                    <div class="pergunta" id="pergunta-${index}">
+                        <div class="pergunta-cabecalho">
+                            <div class="pergunta-numero">${index + 1}</div>
+                            <div class="pergunta-texto">${pergunta.pergunta}</div>
+                        </div>
+                        <div class="opcoes">
+                `;
+
+                pergunta.opcoes.forEach((opcao, opcaoIndex) => {
+                    const opcaoId = `pergunta-${index}-opcao-${opcaoIndex}`;
+                    html += `
+                        <div class="opcao">
+                            <input type="radio" 
+                                   id="${opcaoId}" 
+                                   name="pergunta-${index}" 
+                                   value="${opcaoIndex}"
+                                   onchange="atualizarContadorRespostas()">
+                            <label for="${opcaoId}">
+                                <span class="opcao-letra">${String.fromCharCode(65 + opcaoIndex)}</span>
+                                <span class="opcao-texto">${opcao}</span>
+                            </label>
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
                     </div>
                 `;
             });
 
             html += `
+                    </form>
+
+                    <div class="prova-actions">
+                        <button class="btn btn-primary" id="btn-finalizar-prova" onclick="finalizarProva()" disabled>
+                            <i class="fas fa-paper-plane"></i> Finalizar Prova
+                        </button>
+                        <button class="btn btn-secondary" onclick="carregarDashboard()">
+                            <i class="fas fa-arrow-left"></i> Voltar
+                        </button>
                     </div>
                 </div>
             `;
-        });
 
-        html += `
-                    <div class="quiz-actions">
-                        <button type="button" class="btn btn-primary btn-finalizar-quiz" 
-                                id="btn-finalizar-${conteudo.id}" 
-                                onclick="submeterQuiz(${conteudo.id})"
-                                disabled>
-                            <i class="fas fa-paper-plane"></i> Enviar Respostas
-                            <span id="contador-${conteudo.id}"> (0/${perguntasValidas.length})</span>
-                        </button>
-                        <button type="button" class="btn btn-secondary" 
-                                onclick="reiniciarQuiz(${conteudo.id})">
-                            <i class="fas fa-redo"></i> Reiniciar
-                        </button>
-                    </div>
-                </form>
-                
-                <div id="resultado-quiz-${conteudo.id}" class="resultado-quiz oculto"></div>
-            </div>
-        `;
-
-        console.log('Quiz renderizado com sucesso');
-        return html;
-    }
-
-    function validarQuiz(conteudoId) {
-        const form = document.getElementById(`quiz-form-${conteudoId}`);
-        const perguntas = window.quizData[conteudoId];
-        
-        if (!perguntas) {
-            console.error('Dados do quiz não encontrados para:', conteudoId);
-            return;
+            provaFinalView.innerHTML = html;
+            mostrarView('prova');
         }
 
-        const totalPerguntas = perguntas.length;
-        let respostasRespondidas = 0;
+        function finalizarProva() {
+            const perguntas = cursoState.prova_final_perguntas;
+            let respostas = {};
+            let todasRespondidas = true;
 
-        for (let i = 0; i < totalPerguntas; i++) {
-            if (form.querySelector(`input[name="pergunta_${i}"]:checked`)) {
-                respostasRespondidas++;
+            // Coletar respostas
+            perguntas.forEach((pergunta, index) => {
+                const respostaSelecionada = document.querySelector(`input[name="pergunta-${index}"]:checked`);
+                if (respostaSelecionada) {
+                    respostas[index] = parseInt(respostaSelecionada.value);
+                } else {
+                    todasRespondidas = false;
+                }
+            });
+
+            if (!todasRespondidas) {
+                showToast('Por favor, responda todas as questões antes de finalizar.', 'error');
+                return;
+            }
+
+            // Calcular resultado
+            let acertos = 0;
+            const resultadoDetalhes = [];
+
+            perguntas.forEach((pergunta, index) => {
+                const respostaUsuario = respostas[index];
+                const respostaCorreta = pergunta.resposta_correta;
+                const acertou = respostaUsuario === respostaCorreta;
+                
+                if (acertou) acertos++;
+
+                resultadoDetalhes.push({
+                    pergunta: pergunta.pergunta,
+                    respostaUsuario: pergunta.opcoes[respostaUsuario],
+                    respostaCorreta: pergunta.opcoes[respostaCorreta],
+                    acertou: acertou,
+                    explicacao: pergunta.explicacao
+                });
+            });
+
+            const percentual = (acertos / perguntas.length) * 100;
+            const aprovado = percentual >= 70;
+
+            // Salvar resultado usando a mesma estrutura do seu sistema
+            salvarResultadoProva(percentual, acertos, perguntas.length, aprovado, resultadoDetalhes);
+        }
+
+        async function salvarResultadoProva(percentual, acertos, total, aprovado, detalhes) {
+            try {
+                const response = await fetch('ajax/salvar_progresso.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        tipo: 'prova',
+                        curso_id: cursoState.curso_id,
+                        nota: percentual,
+                        acertos: acertos,
+                        total: total,
+                        aprovado: aprovado,
+                        tentativas: cursoState.prova_final_info.tentativas + 1
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Atualizar estado local
+                    cursoState.prova_final_info.tentativas++;
+                    cursoState.prova_final_info.aprovado = aprovado;
+                    cursoState.prova_final_info.nota = percentual;
+
+                    // Mostrar resultado
+                    mostrarResultadoProva(percentual, acertos, total, aprovado, detalhes, data.codigo);
+                    
+                    // Atualizar dashboard
+                    atualizarDashboard();
+                    
+                    showToast(aprovado ? '🎉 Parabéns! Você foi aprovado!' : '📝 Prova finalizada. Tente novamente!', aprovado ? 'success' : 'warning');
+                } else {
+                    showToast('Erro ao salvar resultado da prova: ' + data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                showToast('Erro ao salvar resultado da prova.', 'error');
             }
         }
 
-        const btnFinalizar = document.getElementById(`btn-finalizar-${conteudoId}`);
-        const contador = document.getElementById(`contador-${conteudoId}`);
-        
-        btnFinalizar.disabled = respostasRespondidas !== totalPerguntas;
-        
-        if (contador) {
-            contador.textContent = ` (${respostasRespondidas}/${totalPerguntas})`;
-        }
-        
-        console.log(`Quiz ${conteudoId}: ${respostasRespondidas}/${totalPerguntas} respondidas`);
-    }
-
-    function submeterQuiz(conteudoId, isProvaFixacao = false) {
-        const form = document.getElementById(`quiz-form-${conteudoId}`);
-        const perguntas = window.quizData[conteudoId];
-        
-        if (!perguntas) {
-            mostrarToast('Dados do quiz não encontrados.', 'error');
-            return;
-        }
-
-        let acertos = 0;
-        const resultados = [];
-
-        perguntas.forEach((pergunta, index) => {
-            const respostaSelecionada = form.querySelector(`input[name="pergunta_${index}"]:checked`);
-            const respostaCorreta = pergunta.resposta;
-            const respostaUsuario = respostaSelecionada ? parseInt(respostaSelecionada.value) : null;
+        function mostrarResultadoProva(percentual, acertos, total, aprovado, detalhes, codigoValidacao) {
+            const aprovadoClass = aprovado ? '' : 'reprovado';
             
-            const acertou = respostaUsuario === respostaCorreta;
-            if (acertou) acertos++;
-            
-            resultados.push({
-                pergunta: pergunta.pergunta,
-                opcoes: pergunta.opcoes,
-                respostaCorreta: respostaCorreta,
-                respostaUsuario: respostaUsuario,
-                acertou: acertou
-            });
-        });
-
-        const percentual = Math.round((acertos / perguntas.length) * 100);
-        exibirResultadoQuiz(conteudoId, percentual, acertos, perguntas.length, resultados, isProvaFixacao);
-    }
-
-    function exibirResultadoQuiz(conteudoId, percentual, acertos, total, resultados, isProvaFixacao = false) {
-        const resultadoDiv = document.getElementById(`resultado-quiz-${conteudoId}`);
-        const aprovado = percentual >= 70;
-        
-        let detalhesHTML = '';
-        resultados.forEach((resultado, index) => {
-            detalhesHTML += `
-                <div class="pergunta-resultado ${resultado.acertou ? 'acerto' : 'erro'}">
-                    <div class="pergunta-titulo-resultado">
-                        <strong>${index + 1}. ${resultado.pergunta}</strong>
-                        <span class="status ${resultado.acertou ? 'acerto' : 'erro'}">
-                            ${resultado.acertou ? '✓ Acertou' : '✗ Errou'}
-                        </span>
-                    </div>
-                    <div class="resposta-info">
-                        <div class="resposta-usuario">
-                            <strong>Sua resposta:</strong> ${resultado.opcoes[resultado.respostaUsuario] || 'Não respondida'}
+            let html = `
+                <div class="prova-final-container">
+                    <div class="resultado-prova ${aprovadoClass}">
+                        <div class="resultado-titulo">
+                            ${aprovado ? '🎉 Parabéns! Você foi Aprovado!' : '📝 Resultado da Prova Final'}
                         </div>
-                        ${!resultado.acertou ? `
-                            <div class="resposta-correta">
-                                <strong>Resposta correta:</strong> ${resultado.opcoes[resultado.respostaCorreta]}
+                        <div class="resultado-nota">${percentual.toFixed(1)}%</div>
+                        <div class="resultado-mensagem">
+                            ${aprovado ? 
+                                `Você demonstrou excelente compreensão do conteúdo com ${acertos} de ${total} questões corretas.` :
+                                `Você acertou ${acertos} de ${total} questões. É necessário 70% para aprovação.`
+                            }
+                        </div>
+                        
+                        <div class="resultado-stats">
+                            <div class="stat-item-resultado">
+                                <span class="stat-value">${acertos}</span>
+                                <span class="stat-label">Acertos</span>
                             </div>
-                        ` : ''}
+                            <div class="stat-item-resultado">
+                                <span class="stat-value">${total}</span>
+                                <span class="stat-label">Total</span>
+                            </div>
+                            <div class="stat-item-resultado">
+                                <span class="stat-value">${((acertos/total)*100).toFixed(1)}%</span>
+                                <span class="stat-label">Taxa de Acerto</span>
+                            </div>
+                        </div>
+            `;
+
+            // Mostrar código de validação se aprovado
+            if (aprovado && codigoValidacao) {
+                html += `
+                    <div class="codigo-validacao">
+                        <strong><i class="fas fa-certificate"></i> Código de Validação:</strong>
+                        <code>${codigoValidacao}</code>
+                        <small>Guarde este código para validar seu certificado</small>
+                    </div>
+                `;
+            }
+
+            // Adicionar detalhes das respostas
+            if (detalhes && detalhes.length > 0) {
+                html += `
+                    <div class="resultado-detalhes">
+                        <h5><i class="fas fa-list"></i> Detalhes das Respostas:</h5>
+                        <div class="detalhes-perguntas">
+                `;
+                
+                detalhes.forEach((detalhe, index) => {
+                    html += `
+                        <div class="pergunta-revisao ${detalhe.acertou ? 'acertou' : 'errou'}">
+                            <div class="pergunta-header">
+                                <span class="pergunta-numero">${index + 1}.</span>
+                                <span class="pergunta-status ${detalhe.acertou ? 'acerto' : 'erro'}">
+                                    <i class="fas ${detalhe.acertou ? 'fa-check' : 'fa-times'}"></i>
+                                    ${detalhe.acertou ? 'Acertou' : 'Errou'}
+                                </span>
+                            </div>
+                            <div class="pergunta-texto">${detalhe.pergunta}</div>
+                            <div class="resposta-usuario">
+                                <strong>Sua resposta:</strong> ${detalhe.respostaUsuario}
+                            </div>
+                            ${!detalhe.acertou ? `
+                                <div class="resposta-correta">
+                                    <strong>Resposta correta:</strong> ${detalhe.respostaCorreta}
+                                </div>
+                            ` : ''}
+                            ${detalhe.explicacao ? `
+                                <div class="explicacao">
+                                    <strong>Explicação:</strong> ${detalhe.explicacao}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Adicionar ações
+            html += `
+                        <div class="acoes-resultado">
+                            <button class="btn btn-primary" onclick="carregarDashboard()">
+                                <i class="fas fa-tachometer-alt"></i> Voltar ao Dashboard
+                            </button>
+                            ${aprovado ? `
+                                <a href="certificado.php?curso_id=${cursoState.curso_id}&codigo=${codigoValidacao}" class="btn btn-success">
+                                    <i class="fas fa-certificate"></i> Emitir Certificado
+                                </a>
+                            ` : `
+                                <button class="btn btn-warning" onclick="carregarProvaFinal()">
+                                    <i class="fas fa-redo"></i> Tentar Novamente
+                                </button>
+                            `}
+                        </div>
                     </div>
                 </div>
             `;
-        });
-        
-        resultadoDiv.innerHTML = `
-            <div class="resultado-quiz ${aprovado ? '' : 'reprovado'} ${isProvaFixacao ? 'prova-fixacao-resultado' : ''}">
-                <div class="resultado-titulo">
-                    ${isProvaFixacao ? 
-                        (aprovado ? '🎉 Módulo Concluído!' : '📝 Módulo Não Aprovado') :
-                        (aprovado ? '🎉 Parabéns!' : '📝 Precisa Melhorar')
-                    }
-                </div>
-                <div class="resultado-nota">${percentual}%</div>
-                <div class="resultado-mensagem">
-                    ${isProvaFixacao ? 
-                        (aprovado ? 
-                            `Parabéns! Você aprovou na prova de fixação com ${acertos} de ${total} acertos.` :
-                            `Você acertou ${acertos} de ${total} questões. Precisa de 70% para aprovar o módulo.`
-                        ) :
-                        (aprovado ? 
-                            `Você acertou ${acertos} de ${total} perguntas e foi aprovado no quiz!` :
-                            `Você acertou ${acertos} de ${total} perguntas. Precisa de 70% para aprovação.`
-                        )
-                    }
-                </div>
-                
-                <div class="resultado-stats">
-                    <div class="stat-item-resultado">
-                        <span class="stat-value">${acertos}</span>
-                        <span class="stat-label">Acertos</span>
-                    </div>
-                    <div class="stat-item-resultado">
-                        <span class="stat-value">${total}</span>
-                        <span class="stat-label">Total</span>
-                    </div>
-                    <div class="stat-item-resultado">
-                        <span class="stat-value">${percentual}%</span>
-                        <span class="stat-label">Taxa de Acerto</span>
-                    </div>
-                </div>
-                
-                <div class="detalhes-resultado">
-                    <h5>Detalhes das Respostas:</h5>
-                    ${detalhesHTML}
-                </div>
-                
-                <div class="acoes-resultado">
-                    ${isProvaFixacao ? `
-                        ${aprovado ? `
-                            <button class="btn btn-continuar" onclick="finalizarModulo(${conteudoId})">
-                                <i class="fas fa-check"></i> Concluir Módulo
-                            </button>
-                        ` : `
-                            <button class="btn btn-revisar" onclick="reiniciarQuiz(${conteudoId})">
-                                <i class="fas fa-redo"></i> Tentar Novamente
-                            </button>
-                        `}
-                    ` : `
-                        <button class="btn ${aprovado ? 'btn-continuar' : 'btn-revisar'}" 
-                                onclick="${aprovado ? `marcarComoConcluido(null, ${conteudoId})` : `reiniciarQuiz(${conteudoId})`}">
-                            <i class="fas fa-${aprovado ? 'check' : 'redo'}"></i>
-                            ${aprovado ? 'Continuar' : 'Tentar Novamente'}
-                        </button>
-                    `}
-                </div>
-            </div>
-        `;
-        
-        resultadoDiv.classList.remove('oculto');
-        document.getElementById(`quiz-form-${conteudoId}`).classList.add('oculto');
-        
-        // Salvar progresso se aprovado
-        if (aprovado && isProvaFixacao) {
-            salvarProgressoModulo(conteudoId);
+
+            provaFinalView.innerHTML = html;
+            mostrarView('prova');
         }
+
+        function atualizarContadorRespostas() {
+            const perguntas = cursoState.prova_final_perguntas;
+            let respondidas = 0;
+
+            perguntas.forEach((pergunta, index) => {
+                if (document.querySelector(`input[name="pergunta-${index}"]:checked`)) {
+                    respondidas++;
+                }
+            });
+
+            document.getElementById('contador-respostas').textContent = respondidas;
+            document.getElementById('btn-finalizar-prova').disabled = respondidas !== perguntas.length;
+        }
+
+        function mostrarView(viewId) {
+            dashboardView.classList.add('oculto');
+            moduloViewContainer.classList.add('oculto');
+            provaFinalView.classList.add('oculto');
+            
+            if (viewId === 'dashboard') {
+                dashboardView.classList.remove('oculto');
+            } else if (viewId === 'modulo') {
+                moduloViewContainer.classList.remove('oculto');
+            } else if (viewId === 'prova') {
+                provaFinalView.classList.remove('oculto');
+            }
+        }
+
+        function atualizarDashboard() {
+            const modulosConcluidos = cursoState.progresso_modulos.length;
+            const porcentagem = cursoState.total_modulos > 0 ? (modulosConcluidos / cursoState.total_modulos) * 100 : 0;
+            
+            document.getElementById('stat-concluidos').textContent = modulosConcluidos;
+            document.getElementById('stat-aprovacao').textContent = cursoState.prova_final_info.aprovado ? 'SIM' : 'NÃO';
+            document.getElementById('stat-aprovacao').closest('.stat-item').classList.toggle('aprovado', cursoState.prova_final_info.aprovado);
+            document.getElementById('progresso-porcentagem').textContent = `${porcentagem.toFixed(0)}% Completo`;
+            document.querySelector('.progress-bar-preenchimento').style.width = `${porcentagem.toFixed(0)}%`;
+            
+            // Atualizar menu lateral
+            const menuAvaliacaoContainer = document.getElementById('menu-avaliacao-container');
+            if (cursoState.prova_final_info.aprovado) {
+                menuAvaliacaoContainer.innerHTML = '';
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icons = { 
+                success: 'fa-check-circle', 
+                error: 'fa-times-circle', 
+                info: 'fa-info-circle',
+                warning: 'fa-exclamation-triangle'
+            };
+            
+            toast.innerHTML = `
+                <i class="fas ${icons[type]}"></i>
+                <span>${message}</span>
+                <button class="toast-close"><i class="fas fa-times"></i></button>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('show'), 10);
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+            
+            toast.querySelector('.toast-close').addEventListener('click', () => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            });
+        }
+
+        // Torna funções globais
+        window.carregarDashboard = carregarDashboard;
+        window.carregarProvaFinal = carregarProvaFinal;
+        window.finalizarProva = finalizarProva;
+        window.atualizarContadorRespostas = atualizarContadorRespostas;
+
+        // Inicializar
+        carregarDashboard();
+    });
+
+
+// === VARIÁVEIS GLOBAIS ===
+let cursoState = {};
+let progressoModuloAtual = { id: null, vistos: new Set(), totalLicoes: 0, inicio: null };
+
+// === INICIALIZAÇÃO ===
+document.addEventListener('DOMContentLoaded', () => {
+    const mainContent = document.querySelector('.main-content');
+    if (!mainContent || !mainContent.dataset.initialState) return;
+
+    cursoState = JSON.parse(mainContent.dataset.initialState);
+    cursoState.progressoModulos = new Set(cursoState.progresso_modulos);
+
+    carregarDashboard();
+    inicializarEventos();
+});
+
+// === NAVEGAÇÃO ===
+function mostrarView(view) {
+    ['dashboard-view', 'modulo-view-container', 'conquistas-view', 'estatisticas-view'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('oculto');
+    });
+    if (view === 'dashboard') document.getElementById('dashboard-view').classList.remove('oculto');
+    if (view === 'modulo') document.getElementById('modulo-view-container').classList.remove('oculto');
+    if (view === 'conquistas') document.getElementById('conquistas-view').classList.remove('oculto');
+    if (view === 'estatisticas') document.getElementById('estatisticas-view').classList.remove('oculto');
+}
+
+function limparAtivosMenu() {
+    document.querySelectorAll('.sidebar li').forEach(li => li.classList.remove('ativo'));
+}
+
+// === DASHBOARD ===
+function carregarDashboard() {
+    limparAtivosMenu();
+    document.getElementById('menu-dashboard').classList.add('ativo');
+    mostrarView('dashboard');
+    atualizarDashboardUI();
+}
+
+// === MÓDULOS ===
+function carregarModulo(idModulo) {
+    limparAtivosMenu();
+    document.querySelector(`li[data-modulo-id='${idModulo}']`)?.classList.add('ativo');
+    mostrarView('modulo');
+
+    const modulo = cursoState.modulos_info[idModulo];
+    if (!modulo) return;
+
+    const normais = modulo.conteudos.filter(c => !c.is_prova_fixacao);
+    const prova = modulo.conteudos.find(c => c.is_prova_fixacao);
+
+    let html = `
+        <div class="modulo-header">
+            <h2><i class="${modulo.icone}"></i> ${modulo.nome}</h2>
+            <p>${modulo.descricao}</p>
+        </div>
+        <div class="conteudos-lista">
+            ${normais.map(c => `
+                <div class="conteudo-item" onclick="abrirConteudo('${idModulo}', '${c.id}', '${c.tipo}')">
+                    <i class="${iconeConteudo(c.tipo)}"></i>
+                    <span>${c.titulo}</span>
+                    <small>${c.duracao || '5 min'}</small>
+                </div>
+            `).join('')}
+        </div>
+        ${prova ? `
+            <div class="prova-fixacao-card">
+                <h4>🎯 Prova de Fixação</h4>
+                <p>${prova.descricao}</p>
+                <button class="btn btn-primary" onclick="iniciarProvaFixacao('${idModulo}', '${prova.id}')">
+                    ${modulo.concluido ? 'Revisar' : 'Iniciar'}
+                </button>
+            </div>
+        ` : ''}
+    `;
+
+    document.getElementById('modulo-view-container').innerHTML = html;
+}
+
+function iconeConteudo(tipo) {
+    const map = { texto: 'fa-file-alt', video: 'fa-video', imagem: 'fa-image', quiz: 'fa-question-circle' };
+    return 'fas ' + (map[tipo] || 'fa-file');
+}
+
+// === CONTEÚDO ===
+function abrirConteudo(moduloId, conteudoId, tipo) {
+    const modulo = cursoState.modulos_info[moduloId];
+    const conteudo = modulo.conteudos.find(c => c.id == conteudoId);
+    if (!conteudo) return;
+
+    let html = `
+        <button class="btn btn-voltar" onclick="carregarModulo('${moduloId}')">
+            <i class="fas fa-arrow-left"></i> Voltar
+        </button>
+        <h3>${conteudo.titulo}</h3>
+    `;
+
+    if (conteudo.is_quiz && conteudo.perguntas_array?.length) {
+        html += renderizarQuiz(conteudo);
+    } else {
+        html += `<div class="conteudo-texto">${conteudo.conteudo || 'Conteúdo indisponível.'}</div>`;
+        html += `<button class="btn btn-primary" onclick="marcarConcluido('${moduloId}', '${conteudoId}')">Marcar como Concluído</button>`;
     }
 
-    function reiniciarQuiz(conteudoId) {
-        const form = document.getElementById(`quiz-form-${conteudoId}`);
-        const resultadoDiv = document.getElementById(`resultado-quiz-${conteudoId}`);
-        
-        // Resetar formulário
-        form.reset();
-        form.classList.remove('oculto');
-        resultadoDiv.classList.add('oculto');
-        resultadoDiv.innerHTML = '';
-        
-        // Resetar botão
-        const btnFinalizar = document.getElementById(`btn-finalizar-${conteudoId}`);
-        btnFinalizar.disabled = true;
-        btnFinalizar.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar Respostas (0/' + window.quizData[conteudoId].length + ')';
-    }
+    document.getElementById('modulo-view-container').innerHTML = html;
+}
 
-    function mostrarToast(mensagem, tipo = 'info') {
-        const toastContainer = document.getElementById('toast-container');
-        const toast = document.createElement('div');
-        toast.className = `toast ${tipo}`;
-        toast.innerHTML = `
-            <i class="fas fa-${tipo === 'success' ? 'check-circle' : tipo === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
-            <span>${mensagem}</span>
-            <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
-        `;
-        
-        toastContainer.appendChild(toast);
-        
-        // Mostrar toast
-        setTimeout(() => toast.classList.add('show'), 100);
-        
-        // Remover toast após 5 segundos
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 400);
-        }, 5000);
-    }
+// === QUIZ / PROVA ===
+function renderizarQuiz(conteudo) {
+    window.quizData = window.quizData || {};
+    window.quizData[conteudo.id] = conteudo.perguntas_array;
 
-    // Funções placeholder para compatibilidade
-    function finalizarModulo(conteudoId) {
-        mostrarToast('Módulo concluído com sucesso!', 'success');
-        // Implementar lógica para finalizar o módulo
-    }
+    return `
+        <div class="quiz-container">
+            ${conteudo.perguntas_array.map((p, i) => `
+                <div class="pergunta">
+                    <strong>${i + 1}. ${p.pergunta}</strong>
+                    ${p.opcoes.map((o, j) => `
+                        <label class="opcao">
+                            <input type="radio" name="q${i}" value="${j}"> ${o}
+                        </label>
+                    `).join('')}
+                </div>
+            `).join('')}
+            <button class="btn btn-primary" onclick="submeterQuiz('${conteudo.id}', '${conteudo.is_prova_fixacao || false}', '${conteudo.modulo_id}')">
+                Enviar Respostas
+            </button>
+        </div>
+    `;
+}
 
-    function salvarProgressoModulo(conteudoId) {
-        // Implementar lógica para salvar progresso do módulo
-        console.log('Salvando progresso do módulo:', conteudoId);
-    }
+function submeterQuiz(conteudoId, isProvaFixacao, moduloId) {
+    const perguntas = window.quizData[conteudoId];
+    let acertos = 0;
+    const resultados = [];
 
-    function marcarComoConcluido(moduloId, conteudoId) {
-        mostrarToast('Conteúdo marcado como concluído!', 'success');
-        // Implementar lógica para marcar conteúdo como concluído
+    perguntas.forEach((p, i) => {
+        const selecionada = document.querySelector(`input[name="q${i}"]:checked`);
+        const respostaUsuario = selecionada ? parseInt(selecionada.value) : null;
+        const acertou = respostaUsuario === p.resposta;
+        if (acertou) acertos++;
+        resultados.push({
+            pergunta: p.pergunta,
+            respostaUsuario: p.opcoes[respostaUsuario] || 'Não respondida',
+            respostaCorreta: p.opcoes[p.resposta],
+            acertou
+        });
+    });
+
+    const total = perguntas.length;
+    const percentual = Math.round((acertos / total) * 100);
+    const aprovado = percentual >= 70;
+
+    mostrarResultadoQuiz(conteudoId, percentual, acertos, total, resultados, aprovado, isProvaFixacao, moduloId);
+}
+
+function mostrarResultadoQuiz(conteudoId, percentual, acertos, total, resultados, aprovado, isProvaFixacao, moduloId) {
+    const container = document.getElementById('modulo-view-container');
+    container.innerHTML = `
+        <h3>${aprovado ? '✅ Aprovado!' : '❌ Não Aprovado'}</h3>
+        <p>Você acertou ${acertos} de ${total} (${percentual}%)</p>
+        ${resultados.map(r => `
+            <div class="pergunta-resultado ${r.acertou ? 'acerto' : 'erro'}">
+                <strong>${r.pergunta}</strong><br>
+                Sua resposta: ${r.respostaUsuario}<br>
+                ${!r.acertou ? `Correta: ${r.respostaCorreta}` : ''}
+            </div>
+        `).join('')}
+        <button class="btn btn-primary" onclick="carregarModulo('${moduloId}')">
+            Voltar ao Módulo
+        </button>
+    `;
+
+    if (aprovado && isProvaFixacao) {
+        salvarProgresso({ tipo: 'modulo', id: moduloId });
+        cursoState.progressoModulos.add(moduloId);
+        atualizarDashboardUI();
     }
-    </script>
-    <script src="js/curso_app.js" defer></script>
+}
+
+// === PROGRESSO ===
+async function salvarProgresso(dados) {
+    const payload = {
+        ...dados,
+        usuario_id: cursoState.usuario_id,
+        curso_id: cursoState.curso_id
+    };
+
+    try {
+        const res = await fetch('ajax/salvar_progresso.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        return data.success;
+    } catch (e) {
+        console.error('Erro ao salvar progresso:', e);
+        return false;
+    }
+}
+
+function marcarConcluido(moduloId, conteudoId) {
+    showToast('Conteúdo marcado como concluído!', 'success');
+    carregarModulo(moduloId);
+}
+
+// === UI ===
+function atualizarDashboardUI() {
+    const concluidos = cursoState.progressoModulos.size;
+    const total = cursoState.total_modulos;
+    const pct = total ? Math.round((concluidos / total) * 100) : 0;
+
+    document.getElementById('stat-concluidos').textContent = concluidos;
+    document.getElementById('stat-aprovacao').textContent = cursoState.prova_final_info.aprovado ? 'SIM' : 'NÃO';
+    document.querySelector('.progress-bar-preenchimento').style.width = pct + '%';
+    document.getElementById('progresso-porcentagem').textContent = pct + '% Completo';
+}
+
+function showToast(msg, tipo = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${tipo}`;
+    toast.innerHTML = `<i class="fas fa-${tipo === 'success' ? 'check' : 'info'}-circle"></i> ${msg}`;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+}
+
+// === EVENTOS ===
+function inicializarEventos() {
+    document.body.addEventListener('click', e => {
+        const nav = e.target.closest('[data-nav]');
+        if (nav) {
+            const tipo = nav.dataset.nav;
+            if (tipo === 'dashboard') carregarDashboard();
+            if (tipo === 'modulo') carregarModulo(nav.dataset.moduloId);
+            if (tipo === 'prova') carregarProvaFinal();
+            if (tipo === 'conquistas') carregarConquistas();
+            if (tipo === 'estatisticas') carregarEstatisticas();
+        }
+
+        const btnModulo = e.target.closest('.btn-carregar-modulo');
+        if (btnModulo) carregarModulo(btnModulo.dataset.moduloId);
+
+        const btnProva = e.target.closest('#iniciar-prova-final-dashboard');
+        if (btnProva) carregarProvaFinal();
+    });
+}
+
+
+    
+</script>
 </body>
 </html>

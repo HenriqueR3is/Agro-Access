@@ -35,6 +35,9 @@
 
 /* --- 2. Variáveis de Design --- */
 
+
+
+
 /* 2.1. Tema Claro (Padrão) */
 :root {
     --font-primary: 'Inter', sans-serif;
@@ -1433,4 +1436,7 @@ li.ativo .status-icon {
         font-size: 0.95rem;
     }
 }
+
+
+
 

@@ -1,50 +1,71 @@
 <?php
 session_start();
-require_once __DIR__ . '/../../config/db/conexao.php';
+require_once __DIR__ . '/../config/db/conexao.php';
 
-header('Content-Type: application/json');
+// Configurar headers para JSON
+header('Content-Type: application/json; charset=utf-8');
 
+// Verificar se o usuário está logado
 if (!isset($_SESSION['usuario_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Não autorizado']);
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'Usuário não logado']);
     exit;
 }
 
-$curso_id = $_GET['curso_id'] ?? null;
 $usuario_id = $_SESSION['usuario_id'];
+$curso_id = $_GET['curso_id'] ?? null;
+$forcar = $_GET['forcar'] ?? 0;
 
 if (!$curso_id) {
-    echo json_encode(['success' => false, 'message' => 'Curso não especificado']);
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => 'ID do curso não fornecido']);
     exit;
 }
 
 try {
-    // Buscar progresso da prova usando o mesmo padrão de item_id
+    // Buscar progresso da prova final
     $item_id_final = 'final-curso-' . $curso_id;
     
     $stmt = $pdo->prepare("
-        SELECT tentativas, aprovado, nota, data_conclusao, codigo_validacao 
+        SELECT tentativas, aprovado, nota, data_conclusao, codigo_validacao, bloqueado_ate 
         FROM progresso_curso 
-        WHERE usuario_id = ? 
-        AND curso_id = ? 
-        AND tipo = 'prova' 
-        AND item_id = ?
+        WHERE usuario_id = ? AND curso_id = ? AND tipo = 'prova' AND item_id = ?
+        ORDER BY id DESC 
+        LIMIT 1
     ");
     $stmt->execute([$usuario_id, $curso_id, $item_id_final]);
-    $prova_info = $stmt->fetch(PDO::FETCH_ASSOC);
+    $prova_final_info = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    echo json_encode([
-        'success' => true,
-        'prova_final_info' => $prova_info ?: [
+    // Se não encontrou, criar registro padrão
+    if (!$prova_final_info) {
+        $prova_final_info = [
             'tentativas' => 0,
             'aprovado' => false,
             'nota' => 0,
             'data_conclusao' => null,
-            'codigo_validacao' => null
-        ]
+            'codigo_validacao' => null,
+            'bloqueado_ate' => null
+        ];
+    }
+    
+    echo json_encode([
+        'success' => true,
+        'prova_final_info' => $prova_final_info
     ]);
     
-} catch(PDOException $e) {
-    error_log("Erro ao verificar progresso: " . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Erro no banco de dados']);
+} catch (PDOException $e) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false, 
+        'message' => 'Erro ao verificar progresso',
+        'error' => $e->getMessage()
+    ]);
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false, 
+        'message' => 'Erro inesperado',
+        'error' => $e->getMessage()
+    ]);
 }
 ?>
