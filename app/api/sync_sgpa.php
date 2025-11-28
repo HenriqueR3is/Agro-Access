@@ -1,92 +1,51 @@
 <?php
-// --- MODO DETETIVE (DEBUG) ---
-// Mantenha ativado apenas enquanto estiver testando. Em produção, comente estas 3 linhas.
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-// -----------------------------
-
 // app/api/sync_sgpa.php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
 
-// 1. Cabeçalhos de API
 header('Content-Type: application/json; charset=utf-8');
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST");
-header("Cache-Control: no-cache, no-store, must-revalidate");
 
-// --- FUNÇÃO AUXILIAR PARA CORRIGIR O ERRO DO INFINITYFREE ---
+// Função Auth
 function obter_auth_header() {
-    $header = null;
-    if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
-        $header = $_SERVER['HTTP_AUTHORIZATION'];
-    } elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
-        $header = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
-    } elseif (function_exists('getallheaders')) {
-        $headers = getallheaders();
-        foreach ($headers as $key => $value) {
-            if (strtolower($key) === 'authorization') {
-                $header = $value;
-                break;
-            }
-        }
+    if (isset($_SERVER['HTTP_AUTHORIZATION'])) return $_SERVER['HTTP_AUTHORIZATION'];
+    if (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) return $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+    if (function_exists('getallheaders')) {
+        foreach (getallheaders() as $key => $value) if (strtolower($key) === 'authorization') return $value;
     }
-    return $header;
+    return null;
 }
 
-// --- 2. CONFIGURAÇÃO E SEGURANÇA ---
 $secret_key = "@agrodash123"; 
-$auth_recebido = obter_auth_header();
-
-if ($auth_recebido !== $secret_key) {
-    http_response_code(403);
-    echo json_encode([
-        'status' => 'erro',
-        'mensagem' => 'Acesso negado. Token inválido ou não fornecido.'
-    ]);
-    exit;
+if (obter_auth_header() !== $secret_key) {
+    http_response_code(403); exit(json_encode(['status' => 'erro', 'mensagem' => 'Token inválido']));
 }
 
-// --- 3. CONEXÃO COM BANCO DE DADOS ---
-$host    = 'sql107.infinityfree.com';
-$port    = 3306;
-$db      = 'if0_39840919_agrodash';
-$user    = 'if0_39840919';
-$pass    = 'QQs4kbmVS7Z';
-$charset = 'utf8mb4'; 
-
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset;port=$port";
-
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-];
+$host = 'sql107.infinityfree.com'; $db = 'if0_39840919_agrodash'; $user = 'if0_39840919'; $pass = 'QQs4kbmVS7Z';
 
 try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
+    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4;port=3306", $user, $pass, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+    ]);
 } catch (\PDOException $e) {
-    http_response_code(500);
-    echo json_encode(['status' => 'erro', 'mensagem' => 'Falha ao conectar no Banco de Dados.']);
-    exit;
+    http_response_code(500); exit(json_encode(['status' => 'erro', 'mensagem' => 'Erro Banco']));
 }
 
-// --- 4. RECEBE E PROCESSA O JSON ---
-$json = file_get_contents('php://input');
-$dados = json_decode($json, true);
+$dados = json_decode(file_get_contents('php://input'), true);
+if (!$dados) { http_response_code(400); exit(json_encode(['status' => 'erro', 'mensagem' => 'JSON inválido'])); }
 
-if (!$dados || empty($dados)) {
-    http_response_code(400);
-    echo json_encode(['status' => 'erro', 'mensagem' => 'JSON vazio ou inválido.']);
-    exit;
-}
-
-// --- 5. UPSERT (INSERIR OU ATUALIZAR) ---
-
+// UPSERT com nome_equipamento
 $sql = "INSERT INTO producao_sgpa 
-        (equipamento_id, data, operacao_id, hectares_sgpa, rpm_medio, velocidade_media, consumo_litros, horas_efetivas, importado_em)
+        (equipamento_id, nome_equipamento, unidade, frente, nome_operacao, operador, data, operacao_id, hectares_sgpa, rpm_medio, velocidade_media, consumo_litros, horas_efetivas, importado_em)
         VALUES 
-        (:equip, :data, :oper, :hec, :rpm, :vel, :litros, :horas, NOW())
+        (:equip, :nome_equip, :uni, :frente, :nome_op, :operador, :data, :oper_id, :hec, :rpm, :vel, :litros, :horas, NOW())
         ON DUPLICATE KEY UPDATE
+        nome_equipamento = VALUES(nome_equipamento),
+        unidade          = VALUES(unidade),
+        frente           = VALUES(frente),
+        nome_operacao    = VALUES(nome_operacao),
+        operador         = VALUES(operador),
         hectares_sgpa    = VALUES(hectares_sgpa),
         rpm_medio        = VALUES(rpm_medio),
         velocidade_media = VALUES(velocidade_media),
@@ -95,72 +54,38 @@ $sql = "INSERT INTO producao_sgpa
         importado_em     = NOW()";
 
 $stmt = $pdo->prepare($sql);
-
-$sucesso = 0;
-$erro_count = 0;
-$log_erros = [];
-
-// --- A "OPÇÃO NUCLEAR" ---
-// Desliga verificação de chave estrangeira temporariamente para esta sessão
 $pdo->exec("SET FOREIGN_KEY_CHECKS=0");
 
-// Inicia Transação
-$pdo->beginTransaction();
+$sucesso = 0; $erros = [];
 
 foreach ($dados as $linha) {
     try {
-        // Tratamento do ID
-        $equip_id_raw = $linha['equipamento'] ?? '';
-        $equip_id = (int) preg_replace('/\D/', '', $equip_id_raw);
-
-        if ($equip_id <= 0) continue;
-
-        // Validação de Data
-        $data_op = $linha['data'] ?? null;
-        if (!$data_op) continue; 
-
-        // Cast de variáveis
-        $operacao_id = isset($linha['operacao_id']) ? (int)$linha['operacao_id'] : 1;
-        $hectares    = (float) ($linha['hectares'] ?? 0);
-        $rpm         = (int)   ($linha['rpm'] ?? 0);
-        $velocidade  = (float) ($linha['velocidade'] ?? 0);
-        $consumo     = (float) ($linha['consumo'] ?? 0);
-        $horas       = (float) ($linha['horas'] ?? 0);
+        // ID numérico para o vínculo
+        $equip_id = (int) preg_replace('/\D/', '', $linha['equipamento'] ?? '');
+        
+        if ($equip_id <= 0 || empty($linha['data'])) continue;
 
         $stmt->execute([
-            ':equip'  => $equip_id,
-            ':data'   => $data_op,
-            ':oper'   => $operacao_id,
-            ':hec'    => $hectares,
-            ':rpm'    => $rpm,
-            ':vel'    => $velocidade,
-            ':litros' => $consumo,
-            ':horas'  => $horas
+            ':equip'      => $equip_id,
+            ':nome_equip' => $linha['nome_equipamento'] ?? $linha['equipamento'], // Salva o nome bonito
+            ':uni'        => $linha['unidade'] ?? null,
+            ':frente'     => $linha['frente'] ?? null,
+            ':nome_op'    => $linha['nome_operacao'] ?? null,
+            ':operador'   => $linha['operador'] ?? null,
+            ':data'       => $linha['data'],
+            ':oper_id'    => 1,
+            ':hec'        => $linha['hectares'],
+            ':rpm'        => $linha['rpm'],
+            ':vel'        => $linha['velocidade'],
+            ':litros'     => $linha['consumo'],
+            ':horas'      => $linha['horas']
         ]);
-        
         $sucesso++;
-
     } catch (Exception $e) {
-        $erro_count++;
-        if (count($log_erros) < 5) {
-            $log_erros[] = "Equip $equip_id: " . $e->getMessage();
-        }
+        if(count($erros) < 3) $erros[] = $e->getMessage();
     }
 }
 
-// Comita as alterações no banco
-$pdo->commit();
-
-// Reativa a verificação de chave estrangeira (Boa prática)
 $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
-
-// --- 6. RETORNO ---
-echo json_encode([
-    'status'              => 'Concluido',
-    'recebidos'           => count($dados),
-    'processados_sucesso' => $sucesso,
-    'falhas'              => $erro_count,
-    'erros_amostra'       => $log_erros,
-    'modo_nuclear'        => 'ativado' // Flag para confirmar que rodou a versão nova
-]);
+echo json_encode(['status' => 'Concluido', 'processados' => $sucesso, 'erros' => $erros]);
 ?>
