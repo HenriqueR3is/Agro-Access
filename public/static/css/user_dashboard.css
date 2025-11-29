@@ -698,3 +698,13 @@
   background-color: #33ec61ff;
 }
 
+/* Fix de nitidez */
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+.alert, .no-edit-tooltip::after {
+    text-shadow: none !important; /* Remove sombras que causam embaçamento */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* Sombra suave apenas na caixa */
+    font-weight: 500; /* Engrossa levemente a fonte para leitura */
+}
