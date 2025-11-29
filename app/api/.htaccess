@@ -1,9 +1,0 @@
-# Ativa o motor de reescrita
-RewriteEngine On
-
-# Força o servidor a passar o cabeçalho Authorization para o PHP
-RewriteCond %{HTTP:Authorization} ^(.*)
-RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
-
-# Evita listagem de diretórios (segurança extra)
-Options -Indexes
