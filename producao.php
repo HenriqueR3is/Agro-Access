@@ -1,19 +1,19 @@
 <?php
-// dashboard.php
+// producao.php
+date_default_timezone_set('America/Sao_Paulo');
 $host = 'sql107.infinityfree.com'; $db = 'if0_39840919_agrodash'; $user = 'if0_39840919'; $pass = 'QQs4kbmVS7Z';
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4;port=3306", $user, $pass);
-} catch (PDOException $e) { die("Erro: " . $e->getMessage()); }
+try { $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4;port=3306", $user, $pass); } 
+catch (PDOException $e) { die("Erro: " . $e->getMessage()); }
 
-$sql = "SELECT * FROM producao_sgpa ORDER BY data DESC LIMIT 2000";
+// PEGA A ÚLTIMA DATA DISPONÍVEL NO BANCO
+$data_filtro = $pdo->query("SELECT MAX(data) FROM producao_sgpa")->fetchColumn();
+if(!$data_filtro) $data_filtro = date('Y-m-d');
+
+$sql = "SELECT * FROM producao_sgpa WHERE data = '$data_filtro' ORDER BY hectares_sgpa DESC";
 $dados = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 
-$total_hec = 0; 
-$total_horas = 0; // Novo Totalizador
-foreach($dados as $d) { 
-    $total_hec += $d['hectares_sgpa']; 
-    $total_horas += $d['horas_efetivas'];
-}
+$total_hec = 0; $total_horas = 0;
+foreach($dados as $d) { $total_hec += $d['hectares_sgpa']; $total_horas += $d['horas_efetivas']; }
 ?>
 
 <!DOCTYPE html>
@@ -34,7 +34,11 @@ foreach($dados as $d) {
 <body>
 <div class="container-fluid py-4">
     <div class="row mb-4">
-        <div class="col-12"><h2 class="fw-bold">🚜 Monitoramento SGPA (Automático)</h2></div>
+        <div class="col-12">
+            <h2 class="fw-bold">
+                🚜 Monitoramento SGPA (<?php echo date('d/m/Y', strtotime($data_filtro)); ?>)
+            </h2>
+        </div>
     </div>
     
     <div class="row mb-4 text-white">
@@ -126,7 +130,7 @@ foreach($dados as $d) {
         $('#tabelaSGPA').DataTable({ 
             language: {url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/pt-BR.json'}, 
             order: [[0, 'desc']],
-            pageLength: 50
+            pageLength: 10
         }); 
     });
 </script>

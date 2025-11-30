@@ -2,12 +2,9 @@
 // app/api/sync_sgpa.php
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
-
 header('Content-Type: application/json; charset=utf-8');
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST");
 
-// Autenticação InfinityFree
+// --- AUTENTICAÇÃO ---
 function obter_auth_header() {
     if (isset($_SERVER['HTTP_AUTHORIZATION'])) return $_SERVER['HTTP_AUTHORIZATION'];
     if (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) return $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
@@ -22,7 +19,7 @@ if (obter_auth_header() !== $secret_key) {
     http_response_code(403); exit(json_encode(['status' => 'erro', 'mensagem' => 'Token inválido']));
 }
 
-// Conexão
+// --- CONEXÃO ---
 $host = 'sql107.infinityfree.com'; $db = 'if0_39840919_agrodash'; $user = 'if0_39840919'; $pass = 'QQs4kbmVS7Z';
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8mb4;port=3306", $user, $pass, [
@@ -35,34 +32,40 @@ try {
 $dados = json_decode(file_get_contents('php://input'), true);
 if (!$dados) { http_response_code(400); exit(json_encode(['status' => 'erro', 'mensagem' => 'JSON vazio'])); }
 
-// SQL Poderoso: Salva Textos e Números
+// --- MODO LIMPEZA (Acionado apenas na primeira chamada) ---
+if (isset($_GET['modo']) && $_GET['modo'] === 'limpar') {
+    $datas_para_limpar = [];
+    foreach ($dados as $d) {
+        if (!empty($d['data'])) $datas_para_limpar[$d['data']] = true;
+    }
+    
+    if (!empty($datas_para_limpar)) {
+        $lista_datas = array_keys($datas_para_limpar);
+        $inQuery = implode(',', array_fill(0, count($lista_datas), '?'));
+        $stmt_del = $pdo->prepare("DELETE FROM producao_sgpa WHERE data IN ($inQuery)");
+        $stmt_del->execute($lista_datas);
+        echo json_encode(['status' => 'Limpeza Concluida', 'datas' => $lista_datas]);
+    } else {
+        echo json_encode(['status' => 'Nada a limpar']);
+    }
+    exit; // Para aqui, não insere nada
+}
+
+// --- MODO GRAVAÇÃO (Inserção Normal) ---
+// Note que removemos o DELETE daqui para não apagar os lotes anteriores
 $sql = "INSERT INTO producao_sgpa 
         (equipamento_id, nome_equipamento, unidade, frente, nome_operacao, operador, data, hectares_sgpa, rpm_medio, velocidade_media, consumo_litros, horas_efetivas, importado_em)
         VALUES 
-        (:id, :nome, :uni, :frente, :op_nome, :operador, :data, :hec, :rpm, :vel, :litros, :horas, NOW())
-        ON DUPLICATE KEY UPDATE
-        nome_equipamento = VALUES(nome_equipamento),
-        unidade          = VALUES(unidade),
-        frente           = VALUES(frente),
-        nome_operacao    = VALUES(nome_operacao),
-        operador         = VALUES(operador),
-        hectares_sgpa    = VALUES(hectares_sgpa),
-        rpm_medio        = VALUES(rpm_medio),
-        velocidade_media = VALUES(velocidade_media),
-        consumo_litros   = VALUES(consumo_litros),
-        horas_efetivas   = VALUES(horas_efetivas),
-        importado_em     = NOW()";
+        (:id, :nome, :uni, :frente, :op_nome, :operador, :data, :hec, :rpm, :vel, :litros, :horas, NOW())";
 
 $stmt = $pdo->prepare($sql);
-$pdo->exec("SET FOREIGN_KEY_CHECKS=0"); // Desativa travas de FK para permitir importação livre
+$pdo->exec("SET FOREIGN_KEY_CHECKS=0");
 
 $sucesso = 0; $erros = [];
 
 foreach ($dados as $linha) {
     try {
-        // Extrai apenas números para o ID (ex: 'TRATOR 1250' -> 1250)
         $equip_id = (int) preg_replace('/\D/', '', $linha['equipamento'] ?? '');
-        
         if ($equip_id <= 0 || empty($linha['data'])) continue;
 
         $stmt->execute([
@@ -86,5 +89,5 @@ foreach ($dados as $linha) {
 }
 
 $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
-echo json_encode(['status' => 'Concluido', 'processados' => $sucesso, 'erros' => $erros]);
+echo json_encode(['status' => 'Gravado', 'processados' => $sucesso, 'erros' => $erros]);
 ?>
