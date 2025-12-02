@@ -173,8 +173,8 @@ $visualizacao       = $_GET['visualizacao'] ?? 'cards'; // cards ou lista
 $iconePorOperacao = [
     1 => 'fa-spray-can text-primary',        // ACOP (aplicação de insumos)
     2 => 'fa-seedling text-primary',         // PLANTIO
-    3 => 'fa-person-digging text-warning',   // SUBSOLAGEM/ARADO
-    4 => 'fa-wine-bottle text-danger',       // VINHAÇA (líquido)
+    3 => 'fa-stream text-warning',           // SUBSOLAGEM/ARADO
+    4 => 'fas fa-flask text-danger',         // VINHAÇA (líquido)
     5 => 'fa-truck text-secondary',          // Transporte/Logística
 ];
 

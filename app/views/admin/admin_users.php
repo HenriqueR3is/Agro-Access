@@ -753,7 +753,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('formAction').value = 'add_user';
         document.getElementById('userForm').reset();
         document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
-        document.getElementById('ativo').checked = true;
+        document.getElementById('edit_ativo').checked = true;
         
         // Esconde o botão de reset na tela de adicionar (pois não tem usuário criado ainda)
         const btnReset = document.getElementById('btnResetPassword');

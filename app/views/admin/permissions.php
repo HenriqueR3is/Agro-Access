@@ -55,7 +55,6 @@ $categories = [
         'atalhos:edit' => 'Edição de Atalhos'
     ],
     'Relatórios' => [
-        'comparativo:view' => 'Comparativo de Produção',
         'consumo:view' => 'Consumo, Velocidade & RPM',
         'apontamentos:view' => 'Visualização de Apontamentos',
         'visaogeral:view' => 'Visão Geral'
@@ -177,7 +176,6 @@ function getDefaultPermissions() {
         ['admin', 'metas:view', 'Visualização de Metas', 'Gestão', 1],
         ['admin', 'metas:edit', 'Edição de Metas', 'Gestão', 1],
         ['admin', 'atalhos:edit', 'Edição de Atalhos', 'Gestão', 1],
-        ['admin', 'comparativo:view', 'Comparativo de Produção', 'Relatórios', 1],
         ['admin', 'consumo:view', 'Consumo, Velocidade & RPM', 'Relatórios', 1],
         ['admin', 'apontamentos:view', 'Visualização de Apontamentos', 'Relatórios', 1],
         ['admin', 'visaogeral:view', 'Visão Geral', 'Relatórios', 1],
@@ -193,7 +191,6 @@ function getDefaultPermissions() {
         ['cia_admin', 'metas:view', 'Visualização de Metas', 'Gestão', 1],
         ['cia_admin', 'metas:edit', 'Edição de Metas', 'Gestão', 1],
         ['cia_admin', 'atalhos:edit', 'Edição de Atalhos', 'Gestão', 1],
-        ['cia_admin', 'comparativo:view', 'Comparativo de Produção', 'Relatórios', 1],
         ['cia_admin', 'consumo:view', 'Consumo, Velocidade & RPM', 'Relatórios', 1],
         ['cia_admin', 'apontamentos:view', 'Visualização de Apontamentos', 'Relatórios', 1],
         ['cia_admin', 'visaogeral:view', 'Visão Geral', 'Relatórios', 1],
@@ -202,7 +199,6 @@ function getDefaultPermissions() {
 
         // CIA User - Acesso limitado
         ['cia_user', 'dashboard:view', 'Dashboard CIA', 'Dashboards', 1],
-        ['cia_user', 'comparativo:view', 'Comparativo de Produção', 'Relatórios', 1],
         ['cia_user', 'consumo:view', 'Consumo, Velocidade & RPM', 'Relatórios', 1],
         // Operador - Acesso mínimo
         ['operador', 'user_dashboard:view', 'Dashboard do Usuário', 'Dashboards', 1],

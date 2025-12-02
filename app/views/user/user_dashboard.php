@@ -167,46 +167,89 @@ try {
         
         // Metas e Progresso (RESTAURADO CÁLCULO DETALHADO)
         $hoje_brt = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
-        $data_hoje = $hoje_brt->format('Y-m-d'); $mes = $hoje_brt->format('m'); $ano = $hoje_brt->format('Y');
+        $data_hoje = $hoje_brt->format('Y-m-d'); 
+        $mes = $hoje_brt->format('m'); 
+        $ano = $hoje_brt->format('Y');
         
         if(!empty($allowed_ids)) {
             $in_clause = implode(',', array_fill(0, count($allowed_ids), '?'));
             $params = array_merge([$unidade_do_usuario], $allowed_ids);
             
-            // Metas
+            // 1. Busca as Metas (Isso continua vindo do sistema interno)
             $stmt = $pdo->prepare("SELECT operacao_id, meta_diaria, meta_mensal FROM metas_unidade_operacao WHERE unidade_id = ? AND operacao_id IN ($in_clause)");
             $stmt->execute($params);
             while($r = $stmt->fetch(PDO::FETCH_ASSOC)) $metas_por_operacao[$r['operacao_id']] = $r;
 
-            // Progresso Diário por Operação
-            $params_diario = array_merge([$unidade_do_usuario, $data_hoje], $allowed_ids);
-            $stmt_diario = $pdo->prepare("
-                SELECT operacao_id, SUM(hectares) AS total_ha, COUNT(*) AS total_entries
-                FROM apontamentos
-                WHERE unidade_id = ? AND DATE(data_hora) = ? AND operacao_id IN ($in_clause)
-                GROUP BY operacao_id
-            ");
-            $stmt_diario->execute($params_diario);
-            while ($row = $stmt_diario->fetch(PDO::FETCH_ASSOC)) {
-                $dados_por_operacao_diario[$row['operacao_id']] = [
-                    'total_ha' => (float)($row['total_ha'] ?? 0),
-                    'total_entries' => (int)($row['total_entries'] ?? 0),
-                ];
-            }
+            // =====================================================================
+            // 🚀 NOVA LÓGICA: PROGRESSO BASEADO NO SGPA (AUTOMÁTICO)
+            // =====================================================================
+            
+            // Mapa para traduzir o nome da sua operação (ID) para os nomes do SGPA (Texto)
+            $MAPA_OPERACOES_SGPA = [
+                'PLANTIO'    => ['PLANTANDO', 'PLANTIO MECANIZADO'],
+                'COLHEITA'   => ['COLHENDO', 'COLHEITA', 'CORTANDO'],
+                'ACOP'       => ['ACOP', 'TRANSBORDO'],
+                'VINHACA'    => ['VINHAÇA', 'FERTIRRIGAÇÃO'],
+                'SUBSOLAGEM' => ['SUBSOLAGEM', 'SUBSOLANDO'],
+                'PREPARO'    => ['PREPARO', 'GRADAGEM', 'SUBSOLAGEM']
+            ];
 
-            // Progresso Mensal por Operação
-            $params_mensal = array_merge([$unidade_do_usuario, $mes, $ano], $allowed_ids);
-            $stmt_mensal = $pdo->prepare("
-                SELECT operacao_id, SUM(hectares) AS total_ha, COUNT(*) AS total_entries
-                FROM apontamentos
-                WHERE unidade_id = ? AND MONTH(data_hora) = ? AND YEAR(data_hora) = ? AND operacao_id IN ($in_clause)
-                GROUP BY operacao_id
-            ");
-            $stmt_mensal->execute($params_mensal);
-            while ($row = $stmt_mensal->fetch(PDO::FETCH_ASSOC)) {
-                $dados_por_operacao_mensal[$row['operacao_id']] = [
-                    'total_ha' => (float)($row['total_ha'] ?? 0),
-                    'total_entries' => (int)($row['total_entries'] ?? 0),
+            // Termos para filtrar a unidade correta no SGPA
+            $termo1 = $unidade_nome_real;
+            $termo2 = !empty($unidade_sigla) ? $unidade_sigla : $unidade_nome_real;
+
+            // Para cada operação que o usuário tem acesso, buscamos o total no SGPA
+            foreach ($tipos_operacao as $op) {
+                $op_id = $op['id'];
+                $nome_sistema = strtoupper($op['nome']); // Ex: "PLANTIO"
+                
+                // Descobre quais palavras chave usar no SGPA (Se não achar no mapa, usa o próprio nome)
+                $palavras_chave = $MAPA_OPERACOES_SGPA[$nome_sistema] ?? [$op['nome']];
+                
+                // Monta clausula SQL dinâmica (nome_operacao LIKE 'X' OR nome_operacao LIKE 'Y')
+                $like_parts = [];
+                $params_sgpa_base = [];
+                foreach ($palavras_chave as $p) {
+                    $like_parts[] = "nome_operacao LIKE ?";
+                    $params_sgpa_base[] = "%$p%";
+                }
+                $sql_like = "(" . implode(" OR ", $like_parts) . ")";
+                
+                // Filtro extra para evitar duplicidade em Plantio/Replantio
+                $extra_filter = (stripos($nome_sistema, 'PLANTIO') !== false) ? " AND nome_operacao NOT LIKE '%REPLANTIO%' " : "";
+
+                // --- 1. Progresso Diário (SGPA) ---
+                $sql_dia = "SELECT SUM(hectares_sgpa) as total_ha, COUNT(*) as qtd 
+                            FROM producao_sgpa 
+                            WHERE data = ? 
+                            AND (unidade LIKE ? OR unidade LIKE ?) 
+                            AND $sql_like $extra_filter";
+                            
+                $params_dia = array_merge([$data_hoje, "%$termo1%", "%$termo2%"], $params_sgpa_base);
+                $stmt_dia = $pdo->prepare($sql_dia);
+                $stmt_dia->execute($params_dia);
+                $res_dia = $stmt_dia->fetch(PDO::FETCH_ASSOC);
+
+                $dados_por_operacao_diario[$op_id] = [
+                    'total_ha' => (float)($res_dia['total_ha'] ?? 0),
+                    'total_entries' => (int)($res_dia['qtd'] ?? 0)
+                ];
+
+                // --- 2. Progresso Mensal (SGPA) ---
+                $sql_mes = "SELECT SUM(hectares_sgpa) as total_ha, COUNT(*) as qtd 
+                            FROM producao_sgpa 
+                            WHERE MONTH(data) = ? AND YEAR(data) = ? 
+                            AND (unidade LIKE ? OR unidade LIKE ?) 
+                            AND $sql_like $extra_filter";
+                            
+                $params_mes = array_merge([$mes, $ano, "%$termo1%", "%$termo2%"], $params_sgpa_base);
+                $stmt_mes = $pdo->prepare($sql_mes);
+                $stmt_mes->execute($params_mes);
+                $res_mes = $stmt_mes->fetch(PDO::FETCH_ASSOC);
+
+                $dados_por_operacao_mensal[$op_id] = [
+                    'total_ha' => (float)($res_mes['total_ha'] ?? 0),
+                    'total_entries' => (int)($res_mes['qtd'] ?? 0)
                 ];
             }
         }
@@ -355,8 +398,18 @@ $total_monthly_goal     = array_sum(array_column($metas_por_operacao, 'meta_mens
         .mobile-menu-btn { display: none; background: none; border: none; font-size: 1.5rem; color: #fff; }
         .table-comp th { font-size: 0.85rem; background-color: #f8f9fa; }
         .table-comp td { font-size: 0.9rem; vertical-align: middle; }
-        /* Estilos para a lista de histórico restaurada */
-        .status-list { list-style: none; padding: 0; margin: 0; }
+        .status-list { 
+            list-style: none; 
+            padding: 0; 
+            margin: 0;
+            max-height: 248px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        .status-list::-webkit-scrollbar { width: 6px; }
+        .status-list::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .status-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+        .status-list::-webkit-scrollbar-thumb:hover { background: #999; }
         .entry-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
         .entry-item:last-child { border-bottom: none; }
         .entry-details { display: flex; flex-direction: column; }
@@ -364,7 +417,6 @@ $total_monthly_goal     = array_sum(array_column($metas_por_operacao, 'meta_mens
         .edit-btn { background: none; border: none; color: #6c757d; cursor: pointer; transition: color 0.2s; }
         .edit-btn:hover { color: #0d6efd; }
         .edit-btn.disabled { color: #dee2e6; cursor: not-allowed; }
-        /* Pequeno ajuste para garantir que os ícones fiquem bonitos */
         .icon-box {
             width: 45px;
             height: 45px;
@@ -376,7 +428,7 @@ $total_monthly_goal     = array_sum(array_column($metas_por_operacao, 'meta_mens
         .bg-primary-subtle { background-color: #cfe2ff; color: #084298; }
         .bg-success-subtle { background-color: #d1e7dd; color: #0f5132; }
         .bg-warning-subtle { background-color: #fff3cd; color: #664d03; }
-        .bg-info-subtle    { background-color: #cff4fc; color: #055160; }
+        .bg-info-subtle    { background-color: #cff4fc; color: #055160; }        
     </style>
 </head>
 <body>
@@ -386,7 +438,7 @@ $total_monthly_goal     = array_sum(array_column($metas_por_operacao, 'meta_mens
         <div class="header-content d-flex justify-content-between align-items-center">
             <div class="header-brand">
                 <img src="/public/static/img/logousa.png" alt="CTT Logo" class="header-logo">
-                <i class="fas fa-tractor"></i> <h1>Agro-Dash</h1> <span class="badge bg-warning text-dark">v2.5</span>
+                <i class="fas fa-tractor"></i> <h1>Agro-Dash</h1> <span class="badge bg-warning text-dark">v3.5</span>
             </div>
             <button class="mobile-menu-btn" id="mobileMenuBtn"><i class="fas fa-bars"></i></button>
             <div class="header-info" id="headerInfo">
@@ -464,7 +516,6 @@ $total_monthly_goal     = array_sum(array_column($metas_por_operacao, 'meta_mens
                             <div class="d-flex justify-content-between text-muted small">
                                 <div class="text-center"><span class="d-block fw-bold text-dark">Real</span><?= number_format($total_daily_hectares, 2, ',', '.') ?></div>
                                 <div class="text-center"><span class="d-block fw-bold text-dark">Meta</span><?= number_format($total_daily_goal, 0, ',', '.') ?></div>
-                                <div class="text-center"><span class="d-block fw-bold text-dark">Apont.</span><?= (int)$total_daily_entries ?></div>
                             </div>
                         </div>
                     </div>
@@ -479,7 +530,6 @@ $total_monthly_goal     = array_sum(array_column($metas_por_operacao, 'meta_mens
                             <div class="d-flex justify-content-between text-muted small">
                                 <div class="text-center"><span class="d-block fw-bold text-dark">Real</span><?= number_format($total_monthly_hectares, 2, ',', '.') ?></div>
                                 <div class="text-center"><span class="d-block fw-bold text-dark">Meta</span><?= number_format($total_monthly_goal, 0, ',', '.') ?></div>
-                                <div class="text-center"><span class="d-block fw-bold text-dark">Apont.</span><?= (int)$total_monthly_entries ?></div>
                             </div>
                         </div>
                     </div>
@@ -653,7 +703,7 @@ $total_monthly_goal     = array_sum(array_column($metas_por_operacao, 'meta_mens
             </div>
         </div>
 
-<div class="modal fade" id="editEntryModal" tabindex="-1" aria-labelledby="editEntryModalLabel" aria-hidden="true">
+</div> </div> <div class="modal fade" id="editEntryModal" tabindex="-1" aria-labelledby="editEntryModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">

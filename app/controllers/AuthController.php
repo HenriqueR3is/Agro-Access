@@ -12,16 +12,15 @@ function role_caps(string $role): array {
       return [
         'dashboard:view','admin:menu','admin:pages',
         'users:crud','fazendas:crud','equip:crud',
-        'comparativo:view','metas:view','metas:edit',
-        'audit:view'
+        'metas:view','metas:edit', 'audit:view'
       ];
     case 'cia_admin':
       return [
         'dashboard:view','admin:menu','users:view',
-        'fazendas:crud','equip:crud','comparativo:view','metas:view'
+        'fazendas:crud','equip:crud','metas:view'
       ];
     case 'cia_user':
-      return ['dashboard:view','comparativo:view'];
+      return ['dashboard:view'];
     case 'operador':
       return ['user_dashboard:view'];
     default:

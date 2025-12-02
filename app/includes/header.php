@@ -151,12 +151,6 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                 <i class="fas fa-tachometer-alt"></i>
                 <small>Dashboard</small>
             </a>
-            <?php if (userCan('comparativo:view', $userRole, $pdo)): ?>
-            <a href="/relatorios_bi" class="shortcut-link">
-                <i class="fas fa-chart-bar"></i>
-                <small>Relatórios</small>
-            </a>
-            <?php endif; ?>
             <?php if (userCan('users:crud', $userRole, $pdo)): ?>
             <a href="/admin_users" class="shortcut-link">
                 <i class="fas fa-users-cog"></i>
@@ -202,12 +196,9 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                 <?php endif; ?>
 
                 <!-- Relatórios -->
-                <?php if (userCan('comparativo:view', $userRole, $pdo) || userCan('consumo:view', $userRole, $pdo) || userCan('apontamentos:view', $userRole, $pdo) || userCan('visaogeral:view', $userRole, $pdo)): ?>
+                <?php if (userCan('consumo:view', $userRole, $pdo) || userCan('consumo:view', $userRole, $pdo) || userCan('apontamentos:view', $userRole, $pdo) || userCan('visaogeral:view', $userRole, $pdo)): ?>
                 <div class="has-submenu">📊 Relatórios <span class="arrow"></span></div>
                 <div class="submenu">
-                    <?php if (userCan('comparativo:view', $userRole, $pdo)): ?>
-                    <a href="comparativo" class="<?php echo basename($_SERVER['PHP_SELF']) == 'comparativo.php' ? 'active' : ''; ?>">📈 Comp. de Produção</a>
-                    <?php endif; ?>
                     
                     <?php if (userCan('consumo:view', $userRole, $pdo)): ?>
                     <a href="consumo" class="<?php echo basename($_SERVER['PHP_SELF']) == 'consumo.php' ? 'active' : ''; ?>">⛽ Con., Vel. & RPM</a>
@@ -255,6 +246,7 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                     <a href="/ctt" class="<?php echo basename($_SERVER['PHP_SELF'])=='ctt.php'?'active':''; ?>">👩🏻‍🌾 APONTA CTT</a>
                 </div>
                 <?php endif; ?>
+                <a href="/feedback" class="<?php echo basename($_SERVER['PHP_SELF'])=='feedback.php'?'active':''; ?>">📋 Feedback</a>
             </div>
             
             <div class="sidebar-profile-footer">
@@ -339,7 +331,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'admin_fleet.php': 'equip:crud',
         'admin_farms.php': 'fazendas:crud',
         'admin_metas.php': 'metas:view',
-        'comparativo.php': 'comparativo:view',
+        'consumo.php': 'consumo:view',
         'consumo.php': 'consumo:view',
         'consumo_equip.php': 'consumo:view',
         'admin_consumo.php': 'consumo:view',
