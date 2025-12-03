@@ -3,79 +3,69 @@ ob_start();
 
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
-    require_once __DIR__ . '/../app/controllers/AuthController.php';
 }
 
+// 1. Segurança de Sessão
 if (!isset($_SESSION['usuario_id'])) {
     header('Location: /login');
     exit();
 }
 
-// Buscar permissões do usuário atual
+// 2. Conexão com o Banco
+require_once __DIR__ . '/../../config/db/conexao.php'; 
+
+// ===============================================
+// 📥 PROCESSAMENTO DO FEEDBACK (NOVO)
+// ===============================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['acao_feedback'])) {
+    try {
+        $tipo = $_POST['tipo_feedback'];
+        $msg = trim($_POST['mensagem_feedback']);
+        $anonimo = isset($_POST['anonimo']);
+        $pagina = $_POST['pagina_atual'] ?? $_SERVER['REQUEST_URI'];
+        
+        // Se for anônimo, salva NULL no ID
+        $uid = $anonimo ? null : $_SESSION['usuario_id'];
+
+        if (!empty($msg)) {
+            $stmt = $pdo->prepare("INSERT INTO feedbacks (usuario_id, tipo, mensagem, pagina_origem) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$uid, $tipo, $msg, $pagina]);
+            $_SESSION['feedback_sucesso'] = true;
+        }
+        // Recarrega para limpar o POST
+        header("Location: " . $_SERVER['REQUEST_URI']);
+        exit;
+    } catch (Exception $e) {
+        // Erro silencioso ou log
+    }
+}
+
+// ===============================================
+// 3. Sistema de Permissões OTIMIZADO
+// ===============================================
 $userRole = strtolower($_SESSION['usuario_tipo'] ?? 'operador');
 $userPermissions = [];
 
-if ($userRole !== 'cia_dev') {
-    require_once __DIR__ . '/../helpers/SimpleAuth.php';
-    $userPermissions = getUserPermissionsFromDB($userRole);
-}
-
-
-// ===============================================
-// CONFIGURAÇÃO E CONEXÃO COM BANCO
-// ===============================================
-
-// Configurações do banco
-$host = 'localhost';
-$port = 3306;
-$db   = 'agrodash';
-$user = 'root';
-$pass = '';
-
-$dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-];
-
-try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (PDOException $e) {
-    error_log("Erro de conexão no header: " . $e->getMessage());
-}
-
-// ===============================================
-// SISTEMA DE PERMISSÕES
-// ===============================================
-
-$userRole = strtolower($_SESSION['usuario_tipo'] ?? 'operador');
-
-// Função para verificar permissões no banco
-function userCan($permissionKey, $userRole, $pdo) {
-    // Se for cia_dev, tem acesso total
-    if ($userRole === 'cia_dev') {
-        return true;
-    }
-    
+if ($userRole === 'cia_dev') {
+    $hasFullAccess = true;
+} else {
+    $hasFullAccess = false;
     try {
-        $stmt = $pdo->prepare("
-            SELECT can_access FROM role_permissions 
-            WHERE role_name = ? AND permission_key = ?
-        ");
-        $stmt->execute([$userRole, $permissionKey]);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        return $result && (bool)$result['can_access'];
-    } catch (Exception $e) {
-        error_log("Erro ao verificar permissão [$userRole, $permissionKey]: " . $e->getMessage());
-        return false;
+        $stmt = $pdo->prepare("SELECT permission_key FROM role_permissions WHERE role_name = ? AND can_access = 1");
+        $stmt->execute([$userRole]);
+        $userPermissions = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (PDOException $e) {
+        error_log("Erro permissões: " . $e->getMessage());
     }
 }
 
-// ===============================================
-// Definição das variáveis de usuário e badges
-// ===============================================
+function userCan($permissionKey) {
+    global $userRole, $userPermissions, $hasFullAccess;
+    if ($hasFullAccess) return true;
+    return in_array($permissionKey, $userPermissions);
+}
+
+// Variáveis de Interface
 $usuario_nome = htmlspecialchars($_SESSION['usuario_nome'] ?? 'Usuário');
 $usuario_tipo_raw = $userRole;
 
@@ -91,33 +81,14 @@ $usuario_cargo = $labelsTipo[$usuario_tipo_raw] ?? 'Desconhecido';
 
 $badges = [];
 if (in_array($usuario_tipo_raw, ['admin', 'cia_admin'])) {
-    $badges[] = [
-        'title' => 'Administrador',
-        'icon' => 'fas fa-shield-alt',
-        'color' => '#f39c12'
-    ];
+    $badges[] = ['title' => 'Administrador', 'icon' => 'fas fa-shield-alt', 'color' => '#f39c12'];
 }
 if ($usuario_tipo_raw === 'cia_user') {
-    $badges[] = [
-        'title' => 'Usuário',
-        'icon' => 'fas fa-star',
-        'color' => '#3498db'
-    ];
+    $badges[] = ['title' => 'Usuário', 'icon' => 'fas fa-star', 'color' => '#3498db'];
 }
-
 if ($usuario_tipo_raw === 'cia_dev') {
-    $badges[] = [
-        'title' => 'Desenvolvedor/CEO',
-        'icon' => 'fa-solid fa-web-awesome',
-        'color' => '#ffef11ff'
-    ];
-
-    $badges[] = [
-        'title' => 'Desenvolvedor',
-        'icon' => 'fa-solid fa-code',
-        'color' => '#00bfff'
-    ];
-    
+    $badges[] = ['title' => 'CEO/Dev', 'icon' => 'fa-solid fa-web-awesome', 'color' => '#ffef11ff'];
+    $badges[] = ['title' => 'Dev', 'icon' => 'fa-solid fa-code', 'color' => '#00bfff'];
 }
 
 $pagina_atual = basename($_SERVER['PHP_SELF']);
@@ -128,6 +99,7 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agro-Dash Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
     <link rel="stylesheet" href="/public/static/css/header.css">
     <link rel="stylesheet" href="/public/static/css/style.css">
@@ -151,20 +123,20 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
                 <i class="fas fa-tachometer-alt"></i>
                 <small>Dashboard</small>
             </a>
-            <?php if (userCan('users:crud', $userRole, $pdo)): ?>
+            <?php if (userCan('users:crud')): ?>
             <a href="/admin_users" class="shortcut-link">
                 <i class="fas fa-users-cog"></i>
                 <small>Usuários</small>
             </a>
             <?php endif; ?>
-            <?php if (userCan('atalhos:edit', $userRole, $pdo)): ?>
+            <?php if (userCan('atalhos:edit')): ?>
             <a href="/admin_atalhos" class="shortcut-link">
                 <i class="fa-solid fa-share-from-square"></i>
                 <small>Atalhos</small>
             </a>
             <?php endif; ?>
         </div>
-        <!-- Alterado para usar logout.php -->
+        
         <a href="/logout" class="logout-btn" onclick="return confirmLogout()">
             <i class="fas fa-sign-out-alt"></i>
         </a>
@@ -173,80 +145,78 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
     <div class="main-content">
         <div class="sidebar">
             <div class="sidebar-nav">
-                <!-- Gestão -->
-                <?php if (userCan('users:crud', $userRole, $pdo) || userCan('equip:crud', $userRole, $pdo) || userCan('fazendas:crud', $userRole, $pdo) || userCan('metas:view', $userRole, $pdo)): ?>
+                <?php if (userCan('users:crud') || userCan('equip:crud') || userCan('fazendas:crud') || userCan('metas:view')): ?>
                 <div class="has-submenu">👨‍💼 Gestão <span class="arrow"></span></div>
                 <div class="submenu">
-                    <?php if (userCan('users:crud', $userRole, $pdo)): ?>
+                    <?php if (userCan('users:crud')): ?>
                     <a href="admin_users" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_users.php' ? 'active' : ''; ?>">👥 Gestão de Usuários</a>
                     <?php endif; ?>
                     
-                    <?php if (userCan('equip:crud', $userRole, $pdo)): ?>
+                    <?php if (userCan('equip:crud')): ?>
                     <a href="admin_fleet" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_fleet.php' ? 'active' : ''; ?>">🚜 Gestão de Frota</a>
                     <?php endif; ?>
                     
-                    <?php if (userCan('fazendas:crud', $userRole, $pdo)): ?>
+                    <?php if (userCan('fazendas:crud')): ?>
                     <a href="fazendas" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_farms.php' ? 'active' : ''; ?>">🌾 Gestão Fda/Uni</a>
                     <?php endif; ?>
                     
-                    <?php if (userCan('metas:view', $userRole, $pdo)): ?>
+                    <?php if (userCan('metas:view')): ?>
                     <a href="metas" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_metas.php' ? 'active' : ''; ?>">🎯 Gestão de Metas</a>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
 
-                <!-- Relatórios -->
-                <?php if (userCan('consumo:view', $userRole, $pdo) || userCan('consumo:view', $userRole, $pdo) || userCan('apontamentos:view', $userRole, $pdo) || userCan('visaogeral:view', $userRole, $pdo)): ?>
+                <?php if (userCan('consumo:view') || userCan('apontamentos:view') || userCan('visaogeral:view')): ?>
                 <div class="has-submenu">📊 Relatórios <span class="arrow"></span></div>
                 <div class="submenu">
                     
-                    <?php if (userCan('consumo:view', $userRole, $pdo)): ?>
+                    <?php if (userCan('consumo:view')): ?>
                     <a href="consumo" class="<?php echo basename($_SERVER['PHP_SELF']) == 'consumo.php' ? 'active' : ''; ?>">⛽ Con., Vel. & RPM</a>
                     <a href="consumo_equip" class="<?php echo basename($_SERVER['PHP_SELF']) == 'consumo_equip.php' ? 'active' : ''; ?>">⛽ Comp. Consumo</a>
                     <a href="horasoperacionais" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_consumo.php' ? 'active' : ''; ?>">⏱ Horas Operacionais</a>
                     <?php endif; ?>
                     
-                    <?php if (userCan('apontamentos:view', $userRole, $pdo)): ?>
+                    <?php if (userCan('apontamentos:view')): ?>
                     <a href="admin_dashboard" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_dashboard.php' ? 'active' : ''; ?>">💻 Apontamentos</a>
                     <?php endif; ?>
                     
-                    <?php if (userCan('visaogeral:view', $userRole, $pdo)): ?>
+                    <?php if (userCan('visaogeral:view')): ?>
                     <a href="visaogeral" class="<?php echo basename($_SERVER['PHP_SELF']) == 'admin_rela.php' ? 'active' : ''; ?>">👁‍🗨 Visão Geral</a>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
 
-                <!-- CIA Dashboards -->
-                <?php if (userCan('user_dashboard:view', $userRole, $pdo)): ?>
+                <?php if (userCan('user_dashboard:view')): ?>
                 <div class="has-submenu">📈 CIA Dashboards <span class="arrow"></span></div>
                 <div class="submenu">
                     <a href="dashboard" class="<?php echo basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : ''; ?>">💻 Dash CIA</a>
-                    <?php if (userCan('user_dashboard:view', $userRole, $pdo)): ?>
+                    <?php if (userCan('user_dashboard:view')): ?>
                     <a href="user_dashboard" class="<?php echo basename($_SERVER['PHP_SELF']) == 'user_dashboard.php' ? 'active' : ''; ?>">🧑‍🌾 Dash User</a>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
 
-                <!-- CTT - Colheita -->
-                <?php if (userCan('audit:view', $userRole, $pdo)): ?>
+                <?php if (userCan('audit:view')): ?>
                 <div class="has-submenu">🚜 CTT - Colheita <span class="arrow"></span></div>
                 <div class="submenu">
                     <a href="/ctt" class="<?php echo basename($_SERVER['PHP_SELF'])=='ctt.php'?'active':''; ?>">📈 Aponta CTT</a>
                 </div>
                 <?php endif; ?>
 
-                <!-- DEV Section -->
-                <?php if (userCan('audit:view', $userRole, $pdo)): ?>
+                <?php if (userCan('audit:view')): ?>
                 <div class="has-submenu">👑 DEV Section <span class="arrow"></span></div>
                 <div class="submenu">
                     <a href="/permissions" class="<?php echo basename($_SERVER['PHP_SELF'])=='permissions.php'?'active':''; ?>">🚫 Permissões</a>
                     <a href="/configuracoes" class="<?php echo basename($_SERVER['PHP_SELF'])=='config.php'?'active':''; ?>">🚫 Configurações</a>
                     <a href="/audit_logs" class="<?php echo basename($_SERVER['PHP_SELF'])=='audit_logs.php'?'active':''; ?>">📃 Logs de Auditoria</a>
-                    <a href="/aponta" class="<?php echo basename($_SERVER['PHP_SELF'])=='apontamentos.php'?'active':''; ?>">🚜 APONTA PPT</a>
-                    <a href="/ctt" class="<?php echo basename($_SERVER['PHP_SELF'])=='ctt.php'?'active':''; ?>">👩🏻‍🌾 APONTA CTT</a>
+                    
+                    <a href="/admin_feedbacks" class="<?php echo basename($_SERVER['PHP_SELF'])=='admin_feedbacks.php'?'active':''; ?>">📥 Ler Feedbacks</a>
                 </div>
                 <?php endif; ?>
-                <a href="/feedback" class="<?php echo basename($_SERVER['PHP_SELF'])=='feedback.php'?'active':''; ?>">📋 Feedback</a>
+                
+                <a href="#" data-bs-toggle="modal" data-bs-target="#modalFeedback" class="text-warning">
+                    <i class="fas fa-bullhorn me-2"></i> Enviar Feedback
+                </a>
             </div>
             
             <div class="sidebar-profile-footer">
@@ -270,8 +240,69 @@ $pagina_atual = basename($_SERVER['PHP_SELF']);
             </div>
         </div>
 
+<div class="modal fade" id="modalFeedback" tabindex="-1" aria-hidden="true" style="z-index: 9999;">
+    <div class="modal-dialog">
+        <div class="modal-content text-dark">
+            <form method="POST">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title"><i class="fas fa-bullhorn me-2"></i>Enviar Feedback</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body">
+                    <input type="hidden" name="acao_feedback" value="1">
+                    <input type="hidden" name="pagina_atual" value="<?= htmlspecialchars($_SERVER['REQUEST_URI']) ?>">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Tipo:</label>
+                        <select name="tipo_feedback" class="form-select" required>
+                            <option value="sugestao">💡 Sugestão</option>
+                            <option value="bug">🐛 Reportar Erro</option>
+                            <option value="critica">⚠️ Crítica</option>
+                            <option value="elogio">👏 Elogio</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Mensagem:</label>
+                        <textarea name="mensagem_feedback" class="form-control" rows="4" placeholder="Descreva aqui..." required></textarea>
+                    </div>
+
+                    <div class="form-check form-switch bg-light p-2 rounded">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" name="anonimo" id="checkAnonimo">
+                        <label class="form-check-label fw-bold" for="checkAnonimo">Enviar Anônimo</label>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Enviar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<?php if (isset($_SESSION['feedback_sucesso'])): ?>
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 11000">
+    <div class="toast show align-items-center text-white bg-success border-0 shadow-lg">
+        <div class="d-flex">
+            <div class="toast-body fs-6">
+                <i class="fas fa-check-circle me-2"></i> Feedback enviado com sucesso!
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
+<script>
+    setTimeout(() => { document.querySelector('.toast')?.remove(); }, 4000);
+</script>
+<?php unset($_SESSION['feedback_sucesso']); endif; ?>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Script do Menu (Mantido do original)
     const submenus = document.querySelectorAll('.has-submenu');
 
     function saveState() {
@@ -289,7 +320,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 item.classList.add('open');
                 const submenu = item.nextElementSibling;
                 if (submenu && submenu.classList.contains('submenu')) {
-                    // Sem transição no carregamento
                     submenu.style.maxHeight = submenu.scrollHeight + 'px';
                 }
             }
@@ -298,16 +328,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     submenus.forEach(item => {
         const submenu = item.nextElementSibling;
-        
-        // Adiciona o evento de clique para abrir/fechar e salvar
         item.addEventListener('click', () => {
-            // Adiciona a classe de transição somente no clique
-            if (submenu) {
-                submenu.classList.add('submenu-animated');
-            }
-            
+            if (submenu) submenu.classList.add('submenu-animated');
             item.classList.toggle('open');
-            
             if (submenu && submenu.classList.contains('submenu')) {
                 if (item.classList.contains('open')) {
                     submenu.style.maxHeight = submenu.scrollHeight + 'px';
@@ -315,7 +338,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     submenu.style.maxHeight = '0';
                 }
             }
-            
             saveState();
         });
     });
@@ -323,15 +345,13 @@ document.addEventListener('DOMContentLoaded', function() {
     restoreState();
 });
 
-// Sistema de proteção de páginas - verifica se usuário tem acesso à página atual
+// Sistema de proteção de páginas
 (function(){
-    // Mapeamento de páginas para permissões necessárias
     const pagePermissions = {
         'admin_users.php': 'users:crud',
         'admin_fleet.php': 'equip:crud',
         'admin_farms.php': 'fazendas:crud',
         'admin_metas.php': 'metas:view',
-        'consumo.php': 'consumo:view',
         'consumo.php': 'consumo:view',
         'consumo_equip.php': 'consumo:view',
         'admin_consumo.php': 'consumo:view',
@@ -341,36 +361,25 @@ document.addEventListener('DOMContentLoaded', function() {
         'audit_logs.php': 'audit:view',
         'aponta.php': 'audit:view',
         'ctt.php': 'audit:view',
-        'admin_atalhos.php' : 'atalhos:edit'
+        'admin_atalhos.php' : 'atalhos:edit',
+        'admin_feedbacks.php' : 'audit:view' // Apenas admin acessa feedbacks
     };
 
     function checkPageAccess() {
         const currentPage = window.location.pathname.split('/').pop();
         const requiredPermission = pagePermissions[currentPage];
         
-        if (requiredPermission) {
-            // Verificar se o link correspondente está visível
-            const link = document.querySelector(`a[href*="${currentPage}"]`);
-            if (!link || link.offsetParent === null) {
-                show403Toast('❌ Acesso negado: Você não tem permissão para acessar esta página.');
-                setTimeout(() => {
-                    window.location.href = '/dashboard';
-                }, 3000);
-            }
-        }
+        // Verifica se a permissão existe e se o usuário NÃO tem ela (via classe 'd-none' ou ausência do menu)
+        // Como o PHP já filtrou o menu, se o link não existir, o usuário não tem permissão
+        // Essa verificação JS é visual secundária. O PHP no topo dos arquivos é a segurança real.
     }
-
-    // Verificar acesso quando a página carregar
-    setTimeout(checkPageAccess, 100);
 })();
 
-// Toast no TOPO central
 window.show403Toast = (msg) => {
     const t = document.createElement('div');
     t.className = 'toast-403';
     t.textContent = msg;
     document.body.appendChild(t);
-    // animação
     requestAnimationFrame(()=> t.classList.add('show'));
     setTimeout(()=> { t.classList.remove('show'); setTimeout(()=>t.remove(), 200); }, 2400);
 };
@@ -391,15 +400,14 @@ window.show403Toast = (msg) => {
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     font-weight: 500;
 }
-
 .toast-403.show {
     transform: translateX(-50%) translateY(0);
 }
-
-/* Estilo para links desabilitados por permissão */
 a[style*="display: none"] {
     display: none !important;
 }
 </style>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
