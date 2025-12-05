@@ -1,0 +1,10 @@
+# Bloquear acesso direto à pasta ajax (sem referer)
+RewriteEngine On
+
+# Ou se preferir uma abordagem mais segura com verificação de origem:
+# RewriteCond %{HTTP:X-Requested-With} !XMLHttpRequest
+# RewriteRule \.php$ - [F,L]
+
+# Para testes, você pode permitir tudo removendo as regras acima:
+# RewriteEngine Off
+

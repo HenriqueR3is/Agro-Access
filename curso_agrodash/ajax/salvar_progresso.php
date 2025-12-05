@@ -61,7 +61,7 @@ case 'prova':
     error_log("Dados da prova - Nota: $nota, Tentativas: $tentativas, Aprovado: $aprovado, Acertos: $acertos/$total, Item ID: $item_id");
     
     // Gerar código de validação único
-    $codigo_validacao = 'AGD' . strtoupper(uniqid());
+$codigo_validacao = 'AGD' . strtoupper(substr(uniqid(), -7)); // AGD (3) + 7 = 10 caracteres
     
     error_log("Código gerado: $codigo_validacao");
     

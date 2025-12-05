@@ -54,6 +54,7 @@ require_once __DIR__ . '/../../../app/includes/header.php';
     <meta charset="UTF-8">
     <title>Gestão de Feedbacks</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.2/css/all.css">
     <style>
         body { overflow: hidden; background-color: #f4f6f9; }
         

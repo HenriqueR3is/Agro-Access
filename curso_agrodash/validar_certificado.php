@@ -11,10 +11,34 @@ if (isset($_REQUEST['codigo']) && !empty($_REQUEST['codigo'])) {
     // Limpa e prepara o código
     $codigo = trim(strtoupper($_REQUEST['codigo']));
 
-    // Busca o código no banco de dados - CORRIGIDO para usar item_id dinâmico
+    // Busca o código no banco de dados - CORREÇÃO APLICADA
     $curso_id = null;
-    if (preg_match('/AGD\d+/', $codigo)) {
-        // Se for um código novo, extrai o curso_id do item_id
+    
+    // Primeiro, busca diretamente pelo código de validação
+    $stmt = $pdo->prepare("
+        SELECT 
+            u.nome AS nome_aluno,
+            u.email AS email_aluno,
+            p.nota AS nota_final,
+            p.data_conclusao AS data_conclusao,
+            c.titulo AS nome_curso,
+            p.codigo_validacao,
+            p.curso_id,
+            p.item_id
+        FROM progresso_curso p
+        JOIN usuarios u ON p.usuario_id = u.id
+        JOIN cursos c ON p.curso_id = c.id
+        WHERE p.codigo_validacao = ?
+          AND p.tipo = 'prova'
+          AND p.aprovado = 1
+        LIMIT 1
+    ");
+    $stmt->execute([$codigo]);
+    $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // Se não encontrou, tenta a abordagem alternativa para códigos novos
+    if (!$resultado && preg_match('/AGD\d+/', $codigo)) {
+        // Se for um código novo, busca no progresso_curso
         $stmt_item = $pdo->prepare("
             SELECT curso_id, item_id 
             FROM progresso_curso 
@@ -26,35 +50,40 @@ if (isset($_REQUEST['codigo']) && !empty($_REQUEST['codigo'])) {
         $stmt_item->execute([$codigo]);
         $item_data = $stmt_item->fetch(PDO::FETCH_ASSOC);
         
-        if ($item_data && preg_match('/final-curso-(\d+)/', $item_data['item_id'], $matches)) {
-            $curso_id = $matches[1];
+        if ($item_data) {
+            $curso_id = $item_data['curso_id'];
+            
+            // Busca os dados completos com o curso_id encontrado
+            $stmt = $pdo->prepare("
+                SELECT 
+                    u.nome AS nome_aluno,
+                    u.email AS email_aluno,
+                    p.nota AS nota_final,
+                    p.data_conclusao AS data_conclusao,
+                    c.titulo AS nome_curso,
+                    p.codigo_validacao,
+                    p.curso_id
+                FROM progresso_curso p
+                JOIN usuarios u ON p.usuario_id = u.id
+                JOIN cursos c ON p.curso_id = c.id
+                WHERE p.codigo_validacao = ?
+                  AND p.tipo = 'prova'
+                  AND p.curso_id = ?
+                  AND p.aprovado = 1
+                LIMIT 1
+            ");
+            $stmt->execute([$codigo, $curso_id]);
+            $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
         }
-    }
-
-    if ($curso_id) {
-        $stmt = $pdo->prepare("
-            SELECT 
-                u.nome AS nome_aluno,
-                u.email AS email_aluno,
-                p.nota AS nota_final,
-                p.data_conclusao AS data_conclusao,
-                c.titulo AS nome_curso,
-                p.codigo_validacao
-            FROM progresso_curso p
-            JOIN usuarios u ON p.usuario_id = u.id
-            JOIN cursos c ON p.curso_id = c.id
-            WHERE p.codigo_validacao = ?
-              AND p.tipo = 'prova'
-              AND p.curso_id = ?
-              AND p.aprovado = 1
-            LIMIT 1
-        ");
-        $stmt->execute([$codigo, $curso_id]);
-        $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     if (!$resultado) {
         $erro = "Certificado não encontrado ou inválido.";
+    } else {
+        // Garante que o nome do curso tenha um valor padrão se estiver vazio
+        if (empty($resultado['nome_curso'])) {
+            $resultado['nome_curso'] = 'Curso AgroDash - Gestão e Análise de Performance Agrícola';
+        }
     }
 }
 ?>

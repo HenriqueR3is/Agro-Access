@@ -19,6 +19,6 @@ if ($id) {
     }
 }
 
-header("Location: ../admin_cursos.php");
+header("Location: /curso_agrodash/admincursos");
 exit;
 ?>

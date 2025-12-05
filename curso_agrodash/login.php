@@ -4,7 +4,7 @@ require_once __DIR__ . '/../config/db/conexao.php';
 
 // Se já estiver logado, redireciona para o dashboard
 if (isset($_SESSION['usuario_id'])) {
-    header("Location: dashboard.php");
+    header("Location: /curso_agrodash/dashboard");
     exit;
 }
 
@@ -26,7 +26,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $_SESSION['usuario_email'] = $usuario['email'];
 
             // Redireciona para dashboard.php independente do tipo de usuário
-            header("Location: dashboard.php");
+            header("Location: /curso_agrodash/dashboard");
             exit;
         } else {
             $erro = "Usuário ou senha inválidos.";

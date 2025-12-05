@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agro-Access | Modern Opening</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0c1f0c 0%, #051405 100%);
+            overflow: hidden;
+            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+        }
+        
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        
+        /* Efeito de grade geométrica animada */
+        .grid-overlay {
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background-image: 
+                linear-gradient(rgba(76, 175, 80, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(76, 175, 80, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            transform: perspective(500px) rotateX(60deg);
+            animation: gridMove 20s linear infinite;
+            top: -50%;
+            left: -50%;
+        }
+        
+        @keyframes gridMove {
+            0% {
+                transform: perspective(500px) rotateX(60deg) translateY(0);
+            }
+            100% {
+                transform: perspective(500px) rotateX(60deg) translateY(50px);
+            }
+        }
+        
+        /* Partículas flutuantes */
+        .floating-particle {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, #4CAF50, transparent);
+            filter: blur(1px);
+            animation: floatParticle 15s infinite linear;
+        }
+        
+        @keyframes floatParticle {
+            0% {
+                transform: translateY(100vh) scale(0) rotate(0deg);
+                opacity: 0;
+            }
+            10% {
+                opacity: 0.7;
+            }
+            90% {
+                opacity: 0.5;
+            }
+            100% {
+                transform: translateY(-100px) scale(1) rotate(360deg);
+                opacity: 0;
+            }
+        }
+        
+        /* Logo principal com design moderno */
+        .logo-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+        }
+        
+        .leaf-icon {
+            font-size: 140px;
+            color: #4CAF50;
+            margin-bottom: 40px;
+            filter: drop-shadow(0 0 15px rgba(76, 175, 80, 0.9));
+            transform: scale(0);
+            animation: growLeaf 2.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards 0.5s;
+        }
+        
+        /* Animação da folha da versão anterior */
+        @keyframes growLeaf {
+            0% {
+                transform: scale(0) rotate(-180deg);
+                opacity: 0;
+            }
+            70% {
+                transform: scale(1.3) rotate(15deg);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1) rotate(0deg);
+                opacity: 1;
+            }
+        }
+        
+        .logo-text {
+            font-size: 68px;
+            font-weight: 300;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #e8f5e9, #c8e6c9, #a5d6a7, #81c784);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            position: relative;
+            padding-bottom: 15px;
+            opacity: 0;
+            animation: textReveal 2s forwards 0.8s;
+        }
+        
+        .logo-text::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A, #CDDC39);
+            animation: lineExpand 1.5s forwards 1.8s;
+        }
+        
+        @keyframes textReveal {
+            0% {
+                opacity: 0;
+                transform: translateY(30px) scale(0.9);
+                letter-spacing: 20px;
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                letter-spacing: 8px;
+            }
+        }
+        
+        @keyframes lineExpand {
+            0% {
+                width: 0;
+            }
+            100% {
+                width: 100%;
+            }
+        }
+        
+        /* Anéis concêntricos animados */
+        .ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            animation: ringPulse 4s infinite;
+        }
+        
+        @keyframes ringPulse {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(2.5);
+                opacity: 0;
+            }
+        }
+        
+        /* Efeito de conexões entre partículas */
+        .connections {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: 5;
+        }
+        
+        .connection-line {
+            position: absolute;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #4CAF50, transparent);
+            transform-origin: left center;
+            animation: connectionGlow 3s infinite;
+        }
+        
+        @keyframes connectionGlow {
+            0%, 100% {
+                opacity: 0.2;
+            }
+            50% {
+                opacity: 0.8;
+            }
+        }
+        
+        /* Efeito de brilho sutil */
+        .glow-effect {
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(76, 175, 80, 0.15) 0%, transparent 70%);
+            filter: blur(40px);
+            z-index: 1;
+            animation: glowMove 10s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glowMove {
+            0% {
+                transform: translate(-30%, -30%);
+            }
+            100% {
+                transform: translate(30%, 30%);
+            }
+        }
+        
+        /* Folhas pequenas animadas (substituindo os triângulos) */
+        .small-leaf {
+            position: absolute;
+            font-size: 24px;
+            color: rgba(76, 175, 80, 0.7);
+            animation: leafFloat 20s infinite linear;
+            opacity: 0.6;
+            filter: drop-shadow(0 0 5px rgba(76, 175, 80, 0.5));
+            z-index: 8;
+        }
+        
+        @keyframes leafFloat {
+            0% {
+                transform: translateY(100vh) rotate(0deg) scale(0.8);
+                opacity: 0;
+            }
+            10% {
+                opacity: 0.7;
+            }
+            90% {
+                opacity: 0.5;
+            }
+            100% {
+                transform: translateY(-100px) rotate(360deg) scale(1.2);
+                opacity: 0;
+            }
+        }
+        
+        /* Barra de progresso moderna */
+        .progress-container {
+            position: absolute;
+            bottom: 60px;
+            width: 300px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            z-index: 20;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A, #CDDC39);
+            border-radius: 2px;
+            animation: progressFill 4s forwards 0.5s;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.7);
+        }
+        
+        @keyframes progressFill {
+            0% {
+                width: 0%;
+            }
+            100% {
+                width: 100%;
+            }
+        }
+        
+        /* Efeito de partículas de luz - já começam espalhadas */
+        .light-spark {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background-color: #fff;
+            box-shadow: 0 0 10px 2px #CDDC39;
+            animation: sparkle 3s infinite;
+            z-index: 10;
+            opacity: 0;
+        }
+        
+        @keyframes sparkle {
+            0%, 100% {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.5);
+            }
+        }
+        
+        /* Efeito de brilho no texto */
+        .text-glow {
+            text-shadow: 0 0 10px rgba(76, 175, 80, 0.5),
+                         0 0 20px rgba(76, 175, 80, 0.3),
+                         0 0 30px rgba(76, 175, 80, 0.1);
+        }
+        
+        /* Efeito de fumaça da versão anterior */
+        .smoke {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: rgba(139, 195, 74, 0.7);
+            filter: blur(8px);
+            animation: smokeRise 5s infinite;
+            z-index: 2;
+        }
+        
+        @keyframes smokeRise {
+            0% {
+                transform: translateY(0) scale(1) rotate(0deg);
+                opacity: 0.8;
+            }
+            100% {
+                transform: translateY(-150px) scale(4) rotate(180deg);
+                opacity: 0;
+            }
+        }
+        
+        /* Efeito de pulso no ícone da versão anterior */
+        .leaf-pulse {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: 2px solid rgba(76, 175, 80, 0.5);
+            animation: pulseRing 3s infinite;
+            z-index: 2;
+        }
+        
+        @keyframes pulseRing {
+            0% {
+                transform: scale(0.5);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+
+
+
+        
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="grid-overlay"></div>
+        <div class="glow-effect"></div>
+        <div class="connections" id="connections"></div>
+        
+        <div class="logo-container">
+            <i class="fas fa-leaf leaf-icon"></i>
+            <div class="logo-text text-glow">Agro-Access</div>
+        </div>
+        
+        <div class="progress-container">
+            <div class="progress-bar"></div>
+        </div>
+    </div>
+
+    <script>
+        // Criar partículas flutuantes
+        const container = document.querySelector('.container');
+        const colors = ['#4CAF50', '#8BC34A', '#CDDC39', '#2E7D32'];
+        
+        for (let i = 0; i < 60; i++) {
+            const particle = document.createElement('div');
+            particle.classList.add('floating-particle');
+            
+            const size = Math.random() * 20 + 5;
+            const left = Math.random() * 1000;
+            const delay = Math.random() * 0;
+            const duration = 10 + Math.random() * 20;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            
+            particle.style.width = `${size}px`;
+            particle.style.height = `${size}px`;
+            particle.style.left = `${left}%`;
+            particle.style.animationDelay = `${delay}s`;
+            particle.style.animationDuration = `${duration}s`;
+            particle.style.backgroundColor = color;
+            
+            container.appendChild(particle);
+        }
+        
+        // Criar anéis concêntricos
+        for (let i = 0; i < 5; i++) {
+            const ring = document.createElement('div');
+            ring.classList.add('ring');
+            
+            const size = 200 + i * 100;
+            const delay = i * 0.8;
+            
+            ring.style.width = `${size}px`;
+            ring.style.height = `${size}px`;
+            ring.style.animationDelay = `${delay}s`;
+            
+            container.appendChild(ring);
+        }
+        
+        // Criar folhas pequenas animadas (substituindo os triângulos)
+        for (let i = 0; i < 25; i++) {
+            const leaf = document.createElement('div');
+            leaf.classList.add('small-leaf');
+            leaf.innerHTML = '<i class="fas fa-leaf"></i>';
+            
+            const left = Math.random() * 100;
+            const delay = Math.random() * 0;
+            const duration = 15 + Math.random() * 20;
+            const size = 0.5 + Math.random() * 1.5;
+            const colorIndex = Math.floor(Math.random() * colors.length);
+            
+            leaf.style.left = `${left}%`;
+            leaf.style.animationDelay = `${delay}s`;
+            leaf.style.animationDuration = `${duration}s`;
+            leaf.style.fontSize = `${24 * size}px`;
+            leaf.style.color = colors[colorIndex];
+            leaf.style.opacity = `${0.4 + Math.random() * 0.4}`;
+            
+            container.appendChild(leaf);
+        }
+        
+        // Criar partículas de luz já espalhadas pela tela
+        for (let i = 0; i < 50; i++) {
+            const spark = document.createElement('div');
+            spark.classList.add('light-spark');
+            
+            const left = Math.random() * 100;
+            const top = Math.random() * 100;
+            const delay = Math.random() * 3;
+            const duration = 2 + Math.random() * 2;
+            
+            spark.style.left = `${left}%`;
+            spark.style.top = `${top}%`;
+            spark.style.animationDelay = `${delay}s`;
+            spark.style.animationDuration = `${duration}s`;
+            
+            container.appendChild(spark);
+        }
+        
+        // Criar linhas de conexão
+        const connections = document.getElementById('connections');
+        for (let i = 0; i < 30; i++) {
+            const line = document.createElement('div');
+            line.classList.add('connection-line');
+            
+            const width = Math.random() * 150 + 50;
+            const left = Math.random() * 100;
+            const top = Math.random() * 100;
+            const rotation = Math.random() * 360;
+            const delay = Math.random() * 5;
+            
+            line.style.width = `${width}px`;
+            line.style.left = `${left}%`;
+            line.style.top = `${top}%`;
+            line.style.transform = `rotate(${rotation}deg)`;
+            line.style.animationDelay = `${delay}s`;
+            
+            connections.appendChild(line);
+        }
+        
+        // Criar efeito de fumaça da versão anterior
+        const leafIcon = document.querySelector('.leaf-icon');
+        setInterval(() => {
+            const smoke = document.createElement('div');
+            smoke.classList.add('smoke');
+            
+            // Posição aleatória ao redor da folha
+            const offsetX = (Math.random() - 0.5) * 60;
+            const offsetY = (Math.random() - 0.5) * 40;
+            
+            smoke.style.left = `calc(50% + ${offsetX}px)`;
+            smoke.style.top = `calc(50% - 70px + ${offsetY}px)`;
+            smoke.style.animationDelay = `${Math.random() * 2}s`;
+            
+            // Cor aleatória da paleta verde
+            const smokeColors = ['rgba(76, 175, 80, 0.7)', 'rgba(139, 195, 74, 0.7)', 'rgba(205, 220, 57, 0.6)'];
+            smoke.style.backgroundColor = smokeColors[Math.floor(Math.random() * smokeColors.length)];
+            
+            container.appendChild(smoke);
+            
+            // Remover após a animação
+            setTimeout(() => {
+                if (smoke.parentNode) {
+                    smoke.remove();
+                }
+            }, 5000);
+        }, 200);
+        
+        // Efeito de pulso adicional no ícone da versão anterior
+        setInterval(() => {
+            const pulse = document.createElement('div');
+            pulse.classList.add('leaf-pulse');
+            pulse.style.left = '50%';
+            pulse.style.top = '50%';
+            pulse.style.transform = 'translate(-50%, -50%) scale(0.5)';
+            
+            container.appendChild(pulse);
+            
+            setTimeout(() => {
+                if (pulse.parentNode) {
+                    pulse.remove();
+                }
+            }, 3000);
+        }, 1500);
+    </script>
+</body>
+</html>

@@ -1,11 +1,61 @@
 RewriteEngine On
 
-# Definir login.php como página inicial
+# Se quiser definir uma página inicial diferente para este sub-site
 DirectoryIndex login.php
 
-# Redirecionar acesso à raiz para login.php
-RewriteRule ^$ login.php [L]
 
-RewriteRule ^curso_agrodash/login$ curso_agrodash/login.php [L]
+# Redirecionar acesso à pasta curso_agrodash para login.php
+RewriteRule ^$ login?$ [L]
 
-RewriteRule ^curso_agrodash/validar2$ curso_agrodash/validar_certificado.php [L]
+
+
+
+# URL amigável para login
+RewriteRule ^login/?$ login.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^validar2/?$ validar_certificado.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^dashboard/?$ dashboard.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^adminpainel/?$ admin_dashboard.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^admincursos/?$ admin/admin_cursos.php [L]
+
+
+# URL amigável para validar certificado
+RewriteRule ^admincursosedit/?$ admin/admin_curso_editar.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^sair/?$ logout.php [L]
+
+
+# URL amigável para validar certificado
+RewriteRule ^adminmodulos/?$ admin/admin_modulos.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^adminprovafinal/?$ admin/admin_prova_final.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^adminconteudos/?$ admin/admin_conteudos.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^curso/?$ curso.php [L]
+# URL amigável para validar certificado
+RewriteRule ^loja/?$ admin_loja.php [L]
+
+
+RewriteRule ^admin_loja.php/?$ admin_loja.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^certificado/?$ certificado.php [L]
+
+# URL amigável para validar certificado
+RewriteRule ^teste/?$ teste.php [L]
+
+# Bloquear acesso direto aos arquivos .php (opcional)
+RewriteCond %{THE_REQUEST} \.php[\s?] [NC]
+RewriteRule ^ - [R=404,L]

@@ -142,16 +142,43 @@ foreach ($modulos_db as $modulo) {
     $conteudos = $stmt_conteudos->fetchAll(PDO::FETCH_ASSOC);
     
     // Processar conteúdos normais
-    $conteudos_processados = [];
-    
-    foreach ($conteudos as $conteudo) {
-        // Processar quebras de linha no conteúdo
-        if (!empty($conteudo['conteudo'])) {
-            $conteudo['conteudo'] = nl2br(htmlspecialchars($conteudo['conteudo']));
-        }
-        
-        $conteudos_processados[] = $conteudo;
+$conteudos_processados = [];
+
+foreach ($conteudos as $conteudo) {
+    // Processar baseado no tipo
+    switch ($conteudo['tipo']) {
+        case 'texto':
+            if (!empty($conteudo['conteudo'])) {
+                $conteudo['conteudo'] = nl2br(htmlspecialchars($conteudo['conteudo']));
+            }
+            break;
+            
+        case 'video':
+            // Preparar dados do vídeo
+            $conteudo['video_data'] = [
+                'url' => $conteudo['url_video'] ?? '',
+                'arquivo' => $conteudo['arquivo'] ?? ''
+            ];
+            break;
+            
+        case 'imagem':
+            // Preparar dados da imagem
+            $conteudo['imagem_data'] = [
+                'arquivo' => $conteudo['arquivo'] ?? '',
+                'legenda' => $conteudo['descricao'] ?? ''
+            ];
+            break;
+            
+        case 'quiz':
+            // Processar quiz se existir
+            if (!empty($conteudo['conteudo'])) {
+                $conteudo['quiz_data'] = json_decode($conteudo['conteudo'], true);
+            }
+            break;
     }
+    
+    $conteudos_processados[] = $conteudo;
+}
     
     $modulos_info[$modulo['id']] = [
         'id' => $modulo['id'],
@@ -238,1750 +265,3301 @@ $initial_state = [
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title><?= htmlspecialchars($curso_info['titulo'] ?? 'Treinamento AgroDash') ?> - Plataforma</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/curso_style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <link rel="stylesheet" href="css/curso_style.css">
     <style>
-        /* Estilos para a prova final integrada */
-        .prova-final-container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
-        }
 
-        .prova-header {
-            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
-            color: white;
-            padding: 40px;
-            text-align: center;
-            border-radius: 12px;
-            margin-bottom: 25px;
-        }
+        /* ===== VARIÁVEIS E CONFIGURAÇÕES GLOBAIS ===== */
+:root {
+  --primary: #32CD32;
+  --primary-light: #7CFC00;
+  --secondary: #FFD700;
+  --background: #0f0f0f;
+  --card: #1e1e1e;
+  --progress: #2e7d32;
+  --complete: #00C853;
+  --xp: #FF6B00;
+  --loja: #8B5CF6;
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a0;
+  --text-muted: #666666;
+  --border: rgba(255, 255, 255, 0.1);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
 
-        .prova-header h2 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-        }
+/* ===== RESET E BASE ===== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-        .prova-info {
-            background: #f8f9fa;
-            padding: 25px;
-            border-radius: 8px;
-            margin-bottom: 25px;
-        }
+body {
+  font-family: 'Roboto', 'Poppins', sans-serif;
+  background-color: var(--background);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
 
-        .pergunta {
-            background: white;
-            border: 2px solid #e9ecef;
-            border-radius: 10px;
-            padding: 25px;
-            margin-bottom: 20px;
+/* ===== LAYOUT PRINCIPAL ===== */
+.curso-container {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  min-height: 100vh;
+  gap: 0;
+}
+
+/* ===== HEADER ===== */
+.top-header {
+  grid-column: 1 / -1;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.logo-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo-header img {
+  height: 40px;
+  width: auto;
+}
+
+.logo-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.user-name {
+  font-weight: 500;
+}
+
+.user-xp {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 107, 0, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 107, 0, 0.3);
+}
+
+.user-xp i {
+  color: var(--xp);
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.dashboard-icon {
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  transition: color 0.3s ease;
+}
+
+.dashboard-icon:hover {
+  color: var(--primary);
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  padding: 2rem 1rem;
+  height: calc(100vh - 80px);
+  position: sticky;
+  top: 80px;
+  overflow-y: auto;
+}
+
+.menu-titulo {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 1rem;
+  padding-left: 1rem;
+}
+
+#menu-principal,
+#menu-modulos {
+  list-style: none;
+  margin-bottom: 2rem;
+}
+
+#menu-principal li,
+#menu-modulos li {
+  margin-bottom: 0.5rem;
+}
+
+#menu-principal li a,
+#menu-modulos li {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+#menu-principal li.ativo,
+#menu-modulos li.ativo {
+  background: rgba(50, 205, 50, 0.1);
+  color: var(--primary);
+  border-left: 3px solid var(--primary);
+}
+
+#menu-principal li:hover,
+#menu-modulos li:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+#menu-principal li i,
+#menu-modulos li i {
+  width: 20px;
+  text-align: center;
+}
+
+.modulo-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+
+.modulo-duracao {
+  color: var(--text-muted);
+}
+
+.status-icon {
+  font-size: 0.875rem;
+}
+
+.status-icon.fa-check-circle {
+  color: var(--complete);
+}
+
+/* ===== SIDEBAR FOOTER ===== */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+.btn-certificado {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 1rem;
+  background: rgba(0, 200, 83, 0.1);
+  color: var(--complete);
+  text-decoration: none;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 200, 83, 0.3);
+  transition: all 0.3s ease;
+  margin-bottom: 1.5rem;
+}
+
+.btn-certificado:hover {
+  background: rgba(0, 200, 83, 0.2);
+  transform: translateY(-2px);
+}
+
+.curso-progresso {
+  text-align: center;
+}
+
+.progresso-texto {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.progress-bar-fundo {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  height: 6px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-bar-fundo.mini {
+  height: 4px;
+}
+
+.progress-bar-preenchimento {
+  background: linear-gradient(90deg, var(--primary), var(--primary-light));
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.5s ease;
+}
+
+.progresso-porcentagem {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* ===== CONTEÚDO PRINCIPAL ===== */
+.main-content {
+  padding: 2rem;
+  background: var(--background);
+  height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+/* ===== DASHBOARD VIEW ===== */
+.dashboard-header {
+  margin-bottom: 2rem;
+}
+
+.dashboard-header h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.curso-meta {
+  display: flex;
+  gap: 2rem;
+}
+
+.nivel-curso,
+.duracao-curso {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* ===== STATS GRID ===== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.stat-item {
+  background: var(--card);
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.stat-item:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow);
+}
+
+.stat-item.aprovado {
+  background: rgba(0, 200, 83, 0.1);
+  border-color: rgba(0, 200, 83, 0.3);
+}
+
+.value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.stat-item.aprovado .value {
+  color: var(--complete);
+}
+
+.label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* ===== DASHBOARD GRID ===== */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 2rem;
+}
+
+.card-modulos,
+.card-info {
+  background: var(--card);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.dashboard-card .dashboard-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+
+.dashboard-card .dashboard-header h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* ===== PROGRESSO ===== */
+.progress-container {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+#progresso-porcentagem {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* ===== LISTA DE MÓDULOS ===== */
+.dashboard-modulos {
+  list-style: none;
+  padding: 1.5rem;
+}
+
+.dashboard-modulos li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.dashboard-modulos li:last-child {
+  border-bottom: none;
+}
+
+.dashboard-modulos li.concluido {
+  opacity: 0.7;
+}
+
+.modulo-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.modulo-info i {
+  font-size: 1.25rem;
+  color: var(--primary);
+  width: 24px;
+  text-align: center;
+}
+
+.modulo-detalhes {
+  flex: 1;
+}
+
+.modulo-nome {
+  display: block;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.modulo-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ===== BOTÕES ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--primary-light);
+  transform: translateY(-2px);
+}
+
+.btn-success {
+  background: var(--complete);
+  color: white;
+}
+
+.btn-success:hover {
+  background: #00b347;
+  transform: translateY(-2px);
+}
+
+.btn-carregar-modulo {
+  background: rgba(50, 205, 50, 0.1);
+  color: var(--primary);
+  border: 1px solid rgba(50, 205, 50, 0.3);
+}
+
+.btn-carregar-modulo:hover {
+  background: rgba(50, 205, 50, 0.2);
+  transform: translateY(-2px);
+}
+
+/* ===== PRÓXIMOS PASSOS ===== */
+#proximos-passos-content {
+
+}
+
+.alerta-progresso {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.alerta-progresso.alerta-sucesso {
+  background: rgba(0, 200, 83, 0.1);
+  border-color: rgba(0, 200, 83, 0.3);
+}
+
+.alerta-progresso i {
+  font-size: 1.25rem;
+}
+
+.alerta-progresso.alerta-sucesso i {
+  color: var(--complete);
+}
+
+.tentativas-info {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-top: 1rem;
+  text-align: center;
+}
+
+/* ===== MÓDULO VIEW ===== */
+#modulo-view-container {
+  background: var(--card);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+
+}
+
+.modulo-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.modulo-header h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.modulo-header h2 i {
+  color: var(--primary);
+}
+
+.modulo-descricao {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+
+.conteudos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.conteudo-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  transition: all 0.3s ease;
+}
+
+.conteudo-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+.conteudo-item h4 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.conteudo-texto {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.conteudo-texto p {
+  margin-bottom: 1rem;
+}
+
+.conteudo-texto p:last-child {
+  margin-bottom: 0;
+}
+
+/* ===== PROVA FINAL VIEW ===== */
+#prova-final-view {
+  background: var(--card);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 2rem;
+}
+
+.prova-final-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.prova-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.prova-header h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.prova-header h2 i {
+  color: var(--primary);
+}
+
+.curso-info {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+}
+
+.prova-info {
+  background: rgba(50, 205, 50, 0.1);
+  border: 1px solid rgba(50, 205, 50, 0.3);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.prova-info h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.info-item i {
+  color: var(--primary);
+  width: 16px;
+  text-align: center;
+}
+
+/* ===== PERGUNTAS ===== */
+.pergunta {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+
+.pergunta-cabecalho {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.pergunta-numero {
+  background: var(--primary);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.pergunta-texto {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.opcoes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.opcao {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.opcao:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--primary);
+}
+
+.opcao input[type="radio"] {
+  display: none;
+}
+
+.opcao-letra {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.opcao-texto {
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.opcao input[type="radio"]:checked + label .opcao-letra {
+  background: var(--primary);
+  color: white;
+}
+
+.opcao input[type="radio"]:checked + label .opcao-texto {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ===== PROGRESSO DE RESPOSTAS ===== */
+.progresso-respostas {
+  background: var(--card);
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 2rem;
+  font-weight: 500;
+}
+
+#contador-respostas {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+#total-perguntas {
+  color: var(--text-secondary);
+}
+
+/* ===== AÇÕES DA PROVA ===== */
+.prova-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ===== RESULTADOS ===== */
+.resultado-prova {
+  text-align: center;
+  padding: 2rem;
+}
+
+.resultado-titulo {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.resultado-nota {
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+
+.resultado-mensagem {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  line-height: 1.6;
+}
+
+.resultado-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-item-resultado {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.stat-value {
+  display: block;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.acoes-resultado {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ===== TOASTS ===== */
+#toast-container {
+  position: fixed;
+  top: 100px;
+  right: 2rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.toast {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 300px;
+  transform: translateX(400px);
+  transition: transform 0.3s ease;
+}
+
+.toast.show {
+  transform: translateX(0);
+}
+
+.toast.success {
+  border-left: 4px solid var(--complete);
+}
+
+.toast.error {
+  border-left: 4px solid #ef4444;
+}
+
+.toast.info {
+  border-left: 4px solid #3b82f6;
+}
+
+.toast.warning {
+  border-left: 4px solid #f59e0b;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-left: auto;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.toast-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+/* ===== UTILITÁRIOS ===== */
+.oculto {
+  display: none !important;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
+
+.mt-4 {
+  margin-top: 1rem;
+}
+
+.flex {
+  display: flex;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-4 {
+  gap: 1rem;
+}
+
+/* ===== RESPONSIVIDADE ===== */
+@media (max-width: 1024px) {
+  .curso-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .sidebar {
+    display: none;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .top-header {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .user-profile {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .main-content {
+    padding: 1rem;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .dashboard-header h2 {
+    font-size: 1.5rem;
+  }
+  
+  .curso-meta {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .pergunta-cabecalho {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .resultado-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .acoes-resultado {
+    flex-direction: column;
+  }
+  
+  .prova-actions {
+    flex-direction: column;
+  }
+  
+  #toast-container {
+    right: 1rem;
+    left: 1rem;
+  }
+  
+  .toast {
+    min-width: auto;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .modulo-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .dashboard-modulos li {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .btn-carregar-modulo {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .value {
+    font-size: 1.5rem;
+  }
+  
+  .stat-item {
+    padding: 1rem;
+  }
+}
+
+/* ===== ANIMAÇÕES ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.pulse {
+  animation: pulse 2s infinite;
+}
+
+/* ===== ESTADOS DE CARREGAMENTO ===== */
+.loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* ===== SCROLLBAR PERSONALIZADA ===== */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ===== FOCUS STATES ===== */
+button:focus,
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  .top-header,
+  .sidebar,
+  .btn,
+  .toast {
+    display: none !important;
+  }
+  
+  body {
+    background: white;
+    color: black;
+  }
+  
+  .main-content {
+    padding: 0;
+    height: auto;
+  }
+  
+  .curso-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .course-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(145deg, #1a1a1a 0%, #2d2d2d 100%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .slide {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        .slide.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .progress-ring {
+            transition: stroke-dashoffset 0.5s ease;
+        }
+        
+        .conteudo-slide {
+            min-height: 400px;
+        }
+        
+        .btn-nav {
             transition: all 0.3s ease;
         }
-
-        .pergunta:hover {
-            border-color: #3498db;
-            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.1);
+        
+        .btn-nav:hover {
+            transform: scale(1.05);
         }
-
-        .pergunta-cabecalho {
-            display: flex;
-            align-items: flex-start;
-            gap: 15px;
-            margin-bottom: 20px;
+        
+        .btn-nav:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
-
-        .pergunta-numero {
-            background: #3498db;
-            color: white;
-            width: 35px;
-            height: 35px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 1.1rem;
-            flex-shrink: 0;
-        }
-
-        .pergunta-texto {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: #2c3e50;
-            line-height: 1.4;
-        }
-
-        .opcoes {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .opcao {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 15px;
-            border: 2px solid #e9ecef;
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
             border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
+            color: white;
+            z-index: 1000;
+            transform: translateX(150%);
+            transition: transform 0.3s ease;
         }
-
-        .opcao:hover {
-            border-color: #3498db;
-            background: #f8f9fa;
+        
+        .toast.show {
+            transform: translateX(0);
         }
-
-        .opcao input[type="radio"] {
+        
+        .toast.success {
+            background-color: #10B981;
+        }
+        
+        .toast.error {
+            background-color: #EF4444;
+        }
+        
+        .toast.info {
+            background-color: #3B82F6;
+        }
+        
+        .toast.warning {
+            background-color: #F59E0B;
+        }
+        
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        .scrollbar-hide::-webkit-scrollbar {
             display: none;
         }
 
-        .opcao-letra {
-            background: #6c757d;
-            color: white;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            flex-shrink: 0;
-            transition: background 0.3s ease;
-        }
-
-        .opcao input[type="radio"]:checked + label .opcao-letra {
-            background: #27ae60;
-        }
-
-        .opcao-texto {
-            flex: 1;
-            font-size: 1rem;
-            color: #495057;
-        }
-
-        .prova-actions {
-            padding: 25px;
-            background: #f8f9fa;
-            border-top: 1px solid #e9ecef;
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-        }
-
-        .progresso-respostas {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: white;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-            z-index: 1000;
-        }
-
-        .progresso-respostas span {
-            font-weight: bold;
-            color: #3498db;
-        }
-
-        .resultado-prova {
-            background: linear-gradient(135deg, #f8fff9 0%, #e8f5e9 100%);
-            padding: 25px;
-            border-radius: 12px;
-            border-left: 6px solid #32CD32;
-            margin: 20px 0;
-            text-align: center;
-        }
-
-        .resultado-prova.reprovado {
-            background: linear-gradient(135deg, #fff8f8 0%, #ffebee 100%);
-            border-left-color: #e74c3c;
-        }
-
-        .resultado-titulo {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 15px;
-            color: #2c3e50;
-        }
-
-        .resultado-prova.reprovado .resultado-titulo {
-            color: #e74c3c;
-        }
-
-        .resultado-nota {
-            font-size: 48px;
-            font-weight: 800;
-            margin: 20px 0;
-            color: #32CD32;
-        }
-
-        .resultado-prova.reprovado .resultado-nota {
-            color: #e74c3c;
-        }
-
-
-        .codigo-validacao {
-    background: #e8f5e9;
-    border: 2px solid #4caf50;
-    border-radius: 8px;
-    padding: 15px;
-    margin: 20px 0;
-    text-align: center;
+:root {
+  --primary: #32CD32;
+  --primary-light: #7CFC00;
+  --primary-dark: #228B22;
+  --secondary: #FFD700;
+  --secondary-light: #FFE55C;
+  --background: #0f0f0f;
+  --background-light: #1a1a1a;
+  --card: #1e1e1e;
+  --card-light: #2a2a2a;
+  --progress: #2e7d32;
+  --complete: #00C853;
+  --complete-light: #00E676;
+  --xp: #FF6B00;
+  --loja: #8B5CF6;
+  --text-primary: #ffffff;
+  --text-secondary: #e0e0e0;
+  --text-muted: #a0a0a0;
+  --border: rgba(255, 255, 255, 0.12);
+  --border-light: rgba(255, 255, 255, 0.08);
+  --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 20px 40px -10px rgba(0, 0, 0, 0.4);
+  --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  --gradient-card: linear-gradient(145deg, #1a1a1a 0%, #2d2d2d 100%);
+  --gradient-dark: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
 }
 
-.codigo-validacao code {
-    display: block;
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #2e7d32;
-    margin: 10px 0;
-    background: white;
-    padding: 10px;
-    border-radius: 4px;
-    border: 1px dashed #4caf50;
+/* ===== RESET E BASE ===== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-.codigo-validacao small {
-    color: #666;
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Roboto', 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--gradient-dark);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== LAYOUT PRINCIPAL ===== */
+.curso-container {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+  gap: 0;
+  background: var(--gradient-dark);
+}
+
+/* ===== HEADER ===== */
+.top-header {
+  grid-column: 1 / -1;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 1.25rem 2.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.logo-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: transform 0.3s ease;
+}
+
+.logo-header:hover {
+  transform: translateY(-2px);
+}
+
+.logo-header img {
+  height: 45px;
+  width: auto;
+  border-radius: 12px;
+}
+
+.logo-header h1 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.user-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+}
+
+.user-xp {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(255, 107, 0, 0.15);
+  padding: 0.75rem 1.25rem;
+  border-radius: 50px;
+  border: 1px solid rgba(255, 107, 0, 0.3);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.user-xp:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(255, 107, 0, 0.2);
+}
+
+.user-xp i {
+  color: var(--xp);
+  font-size: 1.3rem;
+}
+
+.user-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary);
+  transition: all 0.3s ease;
+}
+
+.user-avatar:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px rgba(50, 205, 50, 0.3);
+}
+
+.dashboard-icon {
+  color: var(--text-primary);
+  font-size: 1.4rem;
+  transition: all 0.3s ease;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dashboard-icon:hover {
+  color: var(--primary);
+  background: rgba(50, 205, 50, 0.1);
+  transform: translateY(-2px);
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  padding: 2.5rem 1.5rem;
+  height: calc(100vh - 80px);
+  position: sticky;
+  top: 80px;
+  overflow-y: auto;
+  background: var(--gradient-card);
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.2);
+}
+
+.menu-titulo {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 1.5rem;
+  padding-left: 1rem;
+  position: relative;
+}
+
+.menu-titulo::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 16px;
+  background: var(--gradient-primary);
+  border-radius: 2px;
+}
+
+#menu-principal,
+#menu-modulos {
+  list-style: none;
+  margin-bottom: 2.5rem;
+}
+
+#menu-principal li,
+#menu-modulos li {
+  margin-bottom: 0.75rem;
+  position: relative;
+}
+
+#menu-principal li a,
+#menu-modulos li {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 16px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid transparent;
+}
+
+#menu-principal li a::before,
+#menu-modulos li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(50, 205, 50, 0.1), transparent);
+  transition: left 0.6s ease;
+}
+
+#menu-principal li a:hover::before,
+#menu-modulos li:hover::before {
+  left: 100%;
+}
+
+#menu-principal li.ativo,
+#menu-modulos li.ativo {
+  background: rgba(50, 205, 50, 0.15);
+  color: var(--primary);
+  border: 1px solid rgba(50, 205, 50, 0.3);
+  box-shadow: 0 8px 25px rgba(50, 205, 50, 0.15);
+  transform: translateX(8px);
+}
+
+#menu-principal li:hover,
+#menu-modulos li:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  transform: translateX(4px);
+}
+
+#menu-principal li i,
+#menu-modulos li i {
+  width: 24px;
+  text-align: center;
+  font-size: 1.2rem;
+  transition: transform 0.3s ease;
+}
+
+#menu-principal li:hover i,
+#menu-modulos li:hover i {
+  transform: scale(1.2);
+}
+
+.modulo-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+  font-size: 0.8rem;
+}
+
+.modulo-duracao {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.status-icon {
+  font-size: 1rem;
+  transition: transform 0.3s ease;
+}
+
+.status-icon.fa-check-circle {
+  color: var(--complete);
+  filter: drop-shadow(0 0 8px rgba(0, 200, 83, 0.4));
+}
+
+/* ===== SIDEBAR FOOTER ===== */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 2.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.btn-certificado {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1.25rem 1.5rem;
+  background: rgba(0, 200, 83, 0.15);
+  color: var(--complete);
+  text-decoration: none;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 200, 83, 0.3);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 600;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-certificado::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 200, 83, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.btn-certificado:hover::before {
+  left: 100%;
+}
+
+.btn-certificado:hover {
+  background: rgba(0, 200, 83, 0.25);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(0, 200, 83, 0.25);
+}
+
+.curso-progresso {
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.progresso-texto {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.progress-bar-fundo {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  height: 8px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+  position: relative;
+}
+
+.progress-bar-fundo::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  animation: shimmer 2s infinite;
+}
+
+.progress-bar-fundo.mini {
+  height: 6px;
+}
+
+.progress-bar-preenchimento {
+  background: var(--gradient-primary);
+  height: 100%;
+  border-radius: 12px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 0 20px rgba(50, 205, 50, 0.3);
+}
+
+.progresso-porcentagem {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-shadow: 0 0 10px rgba(50, 205, 50, 0.3);
+}
+
+/* ===== CONTEÚDO PRINCIPAL ===== */
+.main-content {
+  padding: 2.5rem;
+  background: var(--gradient-dark);
+  height: calc(100vh - 80px);
+  overflow-y: auto;
+  position: relative;
+}
+
+.main-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  opacity: 0.3;
+}
+
+/* ===== DASHBOARD VIEW ===== */
+.dashboard-header {
+  margin-bottom: 2.5rem;
+  position: relative;
+}
+
+.dashboard-header h2 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.5px;
+}
+
+.curso-meta {
+  display: flex;
+  gap: 2.5rem;
+  flex-wrap: wrap;
+}
+
+.nivel-curso,
+.duracao-curso {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+}
+
+/* ===== STATS GRID ===== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.75rem;
+  margin-bottom: 2.5rem;
+}
+
+.stat-item {
+  background: var(--gradient-card);
+  padding: 2rem 1.5rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  text-align: center;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-primary);
+  transform: scaleX(0);
+  transition: transform 0.4s ease;
+}
+
+.stat-item:hover::before {
+  transform: scaleX(1);
+}
+
+.stat-item:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(50, 205, 50, 0.3);
+}
+
+.stat-item.aprovado {
+  background: linear-gradient(135deg, rgba(0, 200, 83, 0.15) 0%, rgba(0, 200, 83, 0.05) 100%);
+  border-color: rgba(0, 200, 83, 0.4);
+}
+
+.stat-item.aprovado::before {
+  background: var(--complete);
+}
+
+.value {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 0.75rem;
+  text-shadow: 0 0 20px rgba(50, 205, 50, 0.3);
+  position: relative;
+  display: inline-block;
+}
+
+.stat-item.aprovado .value {
+  color: var(--complete);
+  text-shadow: 0 0 20px rgba(0, 200, 83, 0.3);
+}
+
+.value::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 3px;
+  background: var(--gradient-primary);
+  border-radius: 2px;
+  opacity: 0.7;
+}
+
+.label {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+/* ===== DASHBOARD GRID ===== */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 2.5rem;
+}
+
+.card-modulos,
+.card-info {
+  background: var(--gradient-card);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+}
+
+.card-modulos:hover,
+.card-info:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.dashboard-card .dashboard-header {
+  padding: 1.75rem 2rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dashboard-card .dashboard-header h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dashboard-card .dashboard-header h3::before {
+  content: '';
+  width: 4px;
+  height: 24px;
+  background: var(--gradient-primary);
+  border-radius: 2px;
+}
+
+/* ===== PROGRESSO ===== */
+.progress-container {
+  padding: 2rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  font-size: 0.95rem;
+}
+
+#progresso-porcentagem {
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-shadow: 0 0 10px rgba(50, 205, 50, 0.3);
+}
+
+/* ===== LISTA DE MÓDULOS ===== */
+.dashboard-modulos {
+  list-style: none;
+  padding: 2rem;
+}
+
+.dashboard-modulos li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--border-light);
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.dashboard-modulos li::before {
+  content: '';
+  position: absolute;
+  left: -2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 0;
+  background: var(--gradient-primary);
+  border-radius: 2px;
+  transition: height 0.3s ease;
+}
+
+.dashboard-modulos li:hover::before {
+  height: 60%;
+}
+
+.dashboard-modulos li:last-child {
+  border-bottom: none;
+}
+
+.dashboard-modulos li.concluido {
+  opacity: 0.8;
+}
+
+.dashboard-modulos li.concluido::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(0, 200, 83, 0.05), transparent);
+  pointer-events: none;
+}
+
+.modulo-info {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex: 1;
+}
+
+.modulo-info i {
+  font-size: 1.5rem;
+  color: var(--primary);
+  width: 32px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.dashboard-modulos li:hover .modulo-info i {
+  transform: scale(1.2) rotate(5deg);
+  filter: drop-shadow(0 0 8px rgba(50, 205, 50, 0.4));
+}
+
+.modulo-detalhes {
+  flex: 1;
+}
+
+.modulo-nome {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.modulo-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* ===== BOTÕES ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 2rem;
+  border: none;
+  border-radius: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  font-size: 0.95rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  transition: all 0.6s ease;
+  transform: translate(-50%, -50%);
+}
+
+.btn:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+.btn-sm {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.85rem;
+}
+
+.btn-primary {
+  background: var(--gradient-primary);
+  color: white;
+  box-shadow: 0 8px 25px rgba(50, 205, 50, 0.3);
+}
+
+.btn-primary:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 35px rgba(50, 205, 50, 0.4);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, var(--complete) 0%, var(--complete-light) 100%);
+  color: white;
+  box-shadow: 0 8px 25px rgba(0, 200, 83, 0.3);
+}
+
+.btn-success:hover {
+  background: linear-gradient(135deg, var(--complete) 0%, #00b347 100%);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 35px rgba(0, 200, 83, 0.4);
+}
+
+.btn-carregar-modulo {
+  background: rgba(50, 205, 50, 0.15);
+  color: var(--primary);
+  border: 1px solid rgba(50, 205, 50, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.btn-carregar-modulo:hover {
+  background: rgba(50, 205, 50, 0.25);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(50, 205, 50, 0.2);
+}
+
+/* ===== ANIMAÇÕES ===== */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.6s ease-out;
+}
+
+.slide-in {
+  animation: slideIn 0.4s ease-out;
+}
+
+.pulse {
+  animation: pulse 2s infinite;
+}
+
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ===== GLASS EFFECT ===== */
+.glass-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* ===== RESPONSIVIDADE ===== */
+@media (max-width: 1200px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .curso-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .sidebar {
+    display: none;
+  }
+  
+  .top-header {
+    padding: 1rem 2rem;
+  }
+  
+  .main-content {
+    padding: 2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .top-header {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .user-profile {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .main-content {
+    padding: 1.5rem;
+  }
+  
+  .dashboard-header h2 {
+    font-size: 2rem;
+  }
+  
+  .curso-meta {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: 1rem;
+  }
+  
+  .dashboard-header h2 {
+    font-size: 1.75rem;
+  }
+  
+  .value {
+    font-size: 2rem;
+  }
+  
+  .stat-item {
+    padding: 1.5rem 1rem;
+  }
+  
+  .btn {
+    padding: 0.875rem 1.5rem;
     font-size: 0.9rem;
+  }
+}
+
+/* ===== SCROLLBAR PERSONALIZADA ===== */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gradient-primary);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-light);
+  box-shadow: 0 0 10px rgba(50, 205, 50, 0.5);
+}
+
+/* ===== FOCUS STATES ===== */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* ===== UTILITY CLASSES ===== */
+.text-gradient {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.glow {
+  filter: drop-shadow(0 0 10px currentColor);
+}
+
+.hover-lift {
+  transition: transform 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-5px);
+}
+   
+/* Adicione ao seu CSS existente */
+.video-container {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 56.25%; /* Proporção 16:9 */
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.video-container iframe,
+.video-container video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.image-container img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.quiz-container {
+    border-left: 4px solid #32CD32;
+}
+
+/* Estilos responsivos */
+@media (max-width: 768px) {
+    .video-container {
+        padding-bottom: 75%; /* Proporção mais quadrada para mobile */
+    }
+    
+    .image-container img {
+        max-height: 300px;
+    }
+}
+
+/* Loading states */
+.video-container video:not([src]) {
+    background: linear-gradient(45deg, #374151 25%, #4B5563 25%, #4B5563 50%, #374151 50%, #374151 75%, #4B5563 75%);
+    background-size: 20px 20px;
+    animation: loading 1s infinite linear;
+}
+
+@keyframes loading {
+    0% { background-position: 0 0; }
+    100% { background-position: 20px 0; }
 }
 
 
 
 
+/* Estilos melhorados para vídeos */
+.video-container {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 56.25%; /* Proporção 16:9 */
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+}
+
+.video-container iframe,
+.video-container video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 12px;
+}
+
+/* Loading state para vídeos */
+.video-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #666;
+    font-size: 1.1rem;
+}
+
+/* Responsividade para vídeos */
+@media (max-width: 768px) {
+    .video-container {
+        border-radius: 8px;
+    }
+    
+    .video-container iframe,
+    .video-container video {
+        border-radius: 8px;
+    }
+}
+
+/* Controles customizados para vídeos locais */
+video::-webkit-media-controls-panel {
+    background: linear-gradient(transparent, rgba(0,0,0,0.7));
+}
+
+video::-webkit-media-controls-play-button,
+video::-webkit-media-controls-volume-slider,
+video::-webkit-media-controls-mute-button {
+    filter: brightness(0) invert(1);
+}
 
-        .badge-conquista {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            margin: 2px;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        .stat-item {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 12px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border-left: 4px solid #32CD32;
-        }
-        .stat-item.aprovado {
-            border-left-color: #00C853;
-            background: #f8fff9;
-        }
-        .stat-item .value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #32CD32;
-        }
-        .stat-item .label {
-            font-size: 0.9rem;
-            color: #666;
-            margin-top: 0.5rem;
-        }
-        .conquistas-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-        .conquista-item {
-            text-align: center;
-            padding: 1rem;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 2px solid #e9ecef;
-        }
-        .conquista-item.conquistada {
-            border-color: #32CD32;
-            background: #f0fff4;
-        }
-        .conquista-icone {
-            font-size: 2rem;
-            color: #6c757d;
-            margin-bottom: 0.5rem;
-        }
-        .conquista-item.conquistada .conquista-icone {
-            color: #32CD32;
-        }
-        .admin-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 25px;
-            text-decoration: none;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
-        }
-        .admin-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .quiz-info {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid #32CD32;
-        }
-
-        .quiz-stats {
-            display: flex;
-            gap: 20px;
-            margin-top: 10px;
-        }
-
-        .quiz-stats span {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 0.9rem;
-            color: #6c757d;
-        }
-
-        .pergunta {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border: 1px solid #e9ecef;
-        }
-
-        .pergunta-cabecalho {
-            margin-bottom: 15px;
-        }
-
-        .pergunta-cabecalho .numero {
-            background: #32CD32;
-            color: white;
-            width: 25px;
-            height: 25px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 10px;
-            font-weight: bold;
-        }
-
-        .pergunta-cabecalho .texto {
-            font-weight: 500;
-            color: #2c3e50;
-            display: inline;
-        }
-
-        .opcoes {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .opcao {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px;
-            border: 1px solid #e9ecef;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .opcao:hover {
-            border-color: #32CD32;
-            background: #f8fff9;
-        }
-
-        .opcao input[type="radio"] {
-            margin: 0;
-        }
-
-        .opcao label {
-            cursor: pointer;
-            flex: 1;
-            margin: 0;
-        }
-
-        .btn-finalizar-quiz {
-            width: 100%;
-            margin-top: 20px;
-            padding: 12px;
-            font-size: 1.1rem;
-        }
-
-        .quiz-item.oculto {
-            display: none !important;
-        }
-
-        #toastContainer {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            pointer-events: none;
-        }
-
-        .toast {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: #333;
-            color: #fff;
-            padding: 12px 16px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-            opacity: 0;
-            transform: translateX(100%);
-            transition: all 0.4s ease;
-            min-width: 260px;
-            pointer-events: auto;
-        }
-
-        .toast.show {
-            opacity: 1;
-            transform: translateX(0);
-        }
-
-        .toast.hide {
-            opacity: 0;
-            transform: translateX(100%);
-        }
-
-        .toast i {
-            font-size: 18px;
-        }
-
-        .toast.success { background: #4CAF50; }
-        .toast.error { background: #e74c3c; }
-        .toast.info { background: #3498db; }
-        .toast.warning { background: #f39c12; }
-
-        .toast-close {
-            background: transparent;
-            border: none;
-            color: inherit;
-            cursor: pointer;
-            margin-left: auto;
-            font-size: 14px;
-            opacity: 0.8;
-            transition: opacity 0.2s;
-        }
-
-        .toast-close:hover {
-            opacity: 1;
-        }
-
-        .btn-certificado {
-            display: block !important;
-            margin-bottom: 15px;
-        }
-
-        .btn-certificado.oculto {
-            display: none !important;
-        }
-
-        /* ======= ESTILOS PARA RESULTADO DA PROVA ======= */
-        .resultado-quiz {
-            background: linear-gradient(135deg, #f8fff9 0%, #e8f5e9 100%);
-            padding: 25px;
-            border-radius: 12px;
-            border-left: 6px solid #32CD32;
-            margin: 20px 0;
-            text-align: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-
-        .resultado-quiz.reprovado {
-            background: linear-gradient(135deg, #fff8f8 0%, #ffebee 100%);
-            border-left-color: #e74c3c;
-        }
-
-        .resultado-titulo {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 15px;
-            color: #2c3e50;
-        }
-
-        .resultado-quiz.reprovado .resultado-titulo {
-            color: #e74c3c;
-        }
-
-        .resultado-nota {
-            font-size: 48px;
-            font-weight: 800;
-            margin: 20px 0;
-            color: #32CD32;
-        }
-
-        .resultado-quiz.reprovado .resultado-nota {
-            color: #e74c3c;
-        }
-
-        .resultado-mensagem {
-            font-size: 18px;
-            margin: 15px 0;
-            color: #555;
-            line-height: 1.5;
-        }
-
-        .resultado-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }
-
-        .stat-item-resultado {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .stat-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: #32CD32;
-            display: block;
-        }
-
-        .resultado-quiz.reprovado .stat-value {
-            color: #e74c3c;
-        }
-
-        .stat-label {
-            font-size: 14px;
-            color: #666;
-            margin-top: 5px;
-        }
-
-        .btn-revisar {
-            background: #3498db;
-            color: white;
-            padding: 12px 25px;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            margin: 10px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-revisar:hover {
-            background: #2980b9;
-            transform: translateY(-2px);
-        }
-
-        .btn-continuar {
-            background: #32CD32;
-            color: white;
-            padding: 12px 25px;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            margin: 10px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-continuar:hover {
-            background: #28a428;
-            transform: translateY(-2px);
-        }
-
-        /* ======= ESTILOS PARA QUIZ TRAVADO ======= */
-        .quiz-travado {
-            opacity: 0.7;
-            pointer-events: none;
-            position: relative;
-        }
-
-        .quiz-travado::before {
-            content: "✓ CONCLUÍDO";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #32CD32;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 25px;
-            font-weight: 700;
-            font-size: 16px;
-            z-index: 10;
-            box-shadow: 0 4px 15px rgba(50, 205, 50, 0.3);
-        }
-
-        .pergunta-travada {
-            opacity: 0.6;
-            pointer-events: none;
-        }
-
-        .opcao-travada {
-            opacity: 0.6;
-            pointer-events: none;
-            background: #f8f9fa !important;
-            border-color: #dee2e6 !important;
-        }
-
-        .opcao-travada label {
-            cursor: not-allowed !important;
-        }
-
-        .btn-travado {
-            opacity: 0.5;
-            pointer-events: none;
-            cursor: not-allowed !important;
-        }
-
-        .badge-concluido {
-            background: #32CD32;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-left: 10px;
-        }
-
-        /* Estilos específicos para prova final travada */
-        .prova-final-travada {
-            opacity: 0.7;
-            pointer-events: none;
-            position: relative;
-        }
-
-        .prova-final-travada::before {
-            content: "🎓 PROVA FINALIZADA";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(135deg, #32CD32, #00C853);
-            color: white;
-            padding: 15px 30px;
-            border-radius: 30px;
-            font-weight: 700;
-            font-size: 18px;
-            z-index: 10;
-            box-shadow: 0 6px 20px rgba(50, 205, 50, 0.4);
-        }
-
-        /* ======= ESTILOS PARA TELA DE RESULTADOS ======= */
-        .revisao-prova-container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        .pergunta-revisao {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 15px;
-            border-left: 5px solid #e74c3c;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-
-        .pergunta-revisao.acertou {
-            border-left-color: #32CD32;
-            background: #f8fff9;
-        }
-
-        .pergunta-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .pergunta-numero {
-            font-weight: bold;
-            color: #2c3e50;
-            font-size: 1.1em;
-        }
-
-        .pergunta-status {
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 600;
-        }
-
-        .pergunta-status.acerto {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .pergunta-status.erro {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .pergunta-texto {
-            font-weight: 500;
-            color: #2c3e50;
-            margin-bottom: 15px;
-            font-size: 1.05em;
-            line-height: 1.4;
-        }
-
-        .resposta-usuario, .resposta-correta, .explicacao {
-            margin: 8px 0;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 0.95em;
-        }
-
-        .resposta-usuario {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            color: #856404;
-        }
-
-        .resposta-correta {
-            background: #d1ecf1;
-            border: 1px solid #bee5eb;
-            color: #0c5460;
-        }
-
-        .explicacao {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            color: #495057;
-            font-style: italic;
-        }
-
-        .acoes-resultado {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 30px;
-            flex-wrap: wrap;
-        }
-
-        .btn-certificado-resultado {
-            background: linear-gradient(135deg, #32CD32, #28a428);
-            color: white;
-            padding: 12px 25px;
-            border-radius: 25px;
-            text-decoration: none;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-certificado-resultado:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(50, 205, 50, 0.4);
-            color: white;
-        }
-
-        /* Responsividade */
-        @media (max-width: 768px) {
-            .revisao-prova-container {
-                padding: 10px;
-            }
-            
-            .resultado-stats {
-                grid-template-columns: 1fr;
-            }
-            
-            .acoes-resultado {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .pergunta-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 10px;
-            }
-        }
-
-        /* NOVOS ESTILOS PARA ESTATÍSTICAS */
-        .estatisticas-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        .estatisticas-container h2 {
-            text-align: center;
-            color: #2c3e50;
-            margin-bottom: 40px;
-            font-size: 2.2rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 15px;
-        }
-
-        .estatisticas-container h2 i {
-            color: #3498db;
-        }
-
-        .estatisticas-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .estatistica-card {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            text-align: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            border-left: 5px solid #3498db;
-            transition: all 0.3s ease;
-        }
-
-        .estatistica-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        }
-
-        .estatistica-card:nth-child(2) {
-            border-left-color: #32CD32;
-        }
-
-        .estatistica-card:nth-child(3) {
-            border-left-color: #e74c3c;
-        }
-
-        .estatistica-card:nth-child(4) {
-            border-left-color: #f39c12;
-        }
-
-        .estatistica-card h3 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        .estatistica-valor {
-            font-size: 2.2rem;
-            font-weight: 800;
-            margin: 15px 0;
-            min-height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .estatistica-card:nth-child(1) .estatistica-valor {
-            color: #3498db;
-            font-size: 1.8rem;
-        }
-
-        .estatistica-card:nth-child(2) .estatistica-valor {
-            color: #32CD32;
-        }
-
-        .estatistica-card:nth-child(3) .estatistica-valor {
-            color: #e74c3c;
-        }
-
-        .estatistica-card:nth-child(4) .estatistica-valor {
-            color: #f39c12;
-        }
-
-        .estatistica-desc {
-            color: #7f8c8d;
-            font-size: 0.9rem;
-            line-height: 1.4;
-        }
-
-        .resumo-estatisticas {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            margin-top: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-
-        .resumo-estatisticas h3 {
-            color: #2c3e50;
-            margin-bottom: 20px;
-            font-size: 1.3rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .lista-resumo {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-        }
-
-        .item-resumo {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-
-        .item-resumo i {
-            font-size: 1.3rem;
-            color: #3498db;
-        }
-
-        .info-resumo h4 {
-            color: #2c3e50;
-            margin: 0 0 4px 0;
-            font-size: 0.95rem;
-        }
-
-        .info-resumo p {
-            color: #7f8c8d;
-            margin: 0;
-            font-size: 0.85rem;
-        }
-
-        @media (max-width: 768px) {
-            .estatisticas-grid {
-                grid-template-columns: 1fr;
-                gap: 15px;
-            }
-            
-            .estatistica-card {
-                padding: 20px;
-            }
-            
-            .estatistica-valor {
-                font-size: 1.8rem;
-            }
-            
-            .lista-resumo {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Estilos para provas de fixação */
-        .prova-fixacao-section {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 2px solid #e9ecef;
-        }
-
-        .section-title {
-            color: #2c3e50;
-            font-size: 1.3rem;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .prova-fixacao-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-
-        .prova-fixacao-card.concluida {
-            background: linear-gradient(135deg, #32CD32 0%, #228B22 100%);
-        }
-
-        .prova-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 20px;
-        }
-
-        .prova-info h4 {
-            margin: 0 0 10px 0;
-            font-size: 1.3rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .prova-info p {
-            margin: 0 0 15px 0;
-            opacity: 0.9;
-            line-height: 1.5;
-        }
-
-        .prova-stats {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        .prova-stats span {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 0.9rem;
-            opacity: 0.8;
-        }
-
-        .prova-actions {
-            flex-shrink: 0;
-        }
-
-        .btn-iniciar-prova {
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid white;
-            color: white;
-            padding: 12px 20px;
-            font-weight: 600;
-        }
-
-        .btn-iniciar-prova:hover {
-            background: white;
-            color: #667eea;
-            transform: translateY(-2px);
-        }
-
-        .prova-concluida {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 10px 15px;
-            border-radius: 25px;
-            font-weight: 600;
-        }
-
-        .prova-resultado {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.3);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .resultado-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 600;
-        }
-
-        /* Estilos para o modo prova de fixação */
-        .prova-fixacao-detalhe {
-            max-width: 100%;
-        }
-
-        .prova-header-detalhe {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 12px;
-            margin-bottom: 25px;
-        }
-
-        .prova-header-detalhe h3 {
-            margin: 0 0 15px 0;
-            font-size: 1.8rem;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .prova-meta-detalhe {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-
-        .prova-meta-detalhe span {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 1rem;
-            opacity: 0.9;
-        }
-
-        .prova-descricao {
-            font-size: 1.1rem;
-            line-height: 1.6;
-            opacity: 0.9;
-            margin: 0;
-        }
-
-        .prova-body-detalhe {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-
-        .quiz-instructions {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 25px;
-            border-left: 4px solid #32CD32;
-        }
-
-        .instruction-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 10px;
-            color: #2c3e50;
-        }
-
-        .instruction-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .instruction-item i {
-            color: #32CD32;
-            font-size: 1.1rem;
-        }
-
-        .quiz-placeholder {
-            text-align: center;
-            padding: 40px 20px;
-        }
-
-        .placeholder-info i {
-            font-size: 3rem;
-            color: #6c757d;
-            margin-bottom: 15px;
-        }
-
-        .placeholder-info h4 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-
-        .placeholder-info p {
-            color: #6c757d;
-            margin-bottom: 20px;
-            line-height: 1.6;
-        }
-
-        .prova-fixacao-resultado .resultado-titulo {
-            font-size: 1.8rem;
-        }
-
-        .prova-fixacao-resultado .resultado-nota {
-            font-size: 3.5rem;
-        }
-
-        /* Estilos para conteúdo formatado */
-        .conteudo-texto {
-            line-height: 1.6;
-            font-size: 1rem;
-        }
-
-        .conteudo-texto p {
-            margin-bottom: 1rem;
-        }
-
-        .conteudo-texto ul, .conteudo-texto ol {
-            margin-bottom: 1rem;
-            padding-left: 1.5rem;
-        }
-
-        .conteudo-texto li {
-            margin-bottom: 0.5rem;
-        }
-
-        .conteudo-texto h1, .conteudo-texto h2, .conteudo-texto h3, .conteudo-texto h4 {
-            margin: 1.5rem 0 1rem 0;
-            color: #2c3e50;
-        }
-
-        .conteudo-texto blockquote {
-            border-left: 4px solid #32CD32;
-            padding-left: 1rem;
-            margin: 1rem 0;
-            font-style: italic;
-            color: #555;
-        }
-
-        .conteudo-texto code {
-            background: #f4f4f4;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: monospace;
-        }
-
-        .conteudo-texto pre {
-            background: #f8f9fa;
-            padding: 1rem;
-            border-radius: 8px;
-            overflow-x: auto;
-            margin: 1rem 0;
-        }
-
-        .opcao-letra {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 24px;
-            height: 24px;
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            font-weight: bold;
-            margin-right: 10px;
-            font-size: 0.8rem;
-        }
-
-        .opcao-texto {
-            flex: 1;
-        }
-
-        .quiz-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        .detalhes-resultado {
-            margin-top: 20px;
-            text-align: left;
-        }
-
-        .pergunta-resultado {
-            background: white;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 10px;
-            border-left: 4px solid #e74c3c;
-        }
-
-        .pergunta-resultado.acerto {
-            border-left-color: #32CD32;
-        }
-
-        .pergunta-titulo-resultado {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .status.acerto {
-            color: #32CD32;
-            font-weight: bold;
-        }
-
-        .status.erro {
-            color: #e74c3c;
-            font-weight: bold;
-        }
-
-        .resposta-info {
-            margin-top: 10px;
-        }
-
-        .resposta-usuario, .resposta-correta {
-            padding: 8px;
-            border-radius: 4px;
-            margin: 5px 0;
-        }
-
-        .resposta-usuario {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-        }
-
-        .resposta-correta {
-            background: #d1ecf1;
-            border: 1px solid #bee5eb;
-        }
-
-        .acoes-resultado {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-top: 20px;
-        }
     </style>
 </head>
-<body>
-
-    <header class="top-header">
-        <div class="logo-header">
-            <img src="imagem/logo.png" alt="Logo AgroDash" />
-            <h1>AgroDash</h1>
-        </div>
-        <div class="user-profile">
-            <span class="user-name">Olá, <?= htmlspecialchars($username) ?></span> 
-            <div class="user-xp">
-                <i class="fas fa-star"></i>
-                <span><?= $pontos_xp ?> XP</span>
+<body class="bg-background text-white font-sans">
+    <!-- Header Mobile -->
+    <header class="sticky top-0 z-50 bg-card/95 backdrop-blur-lg border-b border-white/10 lg:hidden">
+        <div class="flex items-center justify-between h-16 px-4">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-2xl">agriculture</span>
+                <h1 class="text-lg font-bold">AgroDash</h1>
             </div>
-            <img src="imagem/avatar.png" alt="Avatar" class="user-avatar" />
-            <a href="dashboard.php" class="dashboard-icon" title="Voltar aos Cursos"><i class="fas fa-th"></i></a>
+            
+            <div class="flex items-center gap-3">
+                <!-- XP Mobile -->
+                <div class="flex items-center gap-1 bg-xp/20 px-2 py-1 rounded-full border border-xp/30">
+                    <span class="material-symbols-outlined text-xp text-sm">military_tech</span>
+                    <span class="text-xs font-bold text-xp"><?= $pontos_xp ?></span>
+                </div>
+                
+                <!-- Menu Mobile Toggle -->
+                <button id="menu-toggle" class="p-2 rounded-lg bg-card border border-white/10">
+                    <span class="material-symbols-outlined text-white">menu</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Menu Mobile -->
+        <div id="mobile-menu" class="hidden flex-col absolute top-16 left-0 right-0 bg-card border-b border-white/10 z-40">
+            <div class="menu-item-mobile flex items-center gap-3 p-4">
+                <span class="material-symbols-outlined text-primary">person</span>
+                <div>
+                    <div class="font-semibold text-white"><?= htmlspecialchars($username) ?></div>
+                    <div class="text-xs text-gray-400 capitalize"><?= htmlspecialchars($user_tipo) ?></div>
+                </div>
+            </div>
+            
+            <a href="dashboard.php" class="menu-item-mobile flex items-center gap-3 p-4 text-white border-t border-white/10">
+                <span class="material-symbols-outlined">dashboard</span>
+                <span>Voltar aos Cursos</span>
+            </a>
+            
+            <?php if ($user_tipo === 'cia_dev' || $user_tipo === 'admin'): ?>
+            <a href="/curso_agrodash/admin_dashboard.php" class="menu-item-mobile flex items-center gap-3 p-4 text-purple-400">
+                <span class="material-symbols-outlined">admin_panel_settings</span>
+                <span>Painel Admin</span>
+            </a>
+            <?php endif; ?>
         </div>
     </header>
 
-    <aside class="sidebar">
-        <nav>
-            <p class="menu-titulo">Navegação</p>
-            <ul id="menu-principal">
-                <li id="menu-dashboard" class="ativo" data-nav="dashboard"><i class="fas fa-chart-bar"></i><span>Dashboard</span></li>
-            </ul>
-            <p class="menu-titulo"><?= htmlspecialchars($curso_info['titulo'] ?? 'Curso') ?></p>
-            <ul id="menu-modulos">
-                <?php foreach ($modulos_info as $id => $info): ?>
-                    <li data-nav="modulo" data-modulo-id="<?= $id ?>" class="<?= $info['concluido'] ? 'concluido' : '' ?>">
-                        <i class="<?= $info['icone'] ?>"></i>
-                        <span><?= htmlspecialchars($info['nome']) ?></span>
-                        <div class="modulo-meta">
-                            <span class="modulo-duracao"><?= $info['duracao'] ?></span>
-                            <i class="status-icon <?= $info['concluido'] ? 'fas fa-check-circle' : 'far fa-circle' ?>"></i>
-                        </div>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-            
-            <div id="menu-avaliacao-container">
-                <?php if ($todos_modulos_concluidos && !$prova_final_info['aprovado']): ?>
-                <p class="menu-titulo">Avaliação</p>
-                <ul>
-                    <li id="iniciar-prova-final" data-nav="prova">
-                        <i class="fas fa-graduation-cap"></i>
-                        <span>Prova Final</span>
-                        <?php if ($prova_final_info['tentativas'] > 0): ?>
-                            <span class="tentativas-badge"><?= $prova_final_info['tentativas'] ?>/2</span>
-                        <?php endif; ?>
-                    </li>
-                </ul>
-                <?php endif; ?>
+    <!-- Header Desktop -->
+    <header class="sticky top-0 z-20 bg-card/80 backdrop-blur-lg border-b border-white/10 hidden lg:block">
+        <div class="max-w-screen-xl mx-auto flex items-center justify-between h-20 px-6">
+            <div class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-primary text-4xl">agriculture</span>
+                <h1 class="text-2xl font-bold"><?= htmlspecialchars($curso_info['titulo'] ?? 'Curso AgroDash') ?></h1>
             </div>
-        </nav>
-        
-        <div class="sidebar-footer">
-            <?php if ($prova_final_info['aprovado']): ?>
-                <a href="certificado.php?curso_id=<?= $curso_id ?>" class="btn-certificado">
-                    <i class="fas fa-certificate"></i> Ver Certificado
-                </a>
-            <?php endif; ?>
-            
-            <div class="curso-progresso">
-                <div class="progresso-texto">Progresso do Curso</div>
-                <div class="progress-bar-fundo mini">
-                    <div class="progress-bar-preenchimento" style="width: <?= number_format($progresso_porcentagem, 0) ?>%;"></div>
+
+            <div class="flex items-center gap-4">
+                <!-- Display do XP do usuário -->
+                <div class="flex items-center gap-2 bg-xp/20 px-4 py-2 rounded-full border border-xp/30">
+                    <span class="material-symbols-outlined text-xp">military_tech</span>
+                    <div class="text-right">
+                        <span class="text-sm font-bold text-xp"><?= $pontos_xp ?> XP</span>
+                        <div class="text-xs text-xp/80">Pontuação Total</div>
+                    </div>
                 </div>
-                <div class="progresso-porcentagem"><?= number_format($progresso_porcentagem, 0) ?>%</div>
+
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">person</span>
+                    <div class="text-right">
+                        <span class="text-sm font-semibold text-white"><?= htmlspecialchars($username) ?></span>
+                        <div class="flex items-center gap-1">
+                            <span class="text-xs text-gray-300 capitalize"><?= htmlspecialchars($user_tipo) ?></span>
+                            <?php if ($user_tipo !== 'operador'): ?>
+                                <span class="material-symbols-outlined text-secondary text-sm">verified</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botão do Painel Admin para cia_dev e admin -->
+                <?php if ($user_tipo === 'cia_dev' || $user_tipo === 'admin'): ?>
+                <a href="/curso_agrodash/admin_dashboard.php" class="bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-4 py-2 rounded-full transition flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">admin_panel_settings</span>
+                    Painel Admin
+                </a>
+                <?php endif; ?>
+                
+                <a href="dashboard.php" class="bg-primary hover:bg-green-700 text-white text-sm font-semibold px-4 py-2 rounded-full transition flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">dashboard</span>
+                    Voltar aos Cursos
+                </a>
             </div>
         </div>
-    </aside>
+    </header>
 
-    <main class="main-content" data-initial-state='<?= htmlspecialchars(json_encode($initial_state), ENT_QUOTES, 'UTF-8') ?>'>
-        
-        <?php if ($db_error_message): ?>
-            <div class="alert alert-error">
-                <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($db_error_message) ?>
-            </div>
-        <?php endif; ?>
+    <div class="max-w-screen-xl mx-auto p-4 lg:p-8">
+        <!-- Breadcrumb -->
+        <div class="flex items-center gap-2 text-sm text-gray-400 mb-6">
+            <a href="dashboard.php" class="hover:text-primary transition">Dashboard</a>
+            <span class="material-symbols-outlined text-xs">chevron_right</span>
+            <span class="text-white"><?= htmlspecialchars($curso_info['titulo'] ?? 'Curso') ?></span>
+        </div>
 
-        <div id="conteudo-curso">
-            
-            <div id="dashboard-view">
-                <div class="dashboard-header">
-                    <h2><?= htmlspecialchars($curso_info['titulo'] ?? 'Dashboard do Curso') ?></h2>
-                    <div class="curso-meta">
-                        <span class="nivel-curso">Nível: <?= htmlspecialchars($curso_info['nivel'] ?? 'Iniciante') ?></span>
-                        <span class="duracao-curso">Duração: <?= htmlspecialchars($curso_info['duracao_estimada'] ?? '2 horas') ?></span>
+        <!-- Header do Curso -->
+        <div class="glass-card rounded-2xl p-6 mb-8">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                <div class="flex-1">
+                    <h1 class="text-2xl lg:text-4xl font-bold text-white mb-2"><?= htmlspecialchars($curso_info['titulo'] ?? 'Curso') ?></h1>
+                    <p class="text-gray-400 text-lg mb-4"><?= htmlspecialchars($curso_info['descricao'] ?? '') ?></p>
+                    
+                    <div class="flex flex-wrap gap-4 text-sm">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary text-sm">school</span>
+                            <span class="text-gray-300">Nível: <?= htmlspecialchars($curso_info['nivel'] ?? 'Iniciante') ?></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary text-sm">schedule</span>
+                            <span class="text-gray-300">Duração: <?= htmlspecialchars($curso_info['duracao_estimada'] ?? '2 horas') ?></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary text-sm">menu_book</span>
+                            <span class="text-gray-300"><?= $total_modulos ?> módulos</span>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="value" id="stat-concluidos"><?= $modulos_concluidos ?></div>
-                        <div class="label">Módulos Concluídos</div>
+                <div class="flex flex-col items-center">
+                    <div class="relative w-24 h-24">
+                        <svg class="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="40" stroke="#374151" stroke-width="8" fill="none" />
+                            <circle cx="50" cy="50" r="40" stroke="#32CD32" stroke-width="8" fill="none" 
+                                    stroke-dasharray="251.2" 
+                                    stroke-dashoffset="<?= 251.2 - (251.2 * $progresso_porcentagem / 100) ?>" 
+                                    class="progress-ring" />
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span class="text-xl font-bold text-white"><?= number_format($progresso_porcentagem, 0) ?>%</span>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <div class="value" id="stat-total"><?= $total_modulos ?></div>
-                        <div class="label">Total de Módulos</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="value" id="stat-pontos"><?= $pontos_xp ?></div>
-                        <div class="label">Pontos XP</div>
-                    </div>
-                    <div class="stat-item <?= $prova_final_info['aprovado'] ? 'aprovado' : '' ?>">
-                        <div class="value" id="stat-aprovacao"><?= $prova_final_info['aprovado'] ? 'SIM' : 'NÃO' ?></div>
-                        <div class="label">Aprovação Final</div>
+                    <span class="text-sm text-gray-400 mt-2">Progresso Geral</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Sidebar Desktop -->
+            <div class="hidden lg:block lg:col-span-1">
+                <div class="glass-card rounded-2xl p-6 sticky top-32">
+                    <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">menu_book</span>
+                        Conteúdo do Curso
+                    </h3>
+                    
+                    <div class="space-y-2 max-h-[500px] overflow-y-auto scrollbar-hide">
+                        <?php foreach ($modulos_info as $id => $info): ?>
+                            <button class="w-full text-left p-3 rounded-lg transition-all duration-300 flex items-center justify-between 
+                                          <?= $info['concluido'] ? 'bg-complete/20 border border-complete/30' : 'bg-card hover:bg-white/5 border border-white/5' ?> 
+                                          modulo-nav" 
+                                    data-modulo-id="<?= $id ?>">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-sm <?= $info['concluido'] ? 'text-complete' : 'text-gray-400' ?>">
+                                        <?= $info['concluido'] ? 'check_circle' : 'radio_button_unchecked' ?>
+                                    </span>
+                                    <div class="text-left">
+                                        <div class="text-sm font-medium text-white"><?= htmlspecialchars($info['nome']) ?></div>
+                                        <div class="text-xs text-gray-400"><?= $info['duracao'] ?></div>
+                                    </div>
+                                </div>
+                                <span class="material-symbols-outlined text-xs text-gray-400">chevron_right</span>
+                            </button>
+                        <?php endforeach; ?>
+                        
+                        <?php if ($todos_modulos_concluidos && !$prova_final_info['aprovado']): ?>
+                            <button class="w-full text-left p-3 rounded-lg transition-all duration-300 flex items-center justify-between 
+                                          bg-primary/20 hover:bg-primary/30 border border-primary/30 mt-4 prova-nav">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-sm text-primary">quiz</span>
+                                    <div class="text-left">
+                                        <div class="text-sm font-medium text-white">Prova Final</div>
+                                        <div class="text-xs text-gray-400">
+                                            <?= $prova_final_info['tentativas'] > 0 ? "Tentativa {$prova_final_info['tentativas']}/2" : 'Disponível' ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="material-symbols-outlined text-xs text-primary">chevron_right</span>
+                            </button>
+                        <?php endif; ?>
+                        
+                        <?php if ($prova_final_info['aprovado']): ?>
+                            <a href="/curso_agrodash/certificado?curso_id=<?= $curso_id ?>" 
+                               class="w-full text-left p-3 rounded-lg transition-all duration-300 flex items-center justify-between 
+                                      bg-complete/20 hover:bg-complete/30 border border-complete/30 mt-4">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-sm text-complete">verified</span>
+                                    <div class="text-left">
+                                        <div class="text-sm font-medium text-white">Certificado</div>
+                                        <div class="text-xs text-gray-400">Emitir certificado</div>
+                                    </div>
+                                </div>
+                                <span class="material-symbols-outlined text-xs text-complete">download</span>
+                            </a>
+                        <?php endif; ?>
                     </div>
                 </div>
+            </div>
 
-                <div class="dashboard-grid">
-                    <div class="card-modulos">
-                        <div class="dashboard-card">
-                            <div class="dashboard-header"><h3>Seu Progresso Atual</h3></div>
-                            <div class="progress-container">
-                                <div class="progress-text">
-                                    <span>Progresso Geral</span>
-                                    <span id="progresso-porcentagem"><?= number_format($progresso_porcentagem, 0) ?>% Completo</span>
-                                </div>
-                                <div class="progress-bar-fundo">
-                                    <div class="progress-bar-preenchimento" style="width: <?= number_format($progresso_porcentagem, 0) ?>%;"></div>
-                                </div>
+            <!-- Conteúdo Principal -->
+            <div class="lg:col-span-3">
+                <!-- Dashboard View -->
+                <div id="dashboard-view" class="slide active">
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary">dashboard</span>
+                            Visão Geral do Curso
+                        </h2>
+                        
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                            <div class="bg-card rounded-xl p-4 border border-white/5">
+                                <div class="text-2xl font-bold text-white mb-1"><?= $modulos_concluidos ?></div>
+                                <div class="text-sm text-gray-400">Módulos Concluídos</div>
                             </div>
-
-                            <ul class="dashboard-modulos">
-                                <?php foreach ($modulos_info as $id => $info): ?>
-                                    <li class="<?= $info['concluido'] ? 'concluido' : '' ?>">
-                                        <div class="modulo-info">
-                                            <i class="<?= $info['icone'] ?>"></i>
-                                            <div class="modulo-detalhes">
-                                                <span class="modulo-nome"><?= htmlspecialchars($info['nome']) ?></span>
-                                                <span class="modulo-meta"><?= $info['duracao'] ?> • 
-                                                    <?php if ($info['concluido'] && $info['data_conclusao']): ?>
-                                                        Concluído em <?= date('d/m/Y', strtotime($info['data_conclusao'])) ?>
-                                                    <?php else: ?>
-                                                        Não iniciado
-                                                    <?php endif; ?>
-                                                </span>
+                            <div class="bg-card rounded-xl p-4 border border-white/5">
+                                <div class="text-2xl font-bold text-white mb-1"><?= $total_modulos ?></div>
+                                <div class="text-sm text-gray-400">Total de Módulos</div>
+                            </div>
+                            <div class="bg-card rounded-xl p-4 border border-white/5">
+                                <div class="text-2xl font-bold text-white mb-1"><?= $pontos_xp ?></div>
+                                <div class="text-sm text-gray-400">Pontos XP</div>
+                            </div>
+                            <div class="bg-card rounded-xl p-4 border border-white/5 <?= $prova_final_info['aprovado'] ? 'bg-complete/20 border-complete/30' : '' ?>">
+                                <div class="text-2xl font-bold text-white mb-1"><?= $prova_final_info['aprovado'] ? 'SIM' : 'NÃO' ?></div>
+                                <div class="text-sm text-gray-400">Aprovação Final</div>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <h3 class="text-lg font-bold text-white">Seu Progresso</h3>
+                            
+                            <?php foreach ($modulos_info as $id => $info): ?>
+                                <div class="bg-card rounded-xl p-4 border border-white/5 flex items-center justify-between">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-primary"><?= 
+                                                $info['concluido'] ? 'check_circle' : 'radio_button_unchecked' 
+                                            ?></span>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium text-white"><?= htmlspecialchars($info['nome']) ?></div>
+                                            <div class="text-sm text-gray-400">
+                                                <?php if ($info['concluido'] && $info['data_conclusao']): ?>
+                                                    Concluído em <?= date('d/m/Y', strtotime($info['data_conclusao'])) ?>
+                                                <?php else: ?>
+                                                    <?= $info['duracao'] ?> • Não iniciado
+                                                <?php endif; ?>
                                             </div>
                                         </div>
-                                        <button class="btn btn-sm btn-carregar-modulo" data-modulo-id="<?= $id ?>">
-                                            <?= $info['concluido'] ? 'Revisar' : 'Continuar' ?>
-                                        </button>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
+                                    </div>
+                                    <button class="bg-primary hover:bg-green-700 text-white px-4 py-2 rounded-lg transition btn-carregar-modulo" 
+                                            data-modulo-id="<?= $id ?>">
+                                        <?= $info['concluido'] ? 'Revisar' : 'Continuar' ?>
+                                    </button>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                     
-                    <div class="card-info">
-                        <div class="dashboard-card">
-                            <div class="dashboard-header"><h3>Próximos Passos</h3></div>
-                            
-                            <div id="proximos-passos-content">
-                                <?php if ($prova_final_info['aprovado']): ?>
-                                    <div class="alerta-progresso alerta-sucesso">
-                                        <i class="fas fa-trophy"></i> Você está Aprovado! Emita seu certificado.
-                                    </div>
-                                    <a href="certificado.php?curso_id=<?= $curso_id ?>" class="btn btn-success">
-                                        <i class="fas fa-certificate"></i> Emitir Certificado
+                    <!-- Próximos Passos -->
+                    <div class="glass-card rounded-2xl p-6">
+                        <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary">flag</span>
+                            Próximos Passos
+                        </h3>
+                        
+                        <div id="proximos-passos-content">
+                            <?php if ($prova_final_info['aprovado']): ?>
+                                <div class="bg-complete/20 border border-complete/30 rounded-xl p-6 text-center">
+                                    <span class="material-symbols-outlined text-complete text-4xl mb-4">emoji_events</span>
+                                    <h4 class="text-xl font-bold text-white mb-2">Parabéns! Você está Aprovado!</h4>
+                                    <p class="text-gray-300 mb-4">Você concluiu com sucesso este curso e está apto para emitir seu certificado.</p>
+                                    <a href="certificado.php?curso_id=<?= $curso_id ?>" class="bg-complete hover:bg-green-600 text-white px-6 py-3 rounded-lg transition inline-flex items-center gap-2">
+                                        <span class="material-symbols-outlined">verified</span>
+                                        Emitir Certificado
                                     </a>
-                                <?php elseif ($todos_modulos_concluidos): ?>
-                                    <div class="alerta-progresso">
-                                        <i class="fas fa-exclamation-triangle"></i> Parabéns! Você já pode iniciar a prova final.
-                                    </div>
-                                    <button class="btn btn-primary" id="iniciar-prova-final-dashboard" data-nav="prova">
-                                        <i class="fas fa-graduation-cap"></i> Iniciar Prova Final
+                                </div>
+                            <?php elseif ($todos_modulos_concluidos): ?>
+                                <div class="bg-primary/20 border border-primary/30 rounded-xl p-6 text-center">
+                                    <span class="material-symbols-outlined text-primary text-4xl mb-4">quiz</span>
+                                    <h4 class="text-xl font-bold text-white mb-2">Parabéns! Você pode iniciar a prova final.</h4>
+                                    <p class="text-gray-300 mb-4">Complete todos os módulos e teste seus conhecimentos na prova final.</p>
+                                    <button class="bg-primary hover:bg-green-700 text-white px-6 py-3 rounded-lg transition inline-flex items-center gap-2 iniciar-prova-final-dashboard">
+                                        <span class="material-symbols-outlined">play_arrow</span>
+                                        Iniciar Prova Final
                                     </button>
                                     <?php if ($prova_final_info['tentativas'] > 0): ?>
-                                        <div class="tentativas-info">
+                                        <div class="text-sm text-gray-400 mt-3">
                                             Tentativas utilizadas: <?= $prova_final_info['tentativas'] ?>/2
                                         </div>
                                     <?php endif; ?>
-                                <?php else: 
-                                    $proximo_modulo_id = null;
-                                    foreach ($modulos_info as $id => $info) {
-                                        if (!$info['concluido']) {
-                                            $proximo_modulo_id = $id;
-                                            break;
-                                        }
+                                </div>
+                            <?php else: 
+                                $proximo_modulo_id = null;
+                                foreach ($modulos_info as $id => $info) {
+                                    if (!$info['concluido']) {
+                                        $proximo_modulo_id = $id;
+                                        break;
                                     }
-                                ?>
-                                    <div class="alerta-progresso">
-                                        <i class="fas fa-forward"></i> Restam <strong><?= $total_modulos - $modulos_concluidos ?> módulos</strong> para completar.
+                                }
+                            ?>
+                                <div class="bg-card border border-white/10 rounded-xl p-6">
+                                    <div class="flex items-center gap-4 mb-4">
+                                        <div class="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-primary">forward</span>
+                                        </div>
+                                        <div>
+                                            <h4 class="text-lg font-bold text-white">Continue sua Jornada</h4>
+                                            <p class="text-gray-400">Restam <strong><?= $total_modulos - $modulos_concluidos ?> módulos</strong> para completar.</p>
+                                        </div>
                                     </div>
                                     <?php if ($proximo_modulo_id): ?>
-                                        <button class="btn btn-primary btn-carregar-modulo" data-modulo-id="<?= $proximo_modulo_id ?>">
-                                            <i class="fas fa-arrow-right"></i> Ir para o Próximo Módulo
+                                        <button class="bg-primary hover:bg-green-700 text-white px-6 py-3 rounded-lg transition w-full flex items-center justify-center gap-2 btn-carregar-modulo" 
+                                                data-modulo-id="<?= $proximo_modulo_id ?>">
+                                            <span class="material-symbols-outlined">play_arrow</span>
+                                            Ir para o Próximo Módulo
                                         </button>
                                     <?php endif; ?>
-                                <?php endif; ?>
-                            </div>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <div id="modulo-view-container" class="oculto"></div>
-            <div id="prova-final-view" class="oculto"></div>
-        </div>
-    </main>
-    
-   <div id="toast-container"></div>
 
-    <div id="templates" class="oculto">
-        <!-- Templates serão gerados dinamicamente pelo JavaScript -->
-        <div id="modulo-template-base">
-            <div class="indice-modulo">
-                <h3 class="modulo-titulo-template">Módulo: {TITULO}</h3>
-                <div class="modulo-meta">
-                    <span><i class="fas fa-clock"></i> {DURACAO}</span>
-                    <span><i class="fas fa-play-circle"></i> {TOTAL_LICOES} lições</span>
-                </div>
-                <ul class="lista-licoes" data-total-licoes="{TOTAL_LICOES}">
-                    <!-- Lições serão adicionadas aqui -->
-                </ul>
-            </div>
-            <div class="conteudo-licao-container" id="container-licao-{MODULO_ID}"></div>
-        </div>
+                <!-- Módulo View -->
+                <div id="modulo-view-container" class="slide"></div>
 
-        <div id="licao-template-base">
-            <div class="conteudo-licao">
-                <h4>{TITULO}</h4>
-                <div class="conteudo-body">
-                    {CONTEUDO}
-                </div>
-                <?php if ($user_tipo === 'cia_dev' || $user_tipo === 'admin'): ?>
-                <div class="admin-actions" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                    <small style="color: #666;">
-                        <i class="fas fa-cog"></i> Ações do Administrador:
-                        <a href="admin/admin_conteudos.php?modulo_id={MODULO_ID}" target="_blank" style="color: #32CD32; margin-left: 10px;">Editar Conteúdo</a>
-                    </small>
-                </div>
-                <?php endif; ?>
+                <!-- Prova Final View -->
+                <div id="prova-final-view" class="slide"></div>
             </div>
-        </div>
-
-        <!-- Template de Conquistas -->
-        <div id="conquistas-template">
-            <div class="conquistas-container">
-                <h2><i class="fas fa-trophy"></i> Suas Conquistas</h2>
-                <div class="conquistas-grid-expandido"></div>
-            </div>
-        </div>
-
-        <!-- Template de Estatísticas -->
-        <div id="estatisticas-template">
-            <div class="estatisticas-container">
-                <h2><i class="fas fa-chart-line"></i> Estatísticas Detalhadas</h2>
-                <div class="estatisticas-grid">
-                    <div class="estatistica-card">
-                        <h3>Tempo de Estudo</h3>
-                        <div class="estatistica-valor">0h 0min</div>
-                        <div class="estatistica-desc">Total dedicado ao curso</div>
-                    </div>
-                    <div class="estatistica-card">
-                        <h3>Taxa de Conclusão</h3>
-                        <div class="estatistica-valor"><?= number_format($progresso_porcentagem, 1) ?>%</div>
-                        <div class="estatistica-desc">Progresso geral</div>
-                    </div>
-                    <div class="estatistica-card">
-                        <h3>Média de Acertos</h3>
-                        <div class="estatistica-valor">0%</div>
-                        <div class="estatistica-desc">Nos quizzes</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Template de Quiz -->
-        <div id="quiz-template">
-            <div class="quiz-container">
-                <h4><i class="fas fa-spell-check"></i> Prova de Fixação do Módulo</h4>
-                <div class="quiz-info">
-                    <p>Parabéns! Você completou todas as lições deste módulo. Agora é hora de testar seu conhecimento.</p>
-                    <div class="quiz-stats">
-                        <span><i class="fas fa-question-circle"></i> <span class="total-perguntas">1</span> pergunta(s)</span>
-                        <span><i class="fas fa-trophy"></i> Complete para avançar</span>
-                    </div>
-                </div>
-                
-                <!-- Área do resultado (inicialmente oculta) -->
-                <div id="resultado-quiz-{QUIZ_ID}" class="resultado-quiz oculto">
-                    <!-- Conteúdo gerado dinamicamente pelo JavaScript -->
-                </div>
-                
-                <!-- Área das perguntas (travada após conclusão) -->
-                <div class="perguntas-wrapper" id="perguntas-wrapper-{QUIZ_ID}">
-                    <!-- Perguntas serão inseridas aqui -->
-                </div>
-                
-                <button class="btn btn-primary btn-finalizar-quiz" id="btn-finalizar-{QUIZ_ID}">
-                    <i class="fas fa-paper-plane"></i> Enviar Respostas
-                </button>
-                
-                <button class="btn btn-revisar oculto" id="btn-revisar-{QUIZ_ID}">
-                    <i class="fas fa-eye"></i> Revisar Respostas
-                </button>
-                
-                <button class="btn btn-continuar oculto" id="btn-continuar-{QUIZ_ID}">
-                    <i class="fas fa-arrow-right"></i> Continuar
-                </button>
-            </div>
-        </div>
-
-        <!-- Template de Resultado da Prova Final -->
-        <div id="resultado-prova-template">
-            <div class="resultado-quiz">
-                <div class="resultado-titulo">{TITULO}</div>
-                <div class="resultado-nota">{NOTA}%</div>
-                <div class="resultado-mensagem">{MENSAGEM}</div>
-                
-                <div class="resultado-stats">
-                    <div class="stat-item-resultado">
-                        <span class="stat-value">{ACERTOS}</span>
-                        <span class="stat-label">Acertos</span>
-                    </div>
-                    <div class="stat-item-resultado">
-                        <span class="stat-value">{TOTAL}</span>
-                        <span class="stat-label">Total</span>
-                    </div>
-                    <div class="stat-item-resultado">
-                        <span class="stat-value">{TAXA}%</span>
-                        <span class="stat-label">Taxa de Acerto</span>
-                    </div>
-                </div>
-                
-                <div class="resultado-detalhes">
-                    <h5>Detalhes das Respostas:</h5>
-                    <div class="detalhes-perguntas">
-                        <!-- Detalhes das perguntas serão inseridos aqui -->
-                    </div>
-                </div>
-                
-                <div class="acoes-resultado">
-                    <button class="btn btn-revisar" id="btn-revisar-prova">
-                        <i class="fas fa-eye"></i> Revisar Respostas
-                    </button>
-                    <button class="btn btn-continuar" id="btn-continuar-prova">
-                        <i class="fas fa-arrow-right"></i> Continuar
-                    </button>
-                    <a href="certificado.php?curso_id={CURSO_ID}" class="btn btn-certificado-resultado {CERTIFICADO_CLASS}">
-                        <i class="fas fa-certificate"></i> Emitir Certificado
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Template de Prova Final -->
-        <div id="prova-final-template">
-            <h2><i class="fas fa-graduation-cap"></i> Prova Final do Curso</h2>
-            <p>Você precisa de <strong>70% de acertos</strong> para aprovação. Você tem <strong>2 tentativas</strong>.</p>
-            <div id="timer-bloqueio" class="oculto"></div>
-            <div class="perguntas-wrapper"></div>
-            <button class="btn" id="btn-finalizar-prova">Enviar Respostas</button>
         </div>
     </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const mainContent = document.querySelector('.main-content');
-        const cursoState = JSON.parse(mainContent.dataset.initialState);
-        const dashboardView = document.getElementById('dashboard-view');
-        const moduloViewContainer = document.getElementById('modulo-view-container');
-        const provaFinalView = document.getElementById('prova-final-view');
-        
-        // Sistema de navegação
-        document.body.addEventListener('click', function(e) {
-            // Navegação da Sidebar
-            const navItem = e.target.closest('[data-nav]');
-            if (navItem) {
-                const navTipo = navItem.dataset.nav;
-                if (navTipo === 'dashboard') {
-                    carregarDashboard();
-                } else if (navTipo === 'modulo') {
-                    carregarModulo(navItem.dataset.moduloId);
-                } else if (navTipo === 'prova') {
-                    carregarProvaFinal();
-                }
-                return;
-            }
+    <!-- Navegação Mobile -->
+    <div class="fixed bottom-0 left-0 right-0 bg-card border-t border-white/10 p-4 lg:hidden">
+        <div class="flex justify-between items-center">
+            <button id="btn-prev" class="btn-nav bg-primary hover:bg-green-700 text-white p-3 rounded-full disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                <span class="material-symbols-outlined">chevron_left</span>
+            </button>
+            
+            <div class="text-center">
+                <div id="current-slide-title" class="text-sm font-medium text-white">Dashboard</div>
+                <div id="slide-progress" class="text-xs text-gray-400">1/<?= $total_modulos + 1 ?></div>
+            </div>
+            
+            <button id="btn-next" class="btn-nav bg-primary hover:bg-green-700 text-white p-3 rounded-full">
+                <span class="material-symbols-outlined">chevron_right</span>
+            </button>
+        </div>
+    </div>
 
-            // Botões "Continuar/Revisar" Módulo
-            const btnCarregarModulo = e.target.closest('.btn-carregar-modulo');
-            if (btnCarregarModulo) {
-                carregarModulo(btnCarregarModulo.dataset.moduloId);
-                return;
-            }
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
 
-            // Prova Final do Dashboard
-            const btnProvaDashboard = e.target.closest('#iniciar-prova-final-dashboard');
-            if (btnProvaDashboard) {
-                carregarProvaFinal();
-                return;
-            }
-        });
+    <!-- Script principal -->
+    <script>
+        // ===== DADOS INICIAIS DO PHP =====
+        const cursoState = <?= json_encode($initial_state) ?>;
+        const perguntasFinais = <?= json_encode($perguntas_final_formatadas) ?>;
 
-        function carregarDashboard() {
-            mostrarView('dashboard');
-            atualizarDashboard();
-        }
-
-        function carregarModulo(moduloId) {
-            const modulo = cursoState.modulos_info[moduloId];
-            if (!modulo) return;
-
-            moduloViewContainer.innerHTML = `
-                <div class="modulo-header">
-                    <h2><i class="${modulo.icone}"></i> ${modulo.nome}</h2>
-                    <p class="modulo-descricao">${modulo.descricao}</p>
-                </div>
-                <div class="conteudos-lista">
-                    ${modulo.conteudos.map((conteudo, index) => `
-                        <div class="conteudo-item">
-                            <h4>${conteudo.titulo}</h4>
-                            <div class="conteudo-texto">${conteudo.conteudo}</div>
-                        </div>
-                    `).join('')}
+        // ===== SISTEMA DE TOAST =====
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icons = { 
+                success: 'check_circle', 
+                error: 'error', 
+                info: 'info',
+                warning: 'warning'
+            };
+            
+            toast.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined">${icons[type]}</span>
+                    <span>${message}</span>
+                    <button class="toast-close ml-auto" onclick="this.parentElement.parentElement.remove()">
+                        <span class="material-symbols-outlined text-sm">close</span>
+                    </button>
                 </div>
             `;
-            mostrarView('modulo');
+            
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('show'), 10);
+            
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.classList.remove('show');
+                    setTimeout(() => toast.remove(), 300);
+                }
+            }, 4000);
         }
 
+        // ===== SISTEMA DE NAVEGAÇÃO =====
+        let currentView = 'dashboard';
+        let currentModuloId = null;
+        let currentSlideIndex = 0;
+        let totalSlides = 1;
+
+        function navigateTo(view, moduloId = null) {
+            console.log(`Navegando para: ${view}`, moduloId);
+            
+            // Esconder todas as views
+            document.querySelectorAll('.slide').forEach(slide => {
+                slide.classList.remove('active');
+            });
+            
+            // Atualizar estado atual
+            currentView = view;
+            currentModuloId = moduloId;
+            
+            if (view === 'dashboard') {
+                document.getElementById('dashboard-view').classList.add('active');
+                updateSlideInfo('Dashboard', 1);
+                currentSlideIndex = 0;
+            } else if (view === 'modulo') {
+                carregarModulo(moduloId);
+                document.getElementById('modulo-view-container').classList.add('active');
+                const modulo = cursoState.modulos_info[moduloId];
+                currentSlideIndex = Object.keys(cursoState.modulos_info).indexOf(moduloId) + 1;
+                updateSlideInfo(modulo.nome, currentSlideIndex + 1);
+            } else if (view === 'prova') {
+                carregarProvaFinal();
+                document.getElementById('prova-final-view').classList.add('active');
+                currentSlideIndex = totalSlides - 1;
+                updateSlideInfo('Prova Final', totalSlides);
+            }
+            
+            updateNavigationButtons();
+        }
+
+        function updateSlideInfo(title, slideNumber) {
+            const currentSlideTitle = document.getElementById('current-slide-title');
+            const slideProgress = document.getElementById('slide-progress');
+            
+            if (currentSlideTitle) currentSlideTitle.textContent = title;
+            if (slideProgress) slideProgress.textContent = `${slideNumber}/${totalSlides}`;
+        }
+
+        function updateNavigationButtons() {
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
+            
+            if (btnPrev) btnPrev.disabled = currentSlideIndex === 0;
+            if (btnNext) btnNext.disabled = currentSlideIndex === totalSlides - 1;
+        }
+
+// ===== SISTEMA DE MÓDULOS =====
+function carregarModulo(moduloId) {
+    const modulo = cursoState.modulos_info[moduloId];
+    if (!modulo) {
+        showToast('Módulo não encontrado', 'error');
+        return;
+    }
+    
+    const moduloViewContainer = document.getElementById('modulo-view-container');
+    
+    let html = `
+        <div class="glass-card rounded-2xl p-6 conteudo-slide">
+            <div class="flex items-center gap-4 mb-6">
+                <button class="bg-primary hover:bg-green-700 text-white p-2 rounded-lg transition btn-voltar-dashboard">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </button>
+                <div>
+                    <h2 class="text-2xl font-bold text-white">${modulo.nome}</h2>
+                    <p class="text-gray-400">${modulo.descricao}</p>
+                </div>
+            </div>
+            
+            <div class="space-y-6">
+    `;
+    
+    modulo.conteudos.forEach((conteudo, index) => {
+        let conteudoHTML = '';
+        
+        // Determinar ícone baseado no tipo
+        let iconeTipo = 'description';
+        switch(conteudo.tipo) {
+            case 'video': iconeTipo = 'videocam'; break;
+            case 'imagem': iconeTipo = 'image'; break;
+            case 'quiz': iconeTipo = 'quiz'; break;
+            default: iconeTipo = 'description';
+        }
+        
+        // Renderizar conteúdo baseado no tipo
+        switch (conteudo.tipo) {
+            case 'texto':
+                conteudoHTML = `
+                    <div class="prose prose-invert max-w-none">
+                        <div class="text-gray-300 leading-relaxed">${conteudo.conteudo || ''}</div>
+                    </div>
+                `;
+                break;
+                
+ case 'video':
+    let videoHTML = '';
+    
+    // Verificar se tem URL de vídeo externo
+    if (conteudo.url_video) {
+        let embedUrl = conteudo.url_video;
+        
+        // Converter URLs do YouTube para embed
+        if (conteudo.url_video.includes('youtube.com') || conteudo.url_video.includes('youtu.be')) {
+            const videoId = conteudo.url_video.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+            if (videoId) {
+                embedUrl = `https://www.youtube.com/embed/${videoId[1]}?rel=0&modestbranding=1`;
+            }
+        }
+        // Converter URLs do Vimeo para embed
+        else if (conteudo.url_video.includes('vimeo.com')) {
+            const videoId = conteudo.url_video.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/);
+            if (videoId) {
+                embedUrl = `https://player.vimeo.com/video/${videoId[1]}`;
+            }
+        }
+        
+        videoHTML = `
+            <div class="video-container mb-4">
+                <iframe 
+                    src="${embedUrl}" 
+                    width="100%" 
+                    height="400" 
+                    frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowfullscreen
+                    class="rounded-lg shadow-lg"
+                    loading="lazy"
+                ></iframe>
+            </div>
+        `;
+    } 
+    // Verificar se tem arquivo de vídeo local
+    else if (conteudo.arquivo) {
+        videoHTML = `
+            <div class="video-container mb-4">
+                <video 
+                    controls 
+                    width="100%" 
+                    height="400"
+                    class="rounded-lg shadow-lg bg-black"
+                    poster="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMTExMTExIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzY2NjY2NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkNhcnJlZ2FuZG8gdsOtZGVvLi4uPC90ZXh0Pjwvc3ZnPg=="
+                    preload="metadata"
+                >
+                    <source src="${conteudo.arquivo}" type="video/mp4">
+                    <source src="${conteudo.arquivo}" type="video/webm">
+                    <source src="${conteudo.arquivo}" type="video/ogg">
+                    Seu navegador não suporta a reprodução de vídeos HTML5.
+                    <a href="${conteudo.arquivo}" download>Clique aqui para baixar o vídeo</a>
+                </video>
+            </div>
+        `;
+    } else {
+        videoHTML = `
+            <div class="text-center py-12 bg-gray-800 rounded-lg border-2 border-dashed border-gray-600">
+                <span class="material-symbols-outlined text-6xl text-gray-500 mb-4">videocam_off</span>
+                <p class="text-gray-400 text-lg mb-2">Nenhum vídeo disponível</p>
+                <p class="text-gray-500 text-sm">Configure um vídeo no painel administrativo</p>
+            </div>
+        `;
+    }
+    
+    conteudoHTML = `
+        ${videoHTML}
+        ${conteudo.descricao ? `
+            <div class="bg-gray-800 rounded-lg p-4 mt-4">
+                <h5 class="text-white font-medium mb-2 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary text-sm">info</span>
+                    Descrição do Vídeo
+                </h5>
+                <p class="text-gray-300">${conteudo.descricao}</p>
+            </div>
+        ` : ''}
+    `;
+    break;
+                
+            case 'imagem':
+                let imagemHTML = '';
+                if (conteudo.arquivo) {
+                    imagemHTML = `
+                        <div class="image-container mb-4 text-center">
+                            <img 
+                                src="${conteudo.arquivo}" 
+                                alt="${conteudo.titulo}"
+                                class="max-w-full h-auto rounded-lg mx-auto max-h-96 object-contain bg-gray-800 p-2"
+                                loading="lazy"
+                                onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzM3NDE1MSIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9Ii82Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZW0gbsOjbyBjYXJyZWdhZGE8L3RleHQ+PC9zdmc+'"
+                            >
+                            ${conteudo.descricao ? `
+                                <p class="text-gray-400 text-sm mt-2 italic">${conteudo.descricao}</p>
+                            ` : ''}
+                        </div>
+                    `;
+                } else {
+                    imagemHTML = `
+                        <div class="text-center py-8 bg-gray-800 rounded-lg">
+                            <span class="material-symbols-outlined text-4xl text-gray-500 mb-2">image_not_supported</span>
+                            <p class="text-gray-400">Nenhuma imagem disponível</p>
+                        </div>
+                    `;
+                }
+                
+                conteudoHTML = imagemHTML;
+                break;
+                
+            case 'quiz':
+                let quizHTML = '';
+                if (conteudo.conteudo) {
+                    try {
+                        const quizData = JSON.parse(conteudo.conteudo);
+                        if (quizData && quizData.length > 0) {
+                            quizHTML = `
+                                <div class="quiz-container bg-gray-800 rounded-lg p-6">
+                                    <h4 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-primary">quiz</span>
+                                        Quiz Interativo
+                                    </h4>
+                                    <p class="text-gray-400 mb-4">Este quiz contém ${quizData.length} pergunta(s)</p>
+                                    <div class="text-center">
+                                        <button class="bg-primary hover:bg-green-700 text-white px-6 py-3 rounded-lg transition iniciar-quiz" data-quiz-data='${conteudo.conteudo}'>
+                                            <span class="material-symbols-outlined mr-2">play_arrow</span>
+                                            Iniciar Quiz
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            quizHTML = `
+                                <div class="text-center py-8 bg-gray-800 rounded-lg">
+                                    <span class="material-symbols-outlined text-4xl text-gray-500 mb-2">quiz</span>
+                                    <p class="text-gray-400">Quiz em desenvolvimento</p>
+                                </div>
+                            `;
+                        }
+                    } catch (e) {
+                        quizHTML = `
+                            <div class="text-center py-8 bg-gray-800 rounded-lg">
+                                <span class="material-symbols-outlined text-4xl text-gray-500 mb-2">error</span>
+                                <p class="text-gray-400">Erro ao carregar quiz</p>
+                            </div>
+                        `;
+                    }
+                } else {
+                    quizHTML = `
+                        <div class="text-center py-8 bg-gray-800 rounded-lg">
+                            <span class="material-symbols-outlined text-4xl text-gray-500 mb-2">help</span>
+                            <p class="text-gray-400">Quiz interativo - Em desenvolvimento</p>
+                        </div>
+                    `;
+                }
+                
+                conteudoHTML = quizHTML;
+                break;
+                
+            default:
+                conteudoHTML = `
+                    <div class="text-center py-8 bg-gray-800 rounded-lg">
+                        <span class="material-symbols-outlined text-4xl text-gray-500 mb-2">error</span>
+                        <p class="text-gray-400">Tipo de conteúdo não suportado: ${conteudo.tipo}</p>
+                    </div>
+                `;
+        }
+        
+        // Estrutura principal do conteúdo
+        html += `
+            <div class="bg-card rounded-xl p-6 border border-white/5">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">${iconeTipo}</span>
+                    ${conteudo.titulo}
+                </h3>
+                ${conteudoHTML}
+                
+                ${index === modulo.conteudos.length - 1 ? `
+                    <div class="mt-6 pt-6 border-t border-white/10 text-center">
+                        ${!modulo.concluido ? `
+                            <button class="bg-primary hover:bg-green-700 text-white px-6 py-3 rounded-lg transition marcar-concluido flex items-center justify-center gap-2 mx-auto" 
+                                    data-modulo-id="${moduloId}">
+                                <span class="material-symbols-outlined">check_circle</span>
+                                Marcar como Concluído (+50 XP)
+                            </button>
+                            <p class="text-xs text-gray-400 mt-2">Ao concluir este módulo, você ganhará 50 pontos XP</p>
+                        ` : `
+                            <div class="bg-complete/20 border border-complete/30 rounded-lg p-4 max-w-md mx-auto">
+                                <div class="flex items-center justify-center gap-2 text-complete mb-2">
+                                    <span class="material-symbols-outlined">check_circle</span>
+                                    <span class="font-medium">Módulo Concluído</span>
+                                </div>
+                                <p class="text-sm text-gray-400">Você completou este módulo em ${modulo.data_conclusao ? new Date(modulo.data_conclusao).toLocaleDateString('pt-BR') : 'data não disponível'}</p>
+                                <p class="text-xs text-complete mt-1">+50 XP ganhos</p>
+                            </div>
+                        `}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    });
+    
+    html += `</div></div>`;
+    moduloViewContainer.innerHTML = html;
+    
+    // Adicionar eventos
+    const btnVoltar = moduloViewContainer.querySelector('.btn-voltar-dashboard');
+    if (btnVoltar) {
+        btnVoltar.addEventListener('click', () => navigateTo('dashboard'));
+    }
+    
+    const btnConcluir = moduloViewContainer.querySelector('.marcar-concluido');
+    if (btnConcluir) {
+        btnConcluir.addEventListener('click', function() {
+            const moduloId = this.dataset.moduloId;
+            marcarModuloConcluido(moduloId);
+        });
+    }
+    
+    // Adicionar evento para botões de quiz
+    const btnIniciarQuiz = moduloViewContainer.querySelector('.iniciar-quiz');
+    if (btnIniciarQuiz) {
+        btnIniciarQuiz.addEventListener('click', function() {
+            const quizData = JSON.parse(this.dataset.quizData);
+            iniciarQuiz(quizData);
+        });
+    }
+}
+
+// Função auxiliar para iniciar quiz (opcional)
+function iniciarQuiz(quizData) {
+    showToast('Funcionalidade de quiz em desenvolvimento!', 'info');
+    // Aqui você pode implementar a lógica do quiz interativo
+    console.log('Iniciando quiz:', quizData);
+}
+async function marcarModuloConcluido(moduloId) {
+    const btnConcluir = document.querySelector('.marcar-concluido');
+    const originalText = btnConcluir.innerHTML;
+    
+    // Mostrar loading
+    btnConcluir.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+    btnConcluir.disabled = true;
+
+    try {
+        // Salvar no banco de dados usando o endpoint existente
+        const response = await fetch('ajax/salvar_progresso.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                tipo: 'modulo',
+                curso_id: cursoState.curso_id,
+                id: moduloId, // Usar 'id' em vez de 'modulo_id' para compatibilidade
+                acertos: 1, // Simular que acertou tudo
+                total: 1    // Total de "questões" no módulo
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Módulo marcado como concluído! +50 XP', 'success');
+            
+            // Atualizar estado local apenas se salvou no banco
+            if (!cursoState.progresso_modulos.includes(moduloId)) {
+                cursoState.progresso_modulos.push(moduloId);
+                cursoState.modulos_info[moduloId].concluido = true;
+                cursoState.modulos_info[moduloId].data_conclusao = new Date().toISOString();
+                
+                // Atualizar UI
+                const moduloElement = document.querySelector(`.modulo-nav[data-modulo-id="${moduloId}"]`);
+                if (moduloElement) {
+                    moduloElement.classList.add('bg-complete/20', 'border-complete/30');
+                    const icon = moduloElement.querySelector('.material-symbols-outlined');
+                    if (icon) {
+                        icon.textContent = 'check_circle';
+                        icon.classList.add('text-complete');
+                    }
+                }
+                
+                // Atualizar progresso geral
+                atualizarUIProgresso();
+                
+                // Atualizar estatísticas no dashboard
+                atualizarEstatisticasDashboard();
+            }
+            
+            // Voltar para o dashboard após um breve delay
+            setTimeout(() => {
+                navigateTo('dashboard');
+            }, 1500);
+        } else {
+            showToast('Erro ao salvar progresso: ' + (data.message || 'Tente novamente'), 'error');
+            btnConcluir.innerHTML = originalText;
+            btnConcluir.disabled = false;
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro de conexão. Tente novamente.', 'error');
+        btnConcluir.innerHTML = originalText;
+        btnConcluir.disabled = false;
+    }
+}
+function atualizarEstatisticasDashboard() {
+    const modulosConcluidos = cursoState.progresso_modulos.length;
+    
+    // Atualizar contador de módulos concluídos
+    const modulosConcluidosElement = document.querySelector('.stats-grid .bg-card:nth-child(1) .text-2xl');
+    if (modulosConcluidosElement) {
+        modulosConcluidosElement.textContent = modulosConcluidos;
+    }
+    
+    // Atualizar progresso geral
+    const progressoPorcentagem = cursoState.total_modulos > 0 ? 
+        (modulosConcluidos / cursoState.total_modulos) * 100 : 0;
+    
+    // Atualizar anel de progresso
+    const progressRing = document.querySelector('.progress-ring');
+    if (progressRing) {
+        progressRing.style.strokeDashoffset = 251.2 - (251.2 * progressoPorcentagem / 100);
+    }
+    
+    // Atualizar texto de progresso
+    const progressText = document.querySelector('.absolute.inset-0 span');
+    if (progressText) {
+        progressText.textContent = Math.round(progressoPorcentagem) + '%';
+    }
+    
+    // Verificar se todos os módulos estão concluídos para liberar prova final
+    const todosConcluidos = modulosConcluidos === cursoState.total_modulos;
+    if (todosConcluidos && !cursoState.prova_final_info.aprovado) {
+        // Mostrar/atualizar botão da prova final
+        const provaButton = document.querySelector('.prova-nav');
+        if (provaButton && provaButton.style.display === 'none') {
+            provaButton.style.display = 'block';
+        }
+        
+        // Atualizar seção de próximos passos
+        const proximosPassos = document.getElementById('proximos-passos-content');
+        if (proximosPassos) {
+            proximosPassos.innerHTML = `
+                <div class="bg-primary/20 border border-primary/30 rounded-xl p-6 text-center">
+                    <span class="material-symbols-outlined text-primary text-4xl mb-4">quiz</span>
+                    <h4 class="text-xl font-bold text-white mb-2">Parabéns! Você pode iniciar a prova final.</h4>
+                    <p class="text-gray-300 mb-4">Complete todos os módulos e teste seus conhecimentos na prova final.</p>
+                    <button class="bg-primary hover:bg-green-700 text-white px-6 py-3 rounded-lg transition inline-flex items-center gap-2 iniciar-prova-final-dashboard">
+                        <span class="material-symbols-outlined">play_arrow</span>
+                        Iniciar Prova Final
+                    </button>
+                    ${cursoState.prova_final_info.tentativas > 0 ? `
+                        <div class="text-sm text-gray-400 mt-3">
+                            Tentativas utilizadas: ${cursoState.prova_final_info.tentativas}/2
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+    }
+}
+function atualizarUIProgresso() {
+    const modulosConcluidos = cursoState.progresso_modulos.length;
+    const progressoPorcentagem = cursoState.total_modulos > 0 ? 
+        (modulosConcluidos / cursoState.total_modulos) * 100 : 0;
+    
+    // Atualizar anel de progresso
+    const progressRing = document.querySelector('.progress-ring');
+    if (progressRing) {
+        progressRing.style.strokeDashoffset = 251.2 - (251.2 * progressoPorcentagem / 100);
+    }
+    
+    // Atualizar texto de progresso
+    const progressText = document.querySelector('.absolute.inset-0 span');
+    if (progressText) {
+        progressText.textContent = Math.round(progressoPorcentagem) + '%';
+    }
+    
+    // Atualizar botões na sidebar
+    cursoState.progresso_modulos.forEach(moduloId => {
+        const moduloElement = document.querySelector(`.modulo-nav[data-modulo-id="${moduloId}"]`);
+        if (moduloElement) {
+            moduloElement.classList.add('bg-complete/20', 'border-complete/30');
+            const icon = moduloElement.querySelector('.material-symbols-outlined');
+            if (icon) {
+                icon.textContent = 'check_circle';
+                icon.classList.add('text-complete');
+                icon.classList.remove('text-gray-400');
+            }
+        }
+        
+        // Atualizar também no dashboard
+        const dashboardItem = document.querySelector(`.btn-carregar-modulo[data-modulo-id="${moduloId}"]`);
+        if (dashboardItem) {
+            const card = dashboardItem.closest('.bg-card');
+            if (card) {
+                card.classList.add('bg-complete/20', 'border-complete/30');
+                dashboardItem.textContent = 'Revisar';
+            }
+        }
+    });
+}
+        // ===== SISTEMA DE PROVA FINAL =====
         function carregarProvaFinal() {
             // Verificar se todos os módulos estão concluídos
             if (!verificarModulosConcluidos()) {
                 showToast('Complete todos os módulos antes de fazer a prova final.', 'error');
+                navigateTo('dashboard');
                 return;
             }
-
+            
             // Verificar se já foi aprovado
             if (cursoState.prova_final_info.aprovado) {
                 showToast('Você já foi aprovado na prova final!', 'info');
+                navigateTo('dashboard');
                 return;
             }
-
+            
             // Verificar tentativas
             if (cursoState.prova_final_info.tentativas >= 2) {
                 showToast('Você já utilizou todas as tentativas disponíveis.', 'error');
+                navigateTo('dashboard');
                 return;
             }
-
+            
             renderizarProvaFinal();
         }
 
@@ -1989,114 +3567,294 @@ $initial_state = [
             return cursoState.progresso_modulos.length === cursoState.total_modulos;
         }
 
-        function renderizarProvaFinal() {
-            const perguntas = cursoState.prova_final_perguntas;
+function renderizarProvaFinal() {
+    const perguntas = perguntasFinais;
+    const provaFinalView = document.getElementById('prova-final-view');
+    
+    if (!perguntas || perguntas.length === 0) {
+        provaFinalView.innerHTML = `
+            <div class="glass-card rounded-2xl p-6 text-center">
+                <span class="material-symbols-outlined text-gray-500 text-6xl mb-4">error</span>
+                <h3 class="text-xl font-bold text-white mb-2">Prova Final Não Disponível</h3>
+                <p class="text-gray-400 mb-6">Não há questões configuradas para a prova final deste curso.</p>
+                <button class="bg-primary hover:bg-green-700 text-white px-6 py-3 rounded-lg transition btn-voltar-dashboard">
+                    <span class="material-symbols-outlined mr-2">arrow_back</span>
+                    Voltar ao Dashboard
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div class="glass-card rounded-2xl p-6">
+            <div class="flex items-center gap-4 mb-6">
+                <button class="bg-primary hover:bg-green-700 text-white p-2 rounded-lg transition btn-voltar-dashboard">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </button>
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Prova Final</h2>
+                    <p class="text-gray-400">${cursoState.curso_info.titulo}</p>
+                </div>
+            </div>
             
-            if (perguntas.length === 0) {
-                provaFinalView.innerHTML = `
-                    <div class="alert alert-error">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <h3>Prova Final Não Disponível</h3>
-                        <p>Não há questões configuradas para a prova final deste curso.</p>
-                        <button class="btn btn-primary" onclick="carregarDashboard()">
-                            <i class="fas fa-arrow-left"></i> Voltar ao Dashboard
-                        </button>
+            <div class="bg-primary/20 border border-primary/30 rounded-xl p-6 mb-6">
+                <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined">info</span>
+                    Instruções da Prova
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">help</span>
+                        <div><strong>Total de Questões:</strong> ${perguntas.length}</div>
                     </div>
-                `;
-                mostrarView('prova');
-                return;
-            }
-
-            let html = `
-                <div class="progresso-respostas" id="progresso-respostas">
-                    Respondidas: <span id="contador-respostas">0</span>/<span id="total-perguntas">${perguntas.length}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">military_tech</span>
+                        <div><strong>Nota Mínima:</strong> 70%</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">schedule</span>
+                        <div><strong>Tempo Estimado:</strong> 30 minutos</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">check_circle</span>
+                        <div><strong>Status:</strong> Disponível</div>
+                    </div>
                 </div>
-
-                <div class="prova-final-container">
-                    <div class="prova-header">
-                        <h2><i class="fas fa-graduation-cap"></i> Prova Final</h2>
-                        <div class="curso-info">${cursoState.curso_info.titulo}</div>
+            </div>
+            
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">Progresso de Respostas</span>
+                    <span class="text-sm font-medium text-white" id="contador-respostas">0/${perguntas.length}</span>
+                </div>
+                <div class="w-full bg-gray-700 rounded-full h-2">
+                    <div id="progresso-respostas" class="bg-primary h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+            
+            <form id="form-prova-final" class="space-y-6">
+    `;
+    
+    // Renderizar perguntas - USANDO A MESMA ESTRUTURA DO CÓDIGO QUE FUNCIONA
+    perguntas.forEach((pergunta, index) => {
+        html += `
+            <div class="bg-card rounded-xl p-6 border border-white/5">
+                <div class="flex items-start gap-4 mb-4">
+                    <div class="bg-primary/20 text-primary font-bold rounded-full w-8 h-8 flex items-center justify-center text-sm">
+                        ${index + 1}
                     </div>
-
-                    <div class="prova-info">
-                        <h3><i class="fas fa-info-circle"></i> Instruções da Prova</h3>
-                        <div class="info-grid">
-                            <div class="info-item">
-                                <i class="fas fa-question-circle"></i>
-                                <strong>Total de Questões:</strong> ${perguntas.length}
-                            </div>
-                            <div class="info-item">
-                                <i class="fas fa-trophy"></i>
-                                <strong>Nota Mínima:</strong> 70%
-                            </div>
-                            <div class="info-item">
-                                <i class="fas fa-clock"></i>
-                                <strong>Tempo Estimado:</strong> 30 minutos
-                            </div>
-                            <div class="info-item">
-                                <i class="fas fa-check-circle"></i>
-                                <strong>Status:</strong> Disponível
-                            </div>
-                        </div>
-                    </div>
-
-                    <form id="form-prova-final">
-            `;
-
-            // Renderizar perguntas
-            perguntas.forEach((pergunta, index) => {
-                html += `
-                    <div class="pergunta" id="pergunta-${index}">
-                        <div class="pergunta-cabecalho">
-                            <div class="pergunta-numero">${index + 1}</div>
-                            <div class="pergunta-texto">${pergunta.pergunta}</div>
-                        </div>
-                        <div class="opcoes">
-                `;
-
-                pergunta.opcoes.forEach((opcao, opcaoIndex) => {
-                    const opcaoId = `pergunta-${index}-opcao-${opcaoIndex}`;
-                    html += `
-                        <div class="opcao">
-                            <input type="radio" 
-                                   id="${opcaoId}" 
-                                   name="pergunta-${index}" 
-                                   value="${opcaoIndex}"
-                                   onchange="atualizarContadorRespostas()">
-                            <label for="${opcaoId}">
-                                <span class="opcao-letra">${String.fromCharCode(65 + opcaoIndex)}</span>
-                                <span class="opcao-texto">${opcao}</span>
-                            </label>
-                        </div>
-                    `;
-                });
-
-                html += `
-                        </div>
-                    </div>
-                `;
-            });
-
+                    <div class="flex-1">
+                        <h4 class="text-lg font-medium text-white mb-4">${pergunta.pergunta}</h4>
+                        <div class="space-y-3">
+        `;
+        
+        pergunta.opcoes.forEach((opcao, opcaoIndex) => {
+            const opcaoId = `pergunta-${index}-opcao-${opcaoIndex}`;
             html += `
-                    </form>
-
-                    <div class="prova-actions">
-                        <button class="btn btn-primary" id="btn-finalizar-prova" onclick="finalizarProva()" disabled>
-                            <i class="fas fa-paper-plane"></i> Finalizar Prova
-                        </button>
-                        <button class="btn btn-secondary" onclick="carregarDashboard()">
-                            <i class="fas fa-arrow-left"></i> Voltar
-                        </button>
+                <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-white/5 transition cursor-pointer">
+                    <input type="radio" 
+                           id="${opcaoId}" 
+                           name="pergunta-${index}" 
+                           value="${opcaoIndex}"
+                           class="hidden"
+                           onchange="atualizarContadorRespostas()">
+                    <span class="flex-1">
+                        <span class="font-medium text-white">${String.fromCharCode(65 + opcaoIndex)}.</span>
+                        <span class="text-gray-300 ml-2">${opcao}</span>
+                    </span>
+                    <span class="material-symbols-outlined text-gray-400 radio-icon">radio_button_unchecked</span>
+                    <span class="material-symbols-outlined text-primary check-icon hidden">check_circle</span>
+                </label>
+            `;
+        });
+        
+        html += `
+                        </div>
                     </div>
                 </div>
-            `;
+            </div>
+        `;
+    });
+    
+    html += `
+            </form>
+            
+            <div class="flex gap-4 mt-8">
+                <button class="bg-primary hover:bg-green-700 text-white px-6 py-3 rounded-lg transition flex-1 flex items-center justify-center gap-2" 
+                        id="btn-finalizar-prova" onclick="finalizarProva()" disabled>
+                    <span class="material-symbols-outlined">send</span>
+                    Finalizar Prova
+                </button>
+            </div>
+        </div>
+    `;
+    
+    provaFinalView.innerHTML = html;
+    
+    // ADICIONE ESTE EVENT LISTENER SIMPLES - igual ao código que funciona
+    provaFinalView.querySelectorAll('input[type="radio"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const label = this.closest('label');
+            label.querySelector('.radio-icon').classList.add('hidden');
+            label.querySelector('.check-icon').classList.remove('hidden');
+            
+            // Remover seleção de outras opções no mesmo grupo
+            const groupName = this.name;
+            label.parentElement.querySelectorAll(`input[name="${groupName}"]`).forEach(otherRadio => {
+                if (otherRadio !== this) {
+                    const otherLabel = otherRadio.closest('label');
+                    otherLabel.querySelector('.radio-icon').classList.remove('hidden');
+                    otherLabel.querySelector('.check-icon').classList.add('hidden');
+                }
+            });
+        });
+    });
+    
+    // Event listener para o botão voltar
+    const btnVoltar = provaFinalView.querySelector('.btn-voltar-dashboard');
+    if (btnVoltar) {
+        btnVoltar.addEventListener('click', () => navigateTo('dashboard'));
+    }
 
-            provaFinalView.innerHTML = html;
-            mostrarView('prova');
+    
+    // CORREÇÃO: Event listeners para os radio buttons
+// CORREÇÃO COMPLETA: Event listeners para os radio buttons
+provaFinalView.querySelectorAll('.opcao-radio').forEach(radio => {
+    radio.addEventListener('change', function() {
+        console.log('Opção selecionada:', this.value, this.checked);
+        atualizarContadorRespostas();
+        
+        // Atualizar o visual da opção selecionada
+        const label = this.closest('.opcao-label');
+        if (label) {
+            console.log('Label encontrado, atualizando ícones...');
+            
+            // REMOVER completamente as classes hidden e usar um approach diferente
+            const radioIcon = label.querySelector('.radio-icon');
+            const checkIcon = label.querySelector('.check-icon');
+            
+            // Esconder radio icon e mostrar check icon
+            if (radioIcon) {
+                radioIcon.style.display = 'none';
+            }
+            if (checkIcon) {
+                checkIcon.style.display = 'inline-flex';
+            }
+            
+            // Atualizar estilo visual
+            label.classList.add('border-primary', 'bg-primary/10');
+            label.querySelector('.opcao-letra').classList.remove('bg-gray-700', 'text-gray-300');
+            label.querySelector('.opcao-letra').classList.add('bg-primary', 'text-white');
+            label.querySelector('.opcao-texto').classList.remove('text-gray-300');
+            label.querySelector('.opcao-texto').classList.add('text-white');
+        }
+        
+        // Remover seleção visual de outras opções no mesmo grupo
+        const groupName = this.name;
+        const perguntaItem = this.closest('.pergunta-item');
+        
+        if (perguntaItem) {
+            perguntaItem.querySelectorAll(`input[name="${groupName}"]`).forEach(otherRadio => {
+                if (otherRadio !== this) {
+                    const otherLabel = otherRadio.closest('.opcao-label');
+                    if (otherLabel) {
+                        const otherRadioIcon = otherLabel.querySelector('.radio-icon');
+                        const otherCheckIcon = otherLabel.querySelector('.check-icon');
+                        
+                        // Mostrar radio icon e esconder check icon
+                        if (otherRadioIcon) {
+                            otherRadioIcon.style.display = 'inline-flex';
+                        }
+                        if (otherCheckIcon) {
+                            otherCheckIcon.style.display = 'none';
+                        }
+                        
+                        // Restaurar estilo visual padrão
+                        otherLabel.classList.remove('border-primary', 'bg-primary/10');
+                        otherLabel.querySelector('.opcao-letra').classList.remove('bg-primary', 'text-white');
+                        otherLabel.querySelector('.opcao-letra').classList.add('bg-gray-700', 'text-gray-300');
+                        otherLabel.querySelector('.opcao-texto').classList.remove('text-white');
+                        otherLabel.querySelector('.opcao-texto').classList.add('text-gray-300');
+                    }
+                }
+            });
+        }
+    });
+});
+    
+    // CORREÇÃO: Event listener para cliques diretos nos labels (fallback)
+// SOLUÇÃO ALTERNATIVA - Substitua todo o event listener por:
+provaFinalView.querySelectorAll('.opcao-radio').forEach(radio => {
+    radio.addEventListener('change', function() {
+        console.log('Opção selecionada:', this.value);
+        atualizarContadorRespostas();
+        
+        // Encontrar todos os elementos relevantes
+        const label = this.closest('.opcao-label');
+        const perguntaItem = this.closest('.pergunta-item');
+        const groupName = this.name;
+        
+        if (label && perguntaItem) {
+            // Primeiro, resetar TODAS as opções desta pergunta
+            perguntaItem.querySelectorAll('.opcao-label').forEach(otherLabel => {
+                otherLabel.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                otherLabel.style.backgroundColor = 'transparent';
+                otherLabel.querySelector('.opcao-letra').style.backgroundColor = '#374151';
+                otherLabel.querySelector('.opcao-letra').style.color = '#D1D5DB';
+                otherLabel.querySelector('.opcao-texto').style.color = '#D1D5DB';
+                
+                // Esconder check e mostrar radio para todas
+                const radioIcon = otherLabel.querySelector('.radio-icon');
+                const checkIcon = otherLabel.querySelector('.check-icon');
+                if (radioIcon) radioIcon.style.display = 'inline-flex';
+                if (checkIcon) checkIcon.style.display = 'none';
+            });
+            
+            // Agora aplicar estilo apenas para a opção selecionada
+            label.style.borderColor = '#32CD32';
+            label.style.backgroundColor = 'rgba(50, 205, 50, 0.1)';
+            label.querySelector('.opcao-letra').style.backgroundColor = '#32CD32';
+            label.querySelector('.opcao-letra').style.color = 'white';
+            label.querySelector('.opcao-texto').style.color = 'white';
+            
+            // Mostrar check e esconder radio
+            const radioIcon = label.querySelector('.radio-icon');
+            const checkIcon = label.querySelector('.check-icon');
+            if (radioIcon) radioIcon.style.display = 'none';
+            if (checkIcon) checkIcon.style.display = 'inline-flex';
+        }
+    });
+});
+    
+    // Event listener para o botão finalizar
+    const btnFinalizar = provaFinalView.querySelector('#btn-finalizar-prova');
+    if (btnFinalizar) {
+        btnFinalizar.addEventListener('click', finalizarProva);
+    }
+}
+
+        function atualizarContadorRespostas() {
+            const perguntas = perguntasFinais;
+            let respondidas = 0;
+            
+            perguntas.forEach((pergunta, index) => {
+                if (document.querySelector(`input[name="pergunta-${index}"]:checked`)) {
+                    respondidas++;
+                }
+            });
+            
+            const contador = document.getElementById('contador-respostas');
+            const progresso = document.getElementById('progresso-respostas');
+            const btnFinalizar = document.getElementById('btn-finalizar-prova');
+            
+            if (contador) contador.textContent = `${respondidas}/${perguntas.length}`;
+            if (progresso) progresso.style.width = `${(respondidas / perguntas.length) * 100}%`;
+            if (btnFinalizar) btnFinalizar.disabled = respondidas !== perguntas.length;
         }
 
-        function finalizarProva() {
-            const perguntas = cursoState.prova_final_perguntas;
+        async function finalizarProva() {
+            const perguntas = perguntasFinais;
             let respostas = {};
             let todasRespondidas = true;
 
@@ -2107,6 +3865,12 @@ $initial_state = [
                     respostas[index] = parseInt(respostaSelecionada.value);
                 } else {
                     todasRespondidas = false;
+                    // Destacar pergunta não respondida
+                    const perguntaElement = document.getElementById(`pergunta-${index}`);
+                    if (perguntaElement) {
+                        perguntaElement.style.border = '2px solid #EF4444';
+                        perguntaElement.style.animation = 'pulse 0.5s ease-in-out';
+                    }
                 }
             });
 
@@ -2138,12 +3902,14 @@ $initial_state = [
             const percentual = (acertos / perguntas.length) * 100;
             const aprovado = percentual >= 70;
 
-            // Salvar resultado usando a mesma estrutura do seu sistema
-            salvarResultadoProva(percentual, acertos, perguntas.length, aprovado, resultadoDetalhes);
-        }
+            // Mostrar loading
+            const btnFinalizar = document.getElementById('btn-finalizar-prova');
+            const originalText = btnFinalizar.innerHTML;
+            btnFinalizar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+            btnFinalizar.disabled = true;
 
-        async function salvarResultadoProva(percentual, acertos, total, aprovado, detalhes) {
             try {
+                // Salvar resultado
                 const response = await fetch('ajax/salvar_progresso.php', {
                     method: 'POST',
                     headers: {
@@ -2154,7 +3920,7 @@ $initial_state = [
                         curso_id: cursoState.curso_id,
                         nota: percentual,
                         acertos: acertos,
-                        total: total,
+                        total: perguntas.length,
                         aprovado: aprovado,
                         tentativas: cursoState.prova_final_info.tentativas + 1
                     })
@@ -2169,11 +3935,7 @@ $initial_state = [
                     cursoState.prova_final_info.nota = percentual;
 
                     // Mostrar resultado
-                    mostrarResultadoProva(percentual, acertos, total, aprovado, detalhes, data.codigo);
-                    
-                    // Atualizar dashboard
-                    atualizarDashboard();
-                    
+                    mostrarResultadoProva(percentual, acertos, perguntas.length, aprovado, resultadoDetalhes, data.codigo);
                     showToast(aprovado ? '🎉 Parabéns! Você foi aprovado!' : '📝 Prova finalizada. Tente novamente!', aprovado ? 'success' : 'warning');
                 } else {
                     showToast('Erro ao salvar resultado da prova: ' + data.message, 'error');
@@ -2181,11 +3943,16 @@ $initial_state = [
             } catch (error) {
                 console.error('Erro:', error);
                 showToast('Erro ao salvar resultado da prova.', 'error');
+            } finally {
+                // Restaurar botão
+                btnFinalizar.innerHTML = originalText;
+                btnFinalizar.disabled = false;
             }
         }
 
         function mostrarResultadoProva(percentual, acertos, total, aprovado, detalhes, codigoValidacao) {
-            const aprovadoClass = aprovado ? '' : 'reprovado';
+            const provaFinalView = document.getElementById('prova-final-view');
+            const aprovadoClass = aprovado ? 'aprovado' : 'reprovado';
             
             let html = `
                 <div class="prova-final-container">
@@ -2211,7 +3978,7 @@ $initial_state = [
                                 <span class="stat-label">Total</span>
                             </div>
                             <div class="stat-item-resultado">
-                                <span class="stat-value">${((acertos/total)*100).toFixed(1)}%</span>
+                                <span class="stat-value">${percentual.toFixed(1)}%</span>
                                 <span class="stat-label">Taxa de Acerto</span>
                             </div>
                         </div>
@@ -2220,10 +3987,13 @@ $initial_state = [
             // Mostrar código de validação se aprovado
             if (aprovado && codigoValidacao) {
                 html += `
-                    <div class="codigo-validacao">
-                        <strong><i class="fas fa-certificate"></i> Código de Validação:</strong>
-                        <code>${codigoValidacao}</code>
-                        <small>Guarde este código para validar seu certificado</small>
+                    <div class="codigo-validacao mt-4 p-4 bg-complete/20 rounded-lg border border-complete/30">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="material-symbols-outlined text-complete">certificate</span>
+                            <strong class="text-white">Código de Validação:</strong>
+                        </div>
+                        <code class="block bg-black/50 p-3 rounded text-complete font-mono text-lg">${codigoValidacao}</code>
+                        <small class="text-gray-400 text-sm">Guarde este código para validar seu certificado</small>
                     </div>
                 `;
             }
@@ -2231,33 +4001,37 @@ $initial_state = [
             // Adicionar detalhes das respostas
             if (detalhes && detalhes.length > 0) {
                 html += `
-                    <div class="resultado-detalhes">
-                        <h5><i class="fas fa-list"></i> Detalhes das Respostas:</h5>
-                        <div class="detalhes-perguntas">
+                    <div class="resultado-detalhes mt-6">
+                        <h5 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                            <span class="material-symbols-outlined">list</span>
+                            Detalhes das Respostas
+                        </h5>
+                        <div class="detalhes-perguntas space-y-4">
                 `;
                 
                 detalhes.forEach((detalhe, index) => {
                     html += `
-                        <div class="pergunta-revisao ${detalhe.acertou ? 'acertou' : 'errou'}">
-                            <div class="pergunta-header">
-                                <span class="pergunta-numero">${index + 1}.</span>
-                                <span class="pergunta-status ${detalhe.acertou ? 'acerto' : 'erro'}">
-                                    <i class="fas ${detalhe.acertou ? 'fa-check' : 'fa-times'}"></i>
+                        <div class="pergunta-revisao ${detalhe.acertou ? 'acertou bg-complete/10 border-complete/30' : 'errou bg-red-500/10 border-red-500/30'} border rounded-lg p-4">
+                            <div class="pergunta-header flex items-center gap-3 mb-3">
+                                <span class="pergunta-numero bg-primary/20 text-primary font-bold rounded-full w-6 h-6 flex items-center justify-center text-sm">${index + 1}</span>
+                                <span class="pergunta-status ${detalhe.acertou ? 'text-complete' : 'text-red-500'} font-medium flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-sm">${detalhe.acertou ? 'check' : 'close'}</span>
                                     ${detalhe.acertou ? 'Acertou' : 'Errou'}
                                 </span>
                             </div>
-                            <div class="pergunta-texto">${detalhe.pergunta}</div>
-                            <div class="resposta-usuario">
+                            <div class="pergunta-texto text-white mb-3">${detalhe.pergunta}</div>
+                            <div class="resposta-usuario text-gray-300 mb-2">
                                 <strong>Sua resposta:</strong> ${detalhe.respostaUsuario}
                             </div>
                             ${!detalhe.acertou ? `
-                                <div class="resposta-correta">
+                                <div class="resposta-correta text-complete mb-2">
                                     <strong>Resposta correta:</strong> ${detalhe.respostaCorreta}
                                 </div>
                             ` : ''}
                             ${detalhe.explicacao ? `
-                                <div class="explicacao">
-                                    <strong>Explicação:</strong> ${detalhe.explicacao}
+                                <div class="explicacao bg-black/20 p-3 rounded border border-white/10">
+                                    <strong class="text-primary">Explicação:</strong> 
+                                    <span class="text-gray-300">${detalhe.explicacao}</span>
                                 </div>
                             ` : ''}
                         </div>
@@ -2272,17 +4046,20 @@ $initial_state = [
 
             // Adicionar ações
             html += `
-                        <div class="acoes-resultado">
-                            <button class="btn btn-primary" onclick="carregarDashboard()">
-                                <i class="fas fa-tachometer-alt"></i> Voltar ao Dashboard
+                        <div class="acoes-resultado mt-6 flex gap-4">
+                            <button class="btn btn-primary flex items-center gap-2" onclick="navigateTo('dashboard')">
+                                <span class="material-symbols-outlined">dashboard</span>
+                                Voltar ao Dashboard
                             </button>
                             ${aprovado ? `
-                                <a href="certificado.php?curso_id=${cursoState.curso_id}&codigo=${codigoValidacao}" class="btn btn-success">
-                                    <i class="fas fa-certificate"></i> Emitir Certificado
+                                <a href="certificado.php?curso_id=${cursoState.curso_id}&codigo=${codigoValidacao}" class="btn btn-success flex items-center gap-2">
+                                    <span class="material-symbols-outlined">certificate</span>
+                                    Emitir Certificado
                                 </a>
                             ` : `
-                                <button class="btn btn-warning" onclick="carregarProvaFinal()">
-                                    <i class="fas fa-redo"></i> Tentar Novamente
+                                <button class="btn btn-warning flex items-center gap-2" onclick="carregarProvaFinal()">
+                                    <span class="material-symbols-outlined">redo</span>
+                                    Tentar Novamente
                                 </button>
                             `}
                         </div>
@@ -2291,350 +4068,125 @@ $initial_state = [
             `;
 
             provaFinalView.innerHTML = html;
-            mostrarView('prova');
         }
 
-        function atualizarContadorRespostas() {
-            const perguntas = cursoState.prova_final_perguntas;
-            let respondidas = 0;
-
-            perguntas.forEach((pergunta, index) => {
-                if (document.querySelector(`input[name="pergunta-${index}"]:checked`)) {
-                    respondidas++;
+        // ===== INICIALIZAÇÃO =====
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Sistema de curso inicializado');
+            
+            // Configurar total de slides
+            totalSlides = Object.keys(cursoState.modulos_info).length + 2;
+            
+            // Event Listeners globais
+            document.addEventListener('click', function(e) {
+                // Navegação da Sidebar - Módulos
+                const navItem = e.target.closest('.modulo-nav');
+                if (navItem) {
+                    navigateTo('modulo', navItem.dataset.moduloId);
+                    return;
+                }
+                
+                // Navegação da Sidebar - Prova
+                const provaNav = e.target.closest('.prova-nav');
+                if (provaNav) {
+                    navigateTo('prova');
+                    return;
+                }
+                
+                // Botões "Continuar/Revisar" Módulo no Dashboard
+                const btnCarregarModulo = e.target.closest('.btn-carregar-modulo');
+                if (btnCarregarModulo) {
+                    navigateTo('modulo', btnCarregarModulo.dataset.moduloId);
+                    return;
+                }
+                
+                // Prova Final do Dashboard
+                const btnProvaDashboard = e.target.closest('.iniciar-prova-final-dashboard');
+                if (btnProvaDashboard) {
+                    navigateTo('prova');
+                    return;
                 }
             });
-
-            document.getElementById('contador-respostas').textContent = respondidas;
-            document.getElementById('btn-finalizar-prova').disabled = respondidas !== perguntas.length;
-        }
-
-        function mostrarView(viewId) {
-            dashboardView.classList.add('oculto');
-            moduloViewContainer.classList.add('oculto');
-            provaFinalView.classList.add('oculto');
             
-            if (viewId === 'dashboard') {
-                dashboardView.classList.remove('oculto');
-            } else if (viewId === 'modulo') {
-                moduloViewContainer.classList.remove('oculto');
-            } else if (viewId === 'prova') {
-                provaFinalView.classList.remove('oculto');
+            // Navegação Mobile
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
+            
+            if (btnPrev) {
+                btnPrev.addEventListener('click', function() {
+                    if (currentSlideIndex > 0) {
+                        if (currentView === 'modulo') {
+                            const moduloIds = Object.keys(cursoState.modulos_info);
+                            const prevModuloId = moduloIds[currentSlideIndex - 2];
+                            navigateTo('modulo', prevModuloId);
+                        } else if (currentView === 'prova') {
+                            const lastModuloId = Object.keys(cursoState.modulos_info).pop();
+                            navigateTo('modulo', lastModuloId);
+                        } else {
+                            navigateTo('dashboard');
+                        }
+                    }
+                });
             }
-        }
-
-        function atualizarDashboard() {
-            const modulosConcluidos = cursoState.progresso_modulos.length;
-            const porcentagem = cursoState.total_modulos > 0 ? (modulosConcluidos / cursoState.total_modulos) * 100 : 0;
             
-            document.getElementById('stat-concluidos').textContent = modulosConcluidos;
-            document.getElementById('stat-aprovacao').textContent = cursoState.prova_final_info.aprovado ? 'SIM' : 'NÃO';
-            document.getElementById('stat-aprovacao').closest('.stat-item').classList.toggle('aprovado', cursoState.prova_final_info.aprovado);
-            document.getElementById('progresso-porcentagem').textContent = `${porcentagem.toFixed(0)}% Completo`;
-            document.querySelector('.progress-bar-preenchimento').style.width = `${porcentagem.toFixed(0)}%`;
-            
-            // Atualizar menu lateral
-            const menuAvaliacaoContainer = document.getElementById('menu-avaliacao-container');
-            if (cursoState.prova_final_info.aprovado) {
-                menuAvaliacaoContainer.innerHTML = '';
+            if (btnNext) {
+                btnNext.addEventListener('click', function() {
+                    if (currentSlideIndex < totalSlides - 1) {
+                        if (currentView === 'dashboard') {
+                            const firstModuloId = Object.keys(cursoState.modulos_info)[0];
+                            navigateTo('modulo', firstModuloId);
+                        } else if (currentView === 'modulo') {
+                            const moduloIds = Object.keys(cursoState.modulos_info);
+                            if (currentSlideIndex < moduloIds.length) {
+                                const nextModuloId = moduloIds[currentSlideIndex];
+                                navigateTo('modulo', nextModuloId);
+                            } else {
+                                navigateTo('prova');
+                            }
+                        }
+                    }
+                });
             }
-        }
-
-        function showToast(message, type = 'info') {
-            const toastContainer = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
             
-            const icons = { 
-                success: 'fa-check-circle', 
-                error: 'fa-times-circle', 
-                info: 'fa-info-circle',
-                warning: 'fa-exclamation-triangle'
-            };
+            // Menu Mobile Toggle
+            const menuToggle = document.getElementById('menu-toggle');
+            const mobileMenu = document.getElementById('mobile-menu');
             
-            toast.innerHTML = `
-                <i class="fas ${icons[type]}"></i>
-                <span>${message}</span>
-                <button class="toast-close"><i class="fas fa-times"></i></button>
-            `;
+            if (menuToggle && mobileMenu) {
+                menuToggle.addEventListener('click', function() {
+                    mobileMenu.classList.toggle('hidden');
+                    mobileMenu.classList.toggle('flex');
+                });
+            }
             
-            toastContainer.appendChild(toast);
-            
-            setTimeout(() => toast.classList.add('show'), 10);
-            
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
-            
-            toast.querySelector('.toast-close').addEventListener('click', () => {
-                toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 300);
-            });
-        }
-
-        // Torna funções globais
-        window.carregarDashboard = carregarDashboard;
-        window.carregarProvaFinal = carregarProvaFinal;
-        window.finalizarProva = finalizarProva;
-        window.atualizarContadorRespostas = atualizarContadorRespostas;
-
-        // Inicializar
-        carregarDashboard();
-    });
-
-
-// === VARIÁVEIS GLOBAIS ===
-let cursoState = {};
-let progressoModuloAtual = { id: null, vistos: new Set(), totalLicoes: 0, inicio: null };
-
-// === INICIALIZAÇÃO ===
-document.addEventListener('DOMContentLoaded', () => {
-    const mainContent = document.querySelector('.main-content');
-    if (!mainContent || !mainContent.dataset.initialState) return;
-
-    cursoState = JSON.parse(mainContent.dataset.initialState);
-    cursoState.progressoModulos = new Set(cursoState.progresso_modulos);
-
-    carregarDashboard();
-    inicializarEventos();
-});
-
-// === NAVEGAÇÃO ===
-function mostrarView(view) {
-    ['dashboard-view', 'modulo-view-container', 'conquistas-view', 'estatisticas-view'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.add('oculto');
-    });
-    if (view === 'dashboard') document.getElementById('dashboard-view').classList.remove('oculto');
-    if (view === 'modulo') document.getElementById('modulo-view-container').classList.remove('oculto');
-    if (view === 'conquistas') document.getElementById('conquistas-view').classList.remove('oculto');
-    if (view === 'estatisticas') document.getElementById('estatisticas-view').classList.remove('oculto');
-}
-
-function limparAtivosMenu() {
-    document.querySelectorAll('.sidebar li').forEach(li => li.classList.remove('ativo'));
-}
-
-// === DASHBOARD ===
-function carregarDashboard() {
-    limparAtivosMenu();
-    document.getElementById('menu-dashboard').classList.add('ativo');
-    mostrarView('dashboard');
-    atualizarDashboardUI();
-}
-
-// === MÓDULOS ===
-function carregarModulo(idModulo) {
-    limparAtivosMenu();
-    document.querySelector(`li[data-modulo-id='${idModulo}']`)?.classList.add('ativo');
-    mostrarView('modulo');
-
-    const modulo = cursoState.modulos_info[idModulo];
-    if (!modulo) return;
-
-    const normais = modulo.conteudos.filter(c => !c.is_prova_fixacao);
-    const prova = modulo.conteudos.find(c => c.is_prova_fixacao);
-
-    let html = `
-        <div class="modulo-header">
-            <h2><i class="${modulo.icone}"></i> ${modulo.nome}</h2>
-            <p>${modulo.descricao}</p>
-        </div>
-        <div class="conteudos-lista">
-            ${normais.map(c => `
-                <div class="conteudo-item" onclick="abrirConteudo('${idModulo}', '${c.id}', '${c.tipo}')">
-                    <i class="${iconeConteudo(c.tipo)}"></i>
-                    <span>${c.titulo}</span>
-                    <small>${c.duracao || '5 min'}</small>
-                </div>
-            `).join('')}
-        </div>
-        ${prova ? `
-            <div class="prova-fixacao-card">
-                <h4>🎯 Prova de Fixação</h4>
-                <p>${prova.descricao}</p>
-                <button class="btn btn-primary" onclick="iniciarProvaFixacao('${idModulo}', '${prova.id}')">
-                    ${modulo.concluido ? 'Revisar' : 'Iniciar'}
-                </button>
-            </div>
-        ` : ''}
-    `;
-
-    document.getElementById('modulo-view-container').innerHTML = html;
-}
-
-function iconeConteudo(tipo) {
-    const map = { texto: 'fa-file-alt', video: 'fa-video', imagem: 'fa-image', quiz: 'fa-question-circle' };
-    return 'fas ' + (map[tipo] || 'fa-file');
-}
-
-// === CONTEÚDO ===
-function abrirConteudo(moduloId, conteudoId, tipo) {
-    const modulo = cursoState.modulos_info[moduloId];
-    const conteudo = modulo.conteudos.find(c => c.id == conteudoId);
-    if (!conteudo) return;
-
-    let html = `
-        <button class="btn btn-voltar" onclick="carregarModulo('${moduloId}')">
-            <i class="fas fa-arrow-left"></i> Voltar
-        </button>
-        <h3>${conteudo.titulo}</h3>
-    `;
-
-    if (conteudo.is_quiz && conteudo.perguntas_array?.length) {
-        html += renderizarQuiz(conteudo);
-    } else {
-        html += `<div class="conteudo-texto">${conteudo.conteudo || 'Conteúdo indisponível.'}</div>`;
-        html += `<button class="btn btn-primary" onclick="marcarConcluido('${moduloId}', '${conteudoId}')">Marcar como Concluído</button>`;
-    }
-
-    document.getElementById('modulo-view-container').innerHTML = html;
-}
-
-// === QUIZ / PROVA ===
-function renderizarQuiz(conteudo) {
-    window.quizData = window.quizData || {};
-    window.quizData[conteudo.id] = conteudo.perguntas_array;
-
-    return `
-        <div class="quiz-container">
-            ${conteudo.perguntas_array.map((p, i) => `
-                <div class="pergunta">
-                    <strong>${i + 1}. ${p.pergunta}</strong>
-                    ${p.opcoes.map((o, j) => `
-                        <label class="opcao">
-                            <input type="radio" name="q${i}" value="${j}"> ${o}
-                        </label>
-                    `).join('')}
-                </div>
-            `).join('')}
-            <button class="btn btn-primary" onclick="submeterQuiz('${conteudo.id}', '${conteudo.is_prova_fixacao || false}', '${conteudo.modulo_id}')">
-                Enviar Respostas
-            </button>
-        </div>
-    `;
-}
-
-function submeterQuiz(conteudoId, isProvaFixacao, moduloId) {
-    const perguntas = window.quizData[conteudoId];
-    let acertos = 0;
-    const resultados = [];
-
-    perguntas.forEach((p, i) => {
-        const selecionada = document.querySelector(`input[name="q${i}"]:checked`);
-        const respostaUsuario = selecionada ? parseInt(selecionada.value) : null;
-        const acertou = respostaUsuario === p.resposta;
-        if (acertou) acertos++;
-        resultados.push({
-            pergunta: p.pergunta,
-            respostaUsuario: p.opcoes[respostaUsuario] || 'Não respondida',
-            respostaCorreta: p.opcoes[p.resposta],
-            acertou
+            // Inicializar na view do dashboard
+            navigateTo('dashboard');
         });
-    });
 
-    const total = perguntas.length;
-    const percentual = Math.round((acertos / total) * 100);
-    const aprovado = percentual >= 70;
-
-    mostrarResultadoQuiz(conteudoId, percentual, acertos, total, resultados, aprovado, isProvaFixacao, moduloId);
-}
-
-function mostrarResultadoQuiz(conteudoId, percentual, acertos, total, resultados, aprovado, isProvaFixacao, moduloId) {
-    const container = document.getElementById('modulo-view-container');
-    container.innerHTML = `
-        <h3>${aprovado ? '✅ Aprovado!' : '❌ Não Aprovado'}</h3>
-        <p>Você acertou ${acertos} de ${total} (${percentual}%)</p>
-        ${resultados.map(r => `
-            <div class="pergunta-resultado ${r.acertou ? 'acerto' : 'erro'}">
-                <strong>${r.pergunta}</strong><br>
-                Sua resposta: ${r.respostaUsuario}<br>
-                ${!r.acertou ? `Correta: ${r.respostaCorreta}` : ''}
-            </div>
-        `).join('')}
-        <button class="btn btn-primary" onclick="carregarModulo('${moduloId}')">
-            Voltar ao Módulo
-        </button>
-    `;
-
-    if (aprovado && isProvaFixacao) {
-        salvarProgresso({ tipo: 'modulo', id: moduloId });
-        cursoState.progressoModulos.add(moduloId);
-        atualizarDashboardUI();
-    }
-}
-
-// === PROGRESSO ===
-async function salvarProgresso(dados) {
-    const payload = {
-        ...dados,
-        usuario_id: cursoState.usuario_id,
-        curso_id: cursoState.curso_id
-    };
-
+        // ===== FUNÇÃO PARA SALVAR PROGRESSO NO BANCO =====
+async function salvarProgressoModulo(moduloId) {
     try {
-        const res = await fetch('ajax/salvar_progresso.php', {
+        const response = await fetch('ajax/salvar_progresso.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                tipo: 'modulo',
+                curso_id: cursoState.curso_id,
+                modulo_id: moduloId,
+                usuario_id: cursoState.usuario_id
+            })
         });
-        const data = await res.json();
+
+        const data = await response.json();
         return data.success;
-    } catch (e) {
-        console.error('Erro ao salvar progresso:', e);
+    } catch (error) {
+        console.error('Erro ao salvar progresso:', error);
         return false;
     }
 }
 
-function marcarConcluido(moduloId, conteudoId) {
-    showToast('Conteúdo marcado como concluído!', 'success');
-    carregarModulo(moduloId);
-}
-
-// === UI ===
-function atualizarDashboardUI() {
-    const concluidos = cursoState.progressoModulos.size;
-    const total = cursoState.total_modulos;
-    const pct = total ? Math.round((concluidos / total) * 100) : 0;
-
-    document.getElementById('stat-concluidos').textContent = concluidos;
-    document.getElementById('stat-aprovacao').textContent = cursoState.prova_final_info.aprovado ? 'SIM' : 'NÃO';
-    document.querySelector('.progress-bar-preenchimento').style.width = pct + '%';
-    document.getElementById('progresso-porcentagem').textContent = pct + '% Completo';
-}
-
-function showToast(msg, tipo = 'info') {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast ${tipo}`;
-    toast.innerHTML = `<i class="fas fa-${tipo === 'success' ? 'check' : 'info'}-circle"></i> ${msg}`;
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 4000);
-}
-
-// === EVENTOS ===
-function inicializarEventos() {
-    document.body.addEventListener('click', e => {
-        const nav = e.target.closest('[data-nav]');
-        if (nav) {
-            const tipo = nav.dataset.nav;
-            if (tipo === 'dashboard') carregarDashboard();
-            if (tipo === 'modulo') carregarModulo(nav.dataset.moduloId);
-            if (tipo === 'prova') carregarProvaFinal();
-            if (tipo === 'conquistas') carregarConquistas();
-            if (tipo === 'estatisticas') carregarEstatisticas();
-        }
-
-        const btnModulo = e.target.closest('.btn-carregar-modulo');
-        if (btnModulo) carregarModulo(btnModulo.dataset.moduloId);
-
-        const btnProva = e.target.closest('#iniciar-prova-final-dashboard');
-        if (btnProva) carregarProvaFinal();
-    });
-}
-
-
-    
-</script>
+    </script>
 </body>
 </html>
