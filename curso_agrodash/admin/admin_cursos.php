@@ -1,14 +1,19 @@
 <?php
-session_start();
-require_once __DIR__ . '/../../config/db/conexao.php';
+// admin_cursos.php - VERSÃO CORRIGIDA
 
-// Verificar se é administrador
-if ($_SESSION['usuario_tipo'] !== 'admin' && $_SESSION['usuario_tipo'] !== 'cia_dev') {
+// 1. Inicie a sessão no TOPO do arquivo
+session_start();
+
+// 2. Verifique se o usuário está logado e é admin
+if (!isset($_SESSION['usuario_tipo']) || ($_SESSION['usuario_tipo'] !== 'admin' && $_SESSION['usuario_tipo'] !== 'cia_dev')) {
     header("Location: /curso_agrodash/dashboard");
     exit;
 }
 
-// Buscar todos os cursos
+// 3. Conecte ao banco de dados
+require_once __DIR__ . '/../../config/db/conexao.php';
+
+// 4. Buscar todos os cursos
 try {
     $stmt = $pdo->query("SELECT * FROM cursos ORDER BY id DESC");
     $cursos = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -17,9 +22,7 @@ try {
     $error = "Erro ao carregar cursos: " . $e->getMessage();
 }
 
-
-
-// Buscar estatísticas para o sidebar
+// 5. Buscar estatísticas para o sidebar
 try {
     $stmt = $pdo->query("SELECT COUNT(*) as total FROM cursos");
     $total_cursos = $stmt->fetchColumn();
@@ -36,8 +39,10 @@ try {
     $error_stats = "Erro ao carregar estatísticas: " . $e->getMessage();
 }
 
-// Processar ações AJAX
+// 6. Processar ações AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    // Para AJAX, não envie HTML, apenas JSON
+    ob_clean(); // Limpa qualquer saída anterior
     header('Content-Type: application/json');
     
     if ($_POST['action'] === 'buscar_curso') {
@@ -66,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $duracao_estimada = $_POST['duracao_estimada'] ?? '2 horas';
         $nivel = $_POST['nivel'] ?? 'Iniciante';
         $publico_alvo = $_POST['publico_alvo'] ?? 'todos';
-        $status = $_POST['status'] ?? 'ativo';
+        $status = $_POST['status'] ?? 'Nao_iniciado';
         $imagem_url = $_POST['imagem_url'] ?? '';
         
         try {
@@ -79,7 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 // Criar novo curso
                 $stmt = $pdo->prepare("INSERT INTO cursos (titulo, descricao, duracao_estimada, nivel, publico_alvo, status, imagem, data_criacao) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
                 $stmt->execute([$titulo, $descricao, $duracao_estimada, $nivel, $publico_alvo, $status, $imagem_url]);
-                echo json_encode(['success' => true, 'message' => 'Curso criado com sucesso!']);
+                $novo_id = $pdo->lastInsertId();
+                echo json_encode(['success' => true, 'message' => 'Curso criado com sucesso!', 'id' => $novo_id]);
             }
         } catch (PDOException $e) {
             echo json_encode(['success' => false, 'message' => 'Erro ao salvar curso: ' . $e->getMessage()]);
@@ -87,8 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
 }
-?>
 
+// 7. AGORA, depois de toda a lógica PHP, começa o HTML
+?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -1054,83 +1061,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo">
-                <i class="fas fa-leaf"></i>
-                <div class="logo-text">
-                    <h1>AgroDash</h1>
-                    <p>Painel Admin</p>
-                </div>
-            </div>
-        </div>
-
-        <nav class="sidebar-nav">
-            <div class="nav-section">
-                <div class="nav-title">Principal</div>
-                <a href="/curso_agrodash/dashboard" class="nav-item">
-                    <i class="fas fa-tachometer-alt"></i>
-                    <span class="nav-text">Dashboard</span>
-                </a>
-            </div>
-
-            <div class="nav-section">
-                <div class="nav-title">Conteúdo</div>
-                <a href="/curso_agrodash/admincursos" class="nav-item active">
-                    <i class="fas fa-book"></i>
-                    <span class="nav-text">Gerenciar Cursos</span>
-                    <span class="nav-badge"><?= $total_cursos ?? 0 ?></span>
-                </a>
-                <a href="/curso_agrodash/adminmodulos" class="nav-item">
-                    <i class="fas fa-layer-group"></i>
-                    <span class="nav-text">Gerenciar Módulos</span>
-                    <span class="nav-badge"><?= $total_modulos ?? 0 ?></span>
-                </a>
-                <a href="/curso_agrodash/adminconteudos" class="nav-item">
-                    <i class="fas fa-file-alt"></i>
-                    <span class="nav-text">Gerenciar Conteúdos</span>
-                </a>
-                <a href="/curso_agrodash/loja" class="nav-item">
-                    <i class="fas fa-home"></i>
-                    <span class="nav-text">Loja de XP</span>
-                </a>
-            </div>
-
-            <div class="nav-section">
-                <div class="nav-title">Usuários</div>
-                <a href="/curso_agrodash/adminusuarios" class="nav-item">
-                    <i class="fas fa-users"></i>
-                    <span class="nav-text">Gerenciar Usuários</span>
-                    <span class="nav-badge"><?= $total_usuarios ?? 0 ?></span>
-                </a>
-            </div>
-
-            <div class="nav-section">
-                <div class="nav-title">Sistema</div>
-                <a href="/curso_agrodash/dashboard" class="nav-item">
-                    <i class="fas fa-arrow-left"></i>
-                    <span class="nav-text">Voltar ao Site</span>
-                </a>
-                <a href="../logout.php" class="nav-item logout">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span class="nav-text">Sair</span>
-                </a>
-            </div>
-        </nav>
-
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="user-avatar">
-                    <?= strtoupper(substr($_SESSION['usuario_nome'], 0, 1)) ?>
-                </div>
-                <div class="user-details">
-                    <h4><?= htmlspecialchars($_SESSION['usuario_nome']) ?></h4>
-                    <p><?= htmlspecialchars($_SESSION['usuario_email']) ?></p>
-                </div>
-            </div>
-        </div>
-    </aside>
+    <!-- Inclui o sidebar via header.php -->
+    <?php 
+    // Defina qual aba está ativa
+    $active_tab = 'admincursos';
+    require_once __DIR__ . '/../public/header.php'; 
+    ?>
 
     <!-- Main Content -->
     <main class="main-content">
@@ -1282,9 +1218,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 <label class="form-label" for="status">Status</label>
                                 <select class="form-control" id="status" name="status">
                                     <option value="Nao_iniciado" selected>Não Iniciado</option>
-                                    <option value="rascunho" selected>Rascunho</option>
                                     <option value="ativo">Ativo</option>
                                     <option value="inativo">Inativo</option>
+                                    <option value="rascunho">Rascunho</option>
                                 </select>
                             </div>
                         </div>
@@ -1390,7 +1326,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         <div class="form-group">
                             <label class="form-label" for="edit_status">Status</label>
                             <select class="form-control" id="edit_status" name="status">
-                                <option value="Nao_iniciado" selected>Não Iniciado</option>
+                                <option value="Nao_iniciado">Não Iniciado</option>
                                 <option value="ativo">Ativo</option>
                                 <option value="inativo">Inativo</option>
                                 <option value="rascunho">Rascunho</option>
@@ -1445,6 +1381,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     </div>
 
     <script>
+
+// Sistema de notificação
+function showNotification(message, type = 'info') {
+    // Remove notificações existentes
+    const existing = document.querySelector('.custom-notification');
+    if (existing) existing.remove();
+    
+    // Cria a notificação
+    const notification = document.createElement('div');
+    notification.className = `custom-notification ${type}`;
+    notification.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Adiciona estilos
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+        max-width: 400px;
+    `;
+    
+    // Adiciona animação
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Remove automaticamente após 5 segundos
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.style.animation = 'slideOut 0.3s ease forwards';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 5000);
+}
+
+// Adicione também esta animação de saída
+const slideOutStyle = document.createElement('style');
+slideOutStyle.textContent = `
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+`;
+document.head.appendChild(slideOutStyle);
+
+
         // Menu Mobile
         document.getElementById('menuToggle').addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('active');
@@ -1478,31 +1480,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // Modal de Edição
-        function abrirModalEditar(cursoId) {
-            // Buscar dados do curso
-            const formData = new FormData();
-            formData.append('action', 'buscar_curso');
-            formData.append('id', cursoId);
-            
-            fetch('', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    preencherFormularioEditar(data.curso);
-                    document.getElementById('modalEditar').classList.add('active');
-                } else {
-                    alert('Erro ao carregar curso: ' + data.message);
-                }
-            })
-            .catch(error => {
-                alert('Erro ao carregar curso: ' + error);
-            });
+function abrirModalEditar(cursoId) {
+    // Buscar dados do curso
+    const formData = new FormData();
+    formData.append('action', 'buscar_curso');
+    formData.append('id', cursoId);
+    
+    fetch('', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Erro na rede: ' + response.status);
         }
-
+        return response.json();
+    })
+    .then(data => {
+        if (data.success && data.curso) {
+            preencherFormularioEditar(data.curso);
+            document.getElementById('modalEditar').classList.add('active');
+        } else {
+            showNotification('Erro ao carregar curso: ' + (data.message || 'Curso não encontrado'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showNotification('Erro ao carregar curso', 'error');
+    });
+}
         function fecharModalEditar() {
             document.getElementById('modalEditar').classList.remove('active');
             limparFormularioEditar();
@@ -1515,7 +1521,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             document.getElementById('edit_duracao_estimada').value = curso.duracao_estimada || '2 horas';
             document.getElementById('edit_nivel').value = curso.nivel || 'Iniciante';
             document.getElementById('edit_publico_alvo').value = curso.publico_alvo || 'todos';
-            document.getElementById('edit_status').value = curso.status || 'ativo';
+            document.getElementById('edit_status').value = curso.status || 'Nao_iniciado';
             document.getElementById('edit_imagem').value = curso.imagem || '';
             
             // Atualizar preview da imagem
@@ -1547,64 +1553,91 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         // Formulário de Edição
-        document.getElementById('form-editar-curso').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const imagemValor = document.getElementById('edit_imagem').value;
-            
-            if (!imagemValor && document.getElementById('edit_imagem_url').value) {
-                formData.set('imagem_url', document.getElementById('edit_imagem_url').value);
-            }
-            
-            fetch('', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    fecharModalEditar();
-                    location.reload();
-                } else {
-                    alert('Erro ao salvar curso: ' + data.message);
-                }
-            })
-            .catch(error => {
-                alert('Erro ao salvar curso: ' + error);
-            });
-        });
+// Formulário de Edição
+document.getElementById('form-editar-curso').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const imagemUpload = document.getElementById('edit_imagem_upload').files[0];
+    const imagemUrl = document.getElementById('edit_imagem_url').value;
+    
+    // Se houver upload de arquivo
+    if (imagemUpload) {
+        formData.append('imagem', imagemUpload);
+    }
+    // Se houver URL
+    else if (imagemUrl) {
+        formData.set('imagem_url', imagemUrl);
+    }
+    
+    fetch('', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Erro na rede: ' + response.status);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message || 'Curso atualizado com sucesso!', 'success');
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            showNotification('Erro ao salvar curso: ' + (data.message || 'Erro desconhecido'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showNotification('Erro ao conectar com o servidor', 'error');
+    });
+});
 
-        // Formulário de Novo Curso
-        document.getElementById('form-novo-curso').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const imagemValor = document.getElementById('imagem').value;
-            
-            if (!imagemValor && document.getElementById('imagem_url').value) {
-                formData.set('imagem_url', document.getElementById('imagem_url').value);
-            }
-            
-            fetch('', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    location.reload();
-                } else {
-                    alert('Erro ao salvar curso: ' + data.message);
-                }
-            })
-            .catch(error => {
-                alert('Erro ao salvar curso: ' + error);
-            });
-        });
-
+// Formulário de Novo Curso
+document.getElementById('form-novo-curso').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const imagemUpload = document.getElementById('imagem_upload').files[0];
+    
+    // Se houver upload de arquivo
+    if (imagemUpload) {
+        formData.append('imagem', imagemUpload);
+    }
+    // Se houver URL
+    else if (document.getElementById('imagem_url').value) {
+        formData.set('imagem_url', document.getElementById('imagem_url').value);
+    }
+    
+    fetch('ajax/salvar_curso.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Erro na rede: ' + response.status);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Em vez de alert, use um feedback visual
+            showNotification('Curso salvo com sucesso!', 'success');
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            showNotification('Erro ao salvar curso: ' + (data.message || 'Erro desconhecido'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showNotification('Erro ao conectar com o servidor', 'error');
+    });
+});
         // Preview da imagem (novo curso)
         function previewImage(event) {
             const input = event.target;
@@ -1882,12 +1915,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 fecharModalEditar();
             }
         });
-        
-            // Definir status padrão se não estiver selecionado
-            const statusSelect = document.getElementById('status');
-            if (!statusSelect.value) {
-                statusSelect.value = 'Nao_iniciado';
-            }
     </script>
 </body>
 </html>

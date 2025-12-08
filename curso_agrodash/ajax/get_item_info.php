@@ -12,7 +12,7 @@ if (!isset($_SESSION['usuario_id']) || ($_SESSION['usuario_tipo'] !== 'admin' &&
 $id = $_GET['id'] ?? 0;
 
 try {
-    $stmt = $pdo->prepare("SELECT * FROM loja_xp WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT nome, estoque, custo_xp, status FROM loja_xp WHERE id = ?");
     $stmt->execute([$id]);
     $item = $stmt->fetch(PDO::FETCH_ASSOC);
     

@@ -1,6 +1,6 @@
 <?php
 session_start();
 session_destroy();
-header("Location: /curso_agrodash/login");
+header("Location: /login");
 exit;
 ?>

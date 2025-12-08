@@ -1,1304 +1,2014 @@
 <?php
-session_start();
-require_once __DIR__ . '/../../config/db/conexao.php';
+// admin_conteudos.php - VERSÃO COM HEADER E CSS MODERNO
 
-// Verificar se é administrador
-if ($_SESSION['usuario_tipo'] !== 'admin' && $_SESSION['usuario_tipo'] !== 'cia_dev') {
+// 1. Inicie a sessão no TOPO do arquivo
+session_start();
+
+// 2. Verifique se o usuário está logado e é admin
+if (!isset($_SESSION['usuario_tipo']) || ($_SESSION['usuario_tipo'] !== 'admin' && $_SESSION['usuario_tipo'] !== 'cia_dev')) {
     header("Location: /curso_agrodash/dashboard");
     exit;
 }
 
-$modulo_id = $_GET['modulo_id'] ?? null;
-$conteudo_id = $_GET['conteudo_id'] ?? null;
+// 3. Conecte ao banco de dados
+require_once __DIR__ . '/../../config/db/conexao.php';
 
-if (!$modulo_id) {
+// 4. Verificar modulo_id
+$modulo_id = $_GET['modulo_id'] ?? 0;
+$conteudo_id = $_GET['conteudo_id'] ?? 0;
+
+if ($modulo_id <= 0) {
     header("Location: /curso_agrodash/admincursos");
     exit;
 }
 
-// Buscar informações do módulo e curso
+// 5. Buscar informações do módulo e curso
 try {
-    $stmt = $pdo->prepare("SELECT m.*, c.titulo as curso_titulo FROM modulos m JOIN cursos c ON m.curso_id = c.id WHERE m.id = ?");
+    $stmt = $pdo->prepare("SELECT m.*, c.titulo as curso_titulo, c.id as curso_id FROM modulos m JOIN cursos c ON m.curso_id = c.id WHERE m.id = ?");
     $stmt->execute([$modulo_id]);
     $modulo = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$modulo) {
+        header("Location: /curso_agrodash/admincursos");
+        exit;
+    }
 } catch (PDOException $e) {
+    $modulo = null;
     $error = "Erro ao carregar módulo: " . $e->getMessage();
 }
 
-if (!$modulo) {
-    header("Location: /curso_agrodash/admincursos");
-    exit;
-}
-
-// Buscar conteúdos do módulo
+// 6. Buscar conteúdos do módulo
 try {
-    $stmt = $pdo->prepare("SELECT * FROM conteudos WHERE modulo_id = ? ORDER BY ordem");
+    $stmt = $pdo->prepare("SELECT * FROM conteudos WHERE modulo_id = ? ORDER BY ordem ASC");
     $stmt->execute([$modulo_id]);
     $conteudos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $conteudos = [];
 }
 
-// Buscar dados do conteúdo para edição
+// 7. Buscar dados do conteúdo para edição
 $conteudo_edit = null;
-if ($conteudo_id) {
+if ($conteudo_id > 0) {
     try {
         $stmt = $pdo->prepare("SELECT * FROM conteudos WHERE id = ?");
         $stmt->execute([$conteudo_id]);
         $conteudo_edit = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        // Verificar se o conteúdo pertence ao módulo
+        if ($conteudo_edit && $conteudo_edit['modulo_id'] != $modulo_id) {
+            $conteudo_edit = null;
+        }
     } catch (PDOException $e) {
         $error = "Erro ao carregar conteúdo: " . $e->getMessage();
     }
 }
 
-// Função auxiliar para obter valor seguro do conteúdo em edição
+// 8. Buscar estatísticas para o sidebar
+try {
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM cursos");
+    $total_cursos = $stmt->fetchColumn();
+    
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM modulos");
+    $total_modulos = $stmt->fetchColumn();
+    
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM usuarios");
+    $total_usuarios = $stmt->fetchColumn();
+    
+    // Contar conteúdos deste módulo
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM conteudos WHERE modulo_id = ?");
+    $stmt->execute([$modulo_id]);
+    $total_conteudos_modulo = $stmt->fetchColumn();
+} catch (PDOException $e) {
+    $error_stats = "Erro ao carregar estatísticas: " . $e->getMessage();
+}
+
+// 9. Processar ações AJAX
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    ob_clean();
+    header('Content-Type: application/json');
+    
+    if ($_POST['action'] === 'buscar_conteudo') {
+        $conteudo_id = $_POST['id'] ?? 0;
+        
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM conteudos WHERE id = ?");
+            $stmt->execute([$conteudo_id]);
+            $conteudo = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($conteudo) {
+                echo json_encode(['success' => true, 'conteudo' => $conteudo]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Conteúdo não encontrado']);
+            }
+        } catch (PDOException $e) {
+            echo json_encode(['success' => false, 'message' => 'Erro ao buscar conteúdo: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+    
+    if ($_POST['action'] === 'salvar_conteudo') {
+        $id = $_POST['id'] ?? 0;
+        $modulo_id = $_POST['modulo_id'] ?? 0;
+        $titulo = $_POST['titulo'] ?? '';
+        $descricao = $_POST['descricao'] ?? '';
+        $tipo = $_POST['tipo'] ?? 'texto';
+        $ordem = $_POST['ordem'] ?? 1;
+        $duracao = $_POST['duracao'] ?? '10 min';
+        
+        // Dados específicos por tipo
+        $conteudo_texto = $_POST['conteudo'] ?? '';
+        $url_video = $_POST['url_video'] ?? '';
+        $perguntas_quiz = $_POST['perguntas_quiz'] ?? '[]';
+        
+        try {
+            // Verificar colunas da tabela
+            $stmt = $pdo->prepare("DESCRIBE conteudos");
+            $stmt->execute();
+            $columns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            
+            if ($id > 0) {
+                // Atualizar conteúdo existente
+                $query = "UPDATE conteudos SET 
+                         titulo = ?, descricao = ?, tipo = ?, ordem = ?, duracao = ?,
+                         conteudo = ?, url_video = ?, perguntas_quiz = ? 
+                         WHERE id = ?";
+                
+                $stmt = $pdo->prepare($query);
+                $params = [
+                    $titulo, $descricao, $tipo, $ordem, $duracao,
+                    $conteudo_texto, $url_video, $perguntas_quiz, $id
+                ];
+                
+                $stmt->execute($params);
+                echo json_encode(['success' => true, 'message' => 'Conteúdo atualizado com sucesso!']);
+            } else {
+                // Criar novo conteúdo
+                $query = "INSERT INTO conteudos (modulo_id, titulo, descricao, tipo, ordem, duracao, conteudo, url_video, perguntas_quiz";
+                
+                // Adicionar timestamp se a coluna existir
+                if (in_array('created_at', $columns)) {
+                    $query .= ", created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+                } else if (in_array('data_criacao', $columns)) {
+                    $query .= ", data_criacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+                } else {
+                    $query .= ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                }
+                
+                $stmt = $pdo->prepare($query);
+                $params = [
+                    $modulo_id, $titulo, $descricao, $tipo, $ordem, $duracao,
+                    $conteudo_texto, $url_video, $perguntas_quiz
+                ];
+                
+                $stmt->execute($params);
+                $novo_id = $pdo->lastInsertId();
+                echo json_encode(['success' => true, 'message' => 'Conteúdo criado com sucesso!', 'id' => $novo_id]);
+            }
+        } catch (PDOException $e) {
+            echo json_encode(['success' => false, 'message' => 'Erro ao salvar conteúdo: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+    
+    if ($_POST['action'] === 'excluir_conteudo') {
+        $conteudo_id = $_POST['id'] ?? 0;
+        
+        try {
+            $stmt = $pdo->prepare("DELETE FROM conteudos WHERE id = ?");
+            $stmt->execute([$conteudo_id]);
+            
+            echo json_encode(['success' => true, 'message' => 'Conteúdo excluído com sucesso!']);
+        } catch (PDOException $e) {
+            echo json_encode(['success' => false, 'message' => 'Erro ao excluir conteúdo: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+}
+
+// 10. Passar variáveis para o header
+$GLOBALS['total_cursos'] = $total_cursos ?? 0;
+$GLOBALS['total_modulos'] = $total_modulos ?? 0;
+$GLOBALS['total_usuarios'] = $total_usuarios ?? 0;
+
+// 11. Função auxiliar para obter valor seguro do conteúdo em edição
 function getConteudoEditValue($conteudo_edit, $key, $default = '') {
     if (!$conteudo_edit || !isset($conteudo_edit[$key])) {
         return $default;
     }
     return $conteudo_edit[$key];
 }
-?>
 
+// 12. Função para obter ícone baseado no tipo
+function obterIconeTipo($tipo) {
+    $icones = [
+        'texto' => 'fas fa-file-alt',
+        'video' => 'fas fa-video',
+        'imagem' => 'fas fa-image',
+        'quiz' => 'fas fa-question-circle',
+        'pdf' => 'fas fa-file-pdf',
+        'audio' => 'fas fa-music'
+    ];
+    return $icones[$tipo] ?? 'fas fa-file';
+}
+
+// 13. AGORA, depois de toda a lógica PHP, começa o HTML
+?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerenciar Conteúdos - AgroDash</title>
+    <title>Gerenciar Conteúdos - AgroDash Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Roboto', sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-            min-height: 100vh; 
-            padding: 20px; 
+        /* Variáveis de Cores - Tema Cinza e Verde */
+        :root {
+            /* Cores principais */
+            --primary-50: #f0f9f0;
+            --primary-100: #dcf2dc;
+            --primary-200: #b8e5b8;
+            --primary-300: #94d894;
+            --primary-400: #70cb70;
+            --primary-500: #4cbe4c; /* Verde principal */
+            --primary-600: #3d983d;
+            --primary-700: #2e722e;
+            --primary-800: #1f4c1f;
+            --primary-900: #102610;
+            
+            /* Cores neutras */
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            
+            /* Cores de estado */
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+            --purple: #8b5cf6;
+            
+            /* Sombras */
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            
+            /* Bordas */
+            --radius-sm: 0.375rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 0.75rem;
+            --radius-xl: 1rem;
+            
+            /* Transições */
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-normal: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .admin-container { 
-            max-width: 1200px; 
-            margin: 0 auto; 
-            background: white; 
-            border-radius: 15px; 
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1); 
-            overflow: hidden; 
+
+        /* Reset e Estilos Base */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        .admin-header { 
-            background: linear-gradient(135deg, #32CD32, #228B22); 
-            color: white; 
-            padding: 30px; 
-            position: relative;
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--gray-50);
+            color: var(--gray-800);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
         }
-        .admin-header h1 { 
-            font-size: 2rem; 
-            margin-bottom: 10px; 
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            transition: margin-left var(--transition-normal);
+        }
+
+        /* Header Principal */
+        .main-header {
+            background: white;
+            padding: 1rem 2rem;
             display: flex;
             align-items: center;
-            gap: 15px;
-        }
-        .admin-content { 
-            padding: 30px; 
-        }
-        .modulo-info { 
-            background: #f8f9fa; 
-            padding: 25px; 
-            border-radius: 12px; 
-            margin-bottom: 30px; 
-            border-left: 5px solid #32CD32;
-        }
-        .modulo-info h3 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-            font-size: 1.5rem;
-        }
-        .conteudos-list { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 20px; 
-        }
-        .conteudo-item { 
-            background: white; 
-            border: 2px solid #e9ecef; 
-            border-radius: 12px; 
-            padding: 25px; 
-            transition: all 0.3s ease; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-        }
-        .conteudo-item:hover { 
-            border-color: #32CD32; 
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-        }
-        .conteudo-header { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            margin-bottom: 15px; 
-        }
-        .conteudo-titulo { 
-            font-size: 1.2rem; 
-            font-weight: 600; 
-            color: #2c3e50; 
-            flex: 1; 
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .conteudo-meta { 
-            display: flex; 
-            gap: 15px; 
-            color: #6c757d; 
-            font-size: 0.9rem; 
-        }
-        .conteudo-acoes { 
-            display: flex; 
-            gap: 10px; 
-        }
-        .btn { 
-            padding: 10px 18px; 
-            border: none; 
-            border-radius: 8px; 
-            font-weight: 500; 
-            cursor: pointer; 
-            transition: all 0.3s ease; 
-            text-decoration: none; 
-            display: inline-flex; 
-            align-items: center; 
-            gap: 8px; 
-            font-size: 0.9rem; 
-        }
-        .btn-primary { 
-            background: #32CD32; 
-            color: white; 
-        }
-        .btn-primary:hover { 
-            background: #228B22; 
-            transform: translateY(-2px);
-        }
-        .btn-secondary { 
-            background: #6c757d; 
-            color: white; 
-        }
-        .btn-secondary:hover { 
-            background: #545b62; 
-            transform: translateY(-2px);
-        }
-        .btn-success { 
-            background: #28a745; 
-            color: white; 
-        }
-        .btn-success:hover { 
-            background: #218838; 
-            transform: translateY(-2px);
-        }
-        .btn-warning { 
-            background: #ffc107; 
-            color: #212529; 
-        }
-        .btn-warning:hover { 
-            background: #e0a800; 
-            transform: translateY(-2px);
-        }
-        .btn-danger { 
-            background: #dc3545; 
-            color: white; 
-        }
-        .btn-danger:hover { 
-            background: #c82333; 
-            transform: translateY(-2px);
-        }
-        .empty-state { 
-            text-align: center; 
-            padding: 60px 20px; 
-            color: #6c757d; 
-        }
-        .empty-state i {
-            font-size: 4rem;
-            margin-bottom: 20px;
-            color: #adb5bd;
-        }
-        .form-group { 
-            margin-bottom: 20px; 
-        }
-        .form-label { 
-            display: block; 
-            margin-bottom: 8px; 
-            font-weight: 500; 
-            color: #2c3e50; 
-        }
-        .form-control { 
-            width: 100%; 
-            padding: 12px 15px; 
-            border: 2px solid #e9ecef; 
-            border-radius: 8px; 
-            font-size: 1rem; 
-            transition: all 0.3s ease;
-        }
-        .form-control:focus { 
-            outline: none; 
-            border-color: #32CD32; 
-            box-shadow: 0 0 0 3px rgba(50, 205, 50, 0.2);
-        }
-        .form-textarea { 
-            min-height: 120px; 
-            resize: vertical; 
-        }
-        .tipo-conteudo { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); 
-            gap: 15px; 
-            margin-bottom: 20px; 
-        }
-        .tipo-option { 
-            border: 2px solid #e9ecef; 
-            border-radius: 10px; 
-            padding: 20px; 
-            text-align: center; 
-            cursor: pointer; 
-            transition: all 0.3s ease; 
-        }
-        .tipo-option:hover { 
-            border-color: #32CD32; 
-            transform: translateY(-3px);
-        }
-        .tipo-option.selected { 
-            border-color: #32CD32; 
-            background: #f0fff4; 
-            box-shadow: 0 5px 15px rgba(50, 205, 50, 0.2);
-        }
-        .tipo-icone { 
-            font-size: 2.5rem; 
-            margin-bottom: 10px; 
-            color: #32CD32; 
-        }
-        .badge-tipo {
-            background: #e9ecef;
-            color: #495057;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-        .form-container {
-            background: #f8f9fa; 
-            padding: 25px; 
-            border-radius: 12px; 
-            margin-bottom: 30px;
-            border-left: 5px solid #32CD32;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-        }
-        .form-header {
-            display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
+            box-shadow: var(--shadow-md);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid var(--gray-200);
         }
-        .form-title {
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .menu-toggle {
+            background: none;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--gray-600);
+            transition: all var(--transition-fast);
+        }
+
+        .menu-toggle:hover {
+            background: var(--gray-100);
+            color: var(--gray-900);
+        }
+
+        .page-title h1 {
             font-size: 1.5rem;
-            color: #2c3e50;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 0.25rem;
+        }
+
+        .page-title p {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        /* Header Direito */
+        .header-right {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 1rem;
         }
-        .form-actions {
+
+        .header-actions {
             display: flex;
-            gap: 15px;
-            margin-top: 25px;
+            align-items: center;
+            gap: 1rem;
         }
+
+        /* Botões */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            border: none;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--primary-500);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-600);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-secondary {
+            background: var(--gray-200);
+            color: var(--gray-800);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-300);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #0da271;
+        }
+
+        .btn-info {
+            background: var(--info);
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #2563eb;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: var(--gray-900);
+        }
+
+        .btn-warning:hover {
+            background: #d97706;
+        }
+
+        .btn-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: none;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--gray-600);
+            position: relative;
+            transition: all var(--transition-fast);
+        }
+
+        .btn-icon:hover {
+            background: var(--gray-100);
+            color: var(--gray-900);
+        }
+
+        /* Content Area */
+        .content-area {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        /* Alertas */
         .alert {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            padding: 1rem 1.25rem;
+            border-radius: var(--radius-md);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            border-left: 4px solid transparent;
         }
+
+        .alert-error {
+            background: #fee;
+            color: #dc3545;
+            border-left-color: #dc3545;
+        }
+
         .alert-success {
             background: #d4edda;
             color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .alert-danger {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .file-info {
-            margin-top: 10px;
-            padding: 10px;
-            background: #e9ecef;
-            border-radius: 6px;
-            font-size: 0.9rem;
-        }
-        .json-example {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 6px;
-            padding: 10px;
-            margin-top: 5px;
-            font-size: 0.85rem;
-            color: #6c757d;
+            border-left-color: #155724;
         }
 
+        .alert i {
+            font-size: 1.25rem;
+        }
 
+        /* Breadcrumb */
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
 
-        /* Estilos para o construtor de quiz */
-.quiz-builder {
-    border: 2px solid #e9ecef;
-    border-radius: 8px;
-    padding: 20px;
-    background: #f8f9fa;
-}
+        .breadcrumb a {
+            color: var(--primary-600);
+            text-decoration: none;
+            transition: color var(--transition-fast);
+        }
 
-.quiz-actions {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-}
+        .breadcrumb a:hover {
+            color: var(--primary-700);
+            text-decoration: underline;
+        }
 
-.lista-perguntas {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
+        .breadcrumb-separator {
+            color: var(--gray-400);
+        }
 
-.pergunta-item {
-    background: white;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 15px;
-    position: relative;
-}
+        /* Módulo Info Card */
+        .modulo-info-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--gray-200);
+            border-left: 4px solid var(--primary-500);
+        }
 
-.pergunta-header {
-    display: flex;
-    justify-content: between;
-    align-items: center;
-    margin-bottom: 10px;
-}
+        .modulo-info-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
 
-.pergunta-titulo {
-    font-weight: 600;
-    color: #2c3e50;
-    flex: 1;
-}
+        .modulo-info-title h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 0.25rem;
+        }
 
-.pergunta-acoes {
-    display: flex;
-    gap: 5px;
-}
+        .modulo-info-title p {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            margin-bottom: 0.5rem;
+        }
 
-.btn-pergunta {
-    padding: 5px 10px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-}
+        .modulo-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.875rem;
+            color: var(--gray-500);
+            margin-top: 0.5rem;
+        }
 
-.btn-remover {
-    background: #dc3545;
-    color: white;
-}
+        .modulo-info-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
 
-.btn-mover {
-    background: #6c757d;
-    color: white;
-}
+        /* Abas de Navegação */
+        .nav-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid var(--gray-200);
+            padding-bottom: 1rem;
+        }
 
-.form-group-pergunta {
-    margin-bottom: 10px;
-}
+        .nav-tab {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            border-radius: var(--radius-md);
+            color: var(--gray-600);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
 
-.form-group-pergunta label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: 500;
-    color: #495057;
-}
+        .nav-tab:hover {
+            background: var(--gray-100);
+            color: var(--gray-900);
+        }
 
-.opcoes-lista {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 10px;
-}
+        .nav-tab.active {
+            background: var(--primary-500);
+            color: white;
+        }
 
-.opcao-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px;
-    background: #f8f9fa;
-    border-radius: 4px;
-}
+        /* Grid de Conteúdos */
+        .conteudos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
 
-.opcao-item input[type="radio"] {
-    margin: 0;
-}
+        .conteudo-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+            transition: all var(--transition-normal);
+            border: 1px solid var(--gray-200);
+            position: relative;
+        }
 
-.opcao-item input[type="text"] {
-    flex: 1;
-    padding: 6px 8px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-}
+        .conteudo-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--primary-200);
+        }
 
-.btn-adicionar-opcao {
-    background: #28a745;
-    color: white;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    margin-top: 5px;
-}
+        .conteudo-header {
+            padding: 1.25rem;
+            background: linear-gradient(135deg, var(--gray-50), var(--gray-100));
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
 
-/* Modal styles */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
+        .conteudo-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
 
-.modal-content {
-    background: white;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 800px;
-    max-height: 90vh;
-    overflow-y: auto;
-}
+        .conteudo-icon.texto {
+            background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+            color: white;
+        }
 
-.modal-header {
-    display: flex;
-    justify-content: between;
-    align-items: center;
-    padding: 15px 20px;
-    border-bottom: 1px solid #dee2e6;
-}
+        .conteudo-icon.video {
+            background: linear-gradient(135deg, var(--danger), #dc3545);
+            color: white;
+        }
 
-.modal-header h3 {
-    margin: 0;
-    color: #2c3e50;
-}
+        .conteudo-icon.imagem {
+            background: linear-gradient(135deg, var(--info), #3b82f6);
+            color: white;
+        }
 
-.btn-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: #6c757d;
-}
+        .conteudo-icon.quiz {
+            background: linear-gradient(135deg, var(--warning), #f59e0b);
+            color: var(--gray-900);
+        }
 
-.modal-body {
-    padding: 20px;
-}
+        .conteudo-info {
+            flex: 1;
+        }
 
-/* Preview do quiz */
-.preview-pergunta {
-    background: white;
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 15px;
-}
+        .conteudo-titulo {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 0.25rem;
+        }
 
-.preview-pergunta h4 {
-    color: #2c3e50;
-    margin-bottom: 10px;
-}
+        .conteudo-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.75rem;
+            color: var(--gray-500);
+        }
 
-.preview-opcoes {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
+        .conteudo-badge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: var(--primary-500);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
 
-.preview-opcao {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-}
+        .conteudo-body {
+            padding: 1.25rem;
+        }
 
-.preview-opcao.correta {
-    background: #d4edda;
-    border-color: #c3e6cb;
-}
+        .conteudo-descricao {
+            color: var(--gray-600);
+            font-size: 0.875rem;
+            line-height: 1.5;
+            margin-bottom: 1.25rem;
+            min-height: 60px;
+        }
 
-.preview-opcao label {
-    cursor: pointer;
-    flex: 1;
-    margin: 0;
-}
+        .conteudo-acoes {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
 
+        .conteudo-acoes .btn {
+            flex: 1;
+            min-width: 100px;
+            padding: 0.5rem;
+            font-size: 0.75rem;
+            justify-content: center;
+        }
 
-.alert {
-    padding: 15px 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    max-width: 400px;
-}
-.alert-success {
-    background: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-}
-.alert-danger {
-    background: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-}
+        /* Estado Vazio */
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--gray-500);
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            color: var(--gray-300);
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--gray-700);
+        }
+
+        .empty-state p {
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Formulários */
+        .form-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--gray-200);
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--gray-700);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid var(--gray-300);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            transition: all var(--transition-fast);
+            font-family: inherit;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-500);
+            box-shadow: 0 0 0 3px rgba(76, 190, 76, 0.1);
+        }
+
+        .form-textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        /* Seletor de Tipo */
+        .tipo-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .tipo-option {
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            padding: 1.5rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            background: var(--gray-50);
+        }
+
+        .tipo-option:hover {
+            border-color: var(--primary-300);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .tipo-option.selected {
+            border-color: var(--primary-500);
+            background: var(--primary-50);
+            box-shadow: 0 0 0 3px rgba(76, 190, 76, 0.1);
+        }
+
+        .tipo-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: var(--primary-500);
+        }
+
+        .tipo-text {
+            font-weight: 500;
+            color: var(--gray-700);
+        }
+
+        /* Formulários por Tipo */
+        .tipo-form {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .tipo-form.active {
+            display: block;
+        }
+
+        /* Construtor de Quiz */
+        .quiz-builder {
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            background: var(--gray-50);
+        }
+
+        .quiz-actions {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .perguntas-lista {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .pergunta-item {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            padding: 1.25rem;
+            position: relative;
+        }
+
+        .pergunta-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .pergunta-numero {
+            font-weight: 600;
+            color: var(--gray-700);
+        }
+
+        .pergunta-acoes {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .opcoes-lista {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin: 1rem 0;
+        }
+
+        .opcao-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem;
+            background: var(--gray-50);
+            border-radius: var(--radius-sm);
+        }
+
+        .opcao-item input[type="radio"] {
+            margin: 0;
+            width: 18px;
+            height: 18px;
+        }
+
+        .opcao-item input[type="text"] {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+        }
+
+        /* Preview do Quiz */
+        .quiz-preview {
+            background: white;
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .preview-pergunta {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .preview-pergunta:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity var(--transition-normal);
+        }
+
+        .modal.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: var(--radius-lg);
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-xl);
+            animation: modalSlideIn 0.3s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+            color: white;
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background var(--transition-fast);
+        }
+
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        /* Seções de Conteúdo */
+        .content-section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Responsividade */
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 240px;
+            }
+            
+            .main-content {
+                margin-left: 240px;
+            }
+            
+            .conteudos-grid {
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            }
+            
+            .tipo-selector {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .main-header {
+                flex-direction: column;
+                gap: 1rem;
+                padding: 1rem;
+            }
+            
+            .header-left,
+            .header-right {
+                width: 100%;
+            }
+            
+            .conteudos-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-tabs {
+                flex-wrap: wrap;
+            }
+            
+            .conteudo-acoes {
+                flex-wrap: wrap;
+            }
+            
+            .conteudo-acoes .btn {
+                flex: auto;
+                min-width: auto;
+            }
+            
+            .modal-content {
+                width: 95%;
+                margin: 1rem;
+            }
+            
+            .modulo-info-header {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+            
+            .modulo-info-actions {
+                width: 100%;
+                justify-content: flex-start;
+            }
+            
+            .tipo-selector {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Animações */
+        .conteudo-card {
+            animation: fadeIn 0.5s ease-out;
+        }
     </style>
 </head>
 <body>
-    <div class="admin-container">
-        <div class="admin-header">
-            <h1><i class="fas fa-file-alt"></i> Gerenciar Conteúdos</h1>
-            <p>Módulo: <?= htmlspecialchars($modulo['titulo']) ?> - Curso: <?= htmlspecialchars($modulo['curso_titulo']) ?></p>
-        </div>
+    <!-- Inclui o sidebar via header.php -->
+    <?php 
+    // Defina qual aba está ativa
+    $active_tab = 'adminconteudos';
+    require_once __DIR__ . '/../public/header.php'; 
+    ?>
 
-        <div class="admin-content">
-            <div class="modulo-info">
-                <h3><?= htmlspecialchars($modulo['titulo']) ?></h3>
-                <p><?= htmlspecialchars($modulo['descricao']) ?></p>
-                <div style="display: flex; gap: 15px; margin-top: 15px;">
-                    <a href="/curso_agrodash/adminmodulos?curso_id=<?= $modulo['curso_id'] ?>" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left"></i> Voltar aos Módulos
-                    </a>
-                    <button class="btn btn-success" onclick="mostrarFormConteudo()">
-                        <i class="fas fa-plus"></i> Novo Conteúdo
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Top Header -->
+        <header class="main-header">
+            <div class="header-left">
+                <button class="menu-toggle" id="menuToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="page-title">
+                    <h1>Gerenciar Conteúdos</h1>
+                    <p>Módulo: <?= htmlspecialchars($modulo['titulo'] ?? 'Módulo não encontrado') ?></p>
+                </div>
+            </div>
+            
+            <div class="header-right">
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="mostrarSecao('novo-conteudo')">
+                        <i class="fas fa-plus"></i>
+                        <span>Novo Conteúdo</span>
+                    </button>
+                    <button class="btn btn-info" onclick="window.location.href='/curso_agrodash/adminmodulos?curso_id=<?= $modulo['curso_id'] ?? 0 ?>'">
+                        <i class="fas fa-layer-group"></i>
+                        <span>Ver Módulos</span>
                     </button>
                 </div>
             </div>
+        </header>
 
-            <!-- Formulário de Novo/Editar Conteúdo -->
-            <div id="form-conteudo-container" class="form-container" style="<?= $conteudo_edit ? 'display: block;' : 'display: none;' ?>">
-                <div class="form-header">
-                    <h3 class="form-title">
-                        <i class="fas <?= $conteudo_edit ? 'fa-edit' : 'fa-plus' ?>"></i> 
-                        <?= $conteudo_edit ? 'Editar Conteúdo' : 'Adicionar Novo Conteúdo' ?>
-                    </h3>
-                    <button class="btn btn-secondary" onclick="ocultarFormConteudo()">
-                        <i class="fas fa-times"></i> Fechar
-                    </button>
+        <!-- Content Area -->
+        <div class="content-area">
+            <?php if (isset($error)): ?>
+                <div class="alert alert-error">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    <span><?= htmlspecialchars($error) ?></span>
                 </div>
-                
-                <form id="form-conteudo" action="ajax/salvar_conteudo.php" method="POST" enctype="multipart/form-data">
+            <?php endif; ?>
+
+            <!-- Breadcrumb -->
+            <div class="breadcrumb">
+                <a href="/curso_agrodash/admincursos">
+                    <i class="fas fa-arrow-left"></i> Cursos
+                </a>
+                <span class="breadcrumb-separator">/</span>
+                <a href="/curso_agrodash/adminmodulos?curso_id=<?= $modulo['curso_id'] ?? 0 ?>">
+                    Módulos
+                </a>
+                <span class="breadcrumb-separator">/</span>
+                <span>Conteúdos</span>
+            </div>
+
+            <!-- Card de Informações do Módulo -->
+            <div class="modulo-info-card">
+                <div class="modulo-info-header">
+                    <div class="modulo-info-title">
+                        <h2><?= htmlspecialchars($modulo['titulo'] ?? 'Módulo não encontrado') ?></h2>
+                        <p><?= htmlspecialchars($modulo['descricao'] ?? '') ?></p>
+                        <div class="modulo-meta">
+                            <span><i class="fas fa-book"></i> Curso: <?= htmlspecialchars($modulo['curso_titulo'] ?? 'Curso') ?></span>
+                            <span><i class="fas fa-clock"></i> <?= htmlspecialchars($modulo['duracao'] ?? '30 min') ?></span>
+                            <span><i class="fas fa-sort-numeric-down"></i> Ordem: <?= $modulo['ordem'] ?? 1 ?></span>
+                        </div>
+                    </div>
+                    <div class="modulo-info-actions">
+                        <button class="btn btn-warning" onclick="window.location.href='/curso_agrodash/adminmodulos?curso_id=<?= $modulo['curso_id'] ?? 0 ?>'">
+                            <i class="fas fa-edit"></i> Editar Módulo
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.location.href='/curso_agrodash/admincursos'">
+                            <i class="fas fa-book"></i> Ver Cursos
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Abas de Navegação -->
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="conteudos">
+                    <i class="fas fa-file-alt"></i> Conteúdos
+                    <span style="background: var(--primary-500); color: white; padding: 0.125rem 0.5rem; border-radius: 9999px; font-size: 0.75rem;">
+                        <?= count($conteudos) ?>
+                    </span>
+                </button>
+                <button class="nav-tab" data-tab="novo-conteudo">
+                    <i class="fas fa-plus"></i> Novo Conteúdo
+                </button>
+            </div>
+
+            <!-- Seção: Lista de Conteúdos -->
+            <div id="conteudos" class="content-section active">
+                <div class="conteudos-grid" id="conteudosGrid">
+                    <?php foreach ($conteudos as $conteudo): ?>
+                    <?php $tipo = $conteudo['tipo'] ?? 'texto'; ?>
+                    <div class="conteudo-card" data-conteudo-id="<?= $conteudo['id'] ?>">
+                        <div class="conteudo-header">
+                            <div class="conteudo-icon <?= $tipo ?>">
+                                <i class="<?= obterIconeTipo($tipo) ?>"></i>
+                            </div>
+                            <div class="conteudo-info">
+                                <div class="conteudo-titulo"><?= htmlspecialchars($conteudo['titulo']) ?></div>
+                                <div class="conteudo-meta">
+                                    <span><i class="fas fa-clock"></i> <?= htmlspecialchars($conteudo['duracao'] ?? '10 min') ?></span>
+                                    <span><i class="fas fa-sort-numeric-down"></i> Ordem: <?= $conteudo['ordem'] ?></span>
+                                </div>
+                            </div>
+                            <div class="conteudo-badge">
+                                <?= ucfirst($tipo) ?>
+                            </div>
+                        </div>
+                        <div class="conteudo-body">
+                            <p class="conteudo-descricao">
+                                <?= !empty($conteudo['descricao']) ? htmlspecialchars($conteudo['descricao']) : 'Sem descrição fornecida.' ?>
+                            </p>
+                            <div class="conteudo-acoes">
+                                <button class="btn btn-primary" onclick="abrirModalEditar(<?= $conteudo['id'] ?>)">
+                                    <i class="fas fa-edit"></i> Editar
+                                </button>
+                                <button class="btn btn-danger" onclick="confirmarExclusao(<?= $conteudo['id'] ?>)">
+                                    <i class="fas fa-trash"></i> Excluir
+                                </button>
+                                <button class="btn btn-info" onclick="visualizarConteudo(<?= $conteudo['id'] ?>)">
+                                    <i class="fas fa-eye"></i> Visualizar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+
+                    <?php if (empty($conteudos)): ?>
+                    <div class="empty-state">
+                        <i class="fas fa-file-alt"></i>
+                        <h3>Nenhum conteúdo encontrado</h3>
+                        <p>Comece criando o primeiro conteúdo para este módulo!</p>
+                        <button class="btn btn-primary" onclick="mostrarSecao('novo-conteudo')" style="margin-top: 1rem;">
+                            <i class="fas fa-plus"></i> Criar Primeiro Conteúdo
+                        </button>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Seção: Novo Conteúdo -->
+            <div id="novo-conteudo" class="content-section">
+                <div class="form-container">
+                    <form id="form-novo-conteudo" method="POST">
+                        <input type="hidden" name="action" value="salvar_conteudo">
+                        <input type="hidden" name="modulo_id" value="<?= $modulo_id ?>">
+                        <input type="hidden" name="id" value="0">
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="titulo">Título do Conteúdo *</label>
+                            <input type="text" class="form-control" id="titulo" name="titulo" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="descricao">Descrição</label>
+                            <textarea class="form-control form-textarea" id="descricao" name="descricao" placeholder="Descreva o conteúdo..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Tipo de Conteúdo *</label>
+                            <div class="tipo-selector">
+                                <div class="tipo-option selected" data-tipo="texto" onclick="selecionarTipo('texto')">
+                                    <div class="tipo-icon"><i class="fas fa-file-alt"></i></div>
+                                    <div class="tipo-text">Texto</div>
+                                </div>
+                                <div class="tipo-option" data-tipo="video" onclick="selecionarTipo('video')">
+                                    <div class="tipo-icon"><i class="fas fa-video"></i></div>
+                                    <div class="tipo-text">Vídeo</div>
+                                </div>
+                                <div class="tipo-option" data-tipo="imagem" onclick="selecionarTipo('imagem')">
+                                    <div class="tipo-icon"><i class="fas fa-image"></i></div>
+                                    <div class="tipo-text">Imagem</div>
+                                </div>
+                                <div class="tipo-option" data-tipo="quiz" onclick="selecionarTipo('quiz')">
+                                    <div class="tipo-icon"><i class="fas fa-question-circle"></i></div>
+                                    <div class="tipo-text">Quiz</div>
+                                </div>
+                            </div>
+                            <input type="hidden" name="tipo" id="tipo" value="texto" required>
+                        </div>
+
+                        <!-- Formulário para Texto -->
+                        <div id="form-texto" class="tipo-form active">
+                            <div class="form-group">
+                                <label class="form-label" for="conteudo">Conteúdo em Texto</label>
+                                <textarea class="form-control form-textarea" id="conteudo" name="conteudo" rows="8" placeholder="Digite o conteúdo em texto aqui..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Formulário para Vídeo -->
+                        <div id="form-video" class="tipo-form">
+                            <div class="form-group">
+                                <label class="form-label" for="url_video">URL do Vídeo</label>
+                                <input type="url" class="form-control" id="url_video" name="url_video" 
+                                       placeholder="https://www.youtube.com/watch?v=...">
+                                <small style="color: var(--gray-500); font-size: 0.75rem; display: block; margin-top: 0.25rem;">
+                                    Suporta YouTube, Vimeo e outros serviços de vídeo
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Formulário para Imagem -->
+                        <div id="form-imagem" class="tipo-form">
+                            <div class="form-group">
+                                <label class="form-label" for="arquivo_imagem">Upload de Imagem</label>
+                                <input type="file" class="form-control" id="arquivo_imagem" name="arquivo_imagem" accept="image/*">
+                                <small style="color: var(--gray-500); font-size: 0.75rem; display: block; margin-top: 0.25rem;">
+                                    Formatos suportados: JPG, PNG, GIF (máx. 5MB)
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Formulário para Quiz -->
+                        <div id="form-quiz" class="tipo-form">
+                            <div class="quiz-builder">
+                                <div class="quiz-actions">
+                                    <button type="button" class="btn btn-success" onclick="adicionarPergunta()">
+                                        <i class="fas fa-plus"></i> Adicionar Pergunta
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" onclick="visualizarQuiz()">
+                                        <i class="fas fa-eye"></i> Visualizar Quiz
+                                    </button>
+                                </div>
+                                
+                                <div id="lista-perguntas" class="perguntas-lista">
+                                    <!-- Perguntas serão adicionadas aqui -->
+                                </div>
+                                
+                                <input type="hidden" name="perguntas_quiz" id="perguntas_quiz" value="[]">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label" for="ordem">Ordem</label>
+                                <input type="number" class="form-control" id="ordem" name="ordem" 
+                                       value="<?= count($conteudos) + 1 ?>" min="1">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="duracao">Duração Estimada</label>
+                                <input type="text" class="form-control" id="duracao" name="duracao" value="10 min">
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 0.75rem; margin-top: 2rem;">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Salvar Conteúdo
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="mostrarSecao('conteudos')">
+                                <i class="fas fa-times"></i> Cancelar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal de Edição -->
+    <div id="modalEditar" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-edit"></i> Editar Conteúdo</h2>
+                <button class="modal-close" onclick="fecharModalEditar()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="form-editar-conteudo" method="POST">
+                    <input type="hidden" name="action" value="salvar_conteudo">
                     <input type="hidden" name="modulo_id" value="<?= $modulo_id ?>">
-                    <input type="hidden" name="conteudo_id" value="<?= $conteudo_edit ? $conteudo_edit['id'] : '' ?>">
+                    <input type="hidden" id="edit_id" name="id" value="0">
                     
                     <div class="form-group">
-                        <label class="form-label" for="titulo">Título do Conteúdo *</label>
-                        <input type="text" class="form-control" id="titulo" name="titulo" 
-                               value="<?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'titulo')) ?>" required>
+                        <label class="form-label" for="edit_titulo">Título do Conteúdo *</label>
+                        <input type="text" class="form-control" id="edit_titulo" name="titulo" required>
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label" for="descricao">Descrição</label>
-                        <textarea class="form-control form-textarea" id="descricao" name="descricao"><?= 
-                            htmlspecialchars(getConteudoEditValue($conteudo_edit, 'descricao')) 
-                        ?></textarea>
+                        <label class="form-label" for="edit_descricao">Descrição</label>
+                        <textarea class="form-control form-textarea" id="edit_descricao" name="descricao"></textarea>
                     </div>
 
                     <div class="form-group">
                         <label class="form-label">Tipo de Conteúdo *</label>
-                        <div class="tipo-conteudo">
-                            <div class="tipo-option <?= (!$conteudo_edit || getConteudoEditValue($conteudo_edit, 'tipo') === 'texto') ? 'selected' : '' ?>" 
-                                 data-tipo="texto" onclick="selecionarTipo('texto')">
-                                <div class="tipo-icone"><i class="fas fa-file-alt"></i></div>
-                                <div>Texto</div>
-                            </div>
-                            <div class="tipo-option <?= (getConteudoEditValue($conteudo_edit, 'tipo') === 'video') ? 'selected' : '' ?>" 
-                                 data-tipo="video" onclick="selecionarTipo('video')">
-                                <div class="tipo-icone"><i class="fas fa-video"></i></div>
-                                <div>Vídeo</div>
-                            </div>
-                            <div class="tipo-option <?= (getConteudoEditValue($conteudo_edit, 'tipo') === 'imagem') ? 'selected' : '' ?>" 
-                                 data-tipo="imagem" onclick="selecionarTipo('imagem')">
-                                <div class="tipo-icone"><i class="fas fa-image"></i></div>
-                                <div>Imagem</div>
-                            </div>
-                            <div class="tipo-option <?= (getConteudoEditValue($conteudo_edit, 'tipo') === 'quiz') ? 'selected' : '' ?>" 
-                                 data-tipo="quiz" onclick="selecionarTipo('quiz')">
-                                <div class="tipo-icone"><i class="fas fa-question-circle"></i></div>
-                                <div>Quiz</div>
-                            </div>
+                        <div class="tipo-selector" id="edit-tipo-selector">
+                            <!-- Tipos serão carregados dinamicamente -->
                         </div>
-                        <input type="hidden" name="tipo" id="tipo" 
-                               value="<?= getConteudoEditValue($conteudo_edit, 'tipo', 'texto') ?>" required>
+                        <input type="hidden" name="tipo" id="edit_tipo" value="texto" required>
                     </div>
 
-                    <div id="conteudo-texto" class="tipo-conteudo-form" 
-                         style="<?= (!$conteudo_edit || getConteudoEditValue($conteudo_edit, 'tipo') === 'texto') ? 'display: block;' : 'display: none;' ?>">
+                    <!-- Formulários por tipo serão carregados dinamicamente -->
+
+                    <div class="form-row">
                         <div class="form-group">
-                            <label class="form-label" for="conteudo">Conteúdo em Texto</label>
-                            <textarea class="form-control form-textarea" id="conteudo" name="conteudo" rows="8"><?= 
-                                htmlspecialchars(getConteudoEditValue($conteudo_edit, 'conteudo')) 
-                            ?></textarea>
-                        </div>
-                    </div>
-
-<div id="conteudo-video" class="tipo-conteudo-form" 
-     style="<?= (getConteudoEditValue($conteudo_edit, 'tipo') === 'video') ? 'display: block;' : 'display: none;' ?>">
-    <div class="form-group">
-        <label class="form-label" for="url_video">URL do Vídeo (YouTube, Vimeo, etc.)</label>
-        <input type="url" class="form-control" id="url_video" name="url_video" 
-               placeholder="https://www.youtube.com/watch?v=... ou https://vimeo.com/..."
-               value="<?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'url_video')) ?>">
-        <small class="text-muted">Cole a URL completa do vídeo do YouTube, Vimeo ou outro serviço suportado.</small>
-    </div>
-    
-    <div class="form-group">
-        <label class="form-label">OU faça upload de um arquivo de vídeo</label>
-        <input type="file" class="form-control" name="arquivo_video" accept="video/mp4,video/webm,video/ogg,video/quicktime">
-        <small class="text-muted">Formatos suportados: MP4, WebM, OGG. Tamanho máximo: 50MB</small>
-        
-        <?php if (getConteudoEditValue($conteudo_edit, 'tipo') === 'video' && getConteudoEditValue($conteudo_edit, 'arquivo')): ?>
-            <div class="file-info mt-2">
-                <i class="fas fa-file-video"></i> 
-                Arquivo atual: <?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'arquivo')) ?>
-                <br>
-                <small>
-                    <a href="<?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'arquivo')) ?>" target="_blank" class="text-primary">Visualizar arquivo</a>
-                    |
-                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerArquivoVideo()">Remover arquivo</button>
-                </small>
-            </div>
-            <input type="hidden" name="arquivo_video_atual" value="<?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'arquivo')) ?>">
-        <?php endif; ?>
-    </div>
-    
-    <div class="form-group">
-        <label class="form-label">Pré-visualização do Vídeo</label>
-        <div id="video-preview" class="mt-2">
-            <?php if (getConteudoEditValue($conteudo_edit, 'tipo') === 'video'): ?>
-                <?php if (getConteudoEditValue($conteudo_edit, 'url_video')): ?>
-                    <div class="video-preview-container">
-                        <p class="text-success">✓ Vídeo por URL configurado</p>
-                        <small class="text-muted">URL: <?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'url_video')) ?></small>
-                    </div>
-                <?php elseif (getConteudoEditValue($conteudo_edit, 'arquivo')): ?>
-                    <div class="video-preview-container">
-                        <p class="text-success">✓ Arquivo de vídeo carregado</p>
-                        <small class="text-muted">Arquivo: <?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'arquivo')) ?></small>
-                    </div>
-                <?php endif; ?>
-            <?php else: ?>
-                <p class="text-muted">Nenhum vídeo configurado ainda.</p>
-            <?php endif; ?>
-        </div>
-    </div>
-</div>
-
-                    <div id="conteudo-imagem" class="tipo-conteudo-form" 
-                         style="<?= (getConteudoEditValue($conteudo_edit, 'tipo') === 'imagem') ? 'display: block;' : 'display: none;' ?>">
-                        <div class="form-group">
-                            <label class="form-label">Upload de Imagem</label>
-                            <input type="file" class="form-control" name="arquivo_imagem" accept="image/*">
-                            <?php if (getConteudoEditValue($conteudo_edit, 'tipo') === 'imagem' && getConteudoEditValue($conteudo_edit, 'arquivo')): ?>
-                                <div class="file-info">
-                                    <i class="fas fa-file-image"></i> Arquivo atual: <?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'arquivo')) ?>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-// Substitua a seção do quiz no admin_conteudos.php por este código:
-
-<div id="conteudo-quiz" class="tipo-conteudo-form" 
-     style="<?= (getConteudoEditValue($conteudo_edit, 'tipo') === 'quiz') ? 'display: block;' : 'display: none;' ?>">
-    <div class="form-group">
-        <label class="form-label">Construtor de Quiz</label>
-        <div class="quiz-builder">
-            <div class="quiz-actions">
-                <button type="button" class="btn btn-success" onclick="adicionarPergunta()">
-                    <i class="fas fa-plus"></i> Adicionar Pergunta
-                </button>
-                <button type="button" class="btn btn-secondary" onclick="visualizarQuiz()">
-                    <i class="fas fa-eye"></i> Visualizar Quiz
-                </button>
-            </div>
-            
-            <div id="lista-perguntas" class="lista-perguntas">
-                <!-- Perguntas serão adicionadas aqui -->
-            </div>
-            
-            <input type="hidden" name="perguntas_quiz" id="perguntas_quiz" 
-                   value="<?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'perguntas_quiz')) ?>">
-        </div>
-    </div>
-</div>
-
-<!-- Modal para visualizar quiz -->
-<div id="modal-visualizar-quiz" class="modal" style="display: none;">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Visualizar Quiz</h3>
-            <button type="button" class="btn-close" onclick="fecharModalQuiz()">&times;</button>
-        </div>
-        <div class="modal-body" id="preview-quiz">
-            <!-- Preview do quiz será gerado aqui -->
-        </div>
-    </div>
-</div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                        <div class="form-group">
-                            <label class="form-label" for="ordem">Ordem</label>
-                            <input type="number" class="form-control" id="ordem" name="ordem" 
-                                   value="<?= getConteudoEditValue($conteudo_edit, 'ordem', count($conteudos) + 1) ?>" min="1">
+                            <label class="form-label" for="edit_ordem">Ordem</label>
+                            <input type="number" class="form-control" id="edit_ordem" name="ordem" min="1" required>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label" for="duracao">Duração Estimada</label>
-                            <input type="text" class="form-control" id="duracao" name="duracao" 
-                                   value="<?= htmlspecialchars(getConteudoEditValue($conteudo_edit, 'duracao', '10 min')) ?>">
+                            <label class="form-label" for="edit_duracao">Duração Estimada</label>
+                            <input type="text" class="form-control" id="edit_duracao" name="duracao">
                         </div>
                     </div>
 
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save"></i> <?= $conteudo_edit ? 'Atualizar' : 'Salvar' ?> Conteúdo
+                    <div style="display: flex; gap: 0.75rem; margin-top: 2rem;">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save"></i> Salvar Alterações
                         </button>
-                        <button type="button" class="btn btn-secondary" onclick="ocultarFormConteudo()">
+                        <button type="button" class="btn btn-secondary" onclick="fecharModalEditar()">
                             <i class="fas fa-times"></i> Cancelar
                         </button>
                     </div>
                 </form>
             </div>
+        </div>
+    </div>
 
-            <!-- Lista de Conteúdos -->
-            <div class="conteudos-list">
-                <?php if (!empty($conteudos)): ?>
-                    <?php foreach ($conteudos as $conteudo): ?>
-                    <div class="conteudo-item">
-                        <div class="conteudo-header">
-                            <div class="conteudo-titulo">
-                                <i class="<?= obterIconeTipo($conteudo['tipo']) ?>"></i>
-                                <?= htmlspecialchars($conteudo['titulo']) ?>
-                            </div>
-                            <div class="conteudo-meta">
-                                <span><i class="fas fa-clock"></i> <?= $conteudo['duracao'] ?? '10 min' ?></span>
-                                <span><i class="fas fa-sort-numeric-down"></i> Ordem: <?= $conteudo['ordem'] ?></span>
-                                <span class="badge-tipo"><?= ucfirst($conteudo['tipo']) ?></span>
-                            </div>
-                            <div class="conteudo-acoes">
-                                <a href="?modulo_id=<?= $modulo_id ?>&conteudo_id=<?= $conteudo['id'] ?>" class="btn btn-warning">
-                                    <i class="fas fa-edit"></i> Editar
-                                </a>
-                                <button class="btn btn-danger" onclick="excluirConteudo(<?= $conteudo['id'] ?>)">
-                                    <i class="fas fa-trash"></i> Excluir
-                                </button>
-                                <button class="btn btn-primary" onclick="visualizarConteudo(<?= $conteudo['id'] ?>)">
-                                    <i class="fas fa-eye"></i> Visualizar
-                                </button>
-                            </div>
-                        </div>
-                        <?php if (!empty($conteudo['descricao'])): ?>
-                            <p style="color: #6c757d; font-size: 0.95rem; line-height: 1.5;"><?= htmlspecialchars($conteudo['descricao']) ?></p>
-                        <?php endif; ?>
-                    </div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <div class="empty-state">
-                        <i class="fas fa-file-alt"></i>
-                        <h3>Nenhum conteúdo encontrado</h3>
-                        <p>Comece criando o primeiro conteúdo deste módulo!</p>
-                        <button class="btn btn-success" onclick="mostrarFormConteudo()">
-                            <i class="fas fa-plus"></i> Criar Primeiro Conteúdo
-                        </button>
-                    </div>
-                <?php endif; ?>
+    <!-- Modal para Visualizar Quiz -->
+    <div id="modalQuiz" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2><i class="fas fa-question-circle"></i> Visualizar Quiz</h2>
+                <button class="modal-close" onclick="fecharModalQuiz()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="modalQuizContent">
+                <!-- Conteúdo do quiz será carregado aqui -->
             </div>
         </div>
     </div>
 
     <script>
-
-
-
-// Adicione este JavaScript ao admin_conteudos.php
-
-let contadorPerguntas = 0;
-
-function adicionarPergunta() {
-    contadorPerguntas++;
-    const perguntaId = `pergunta_${contadorPerguntas}`;
-    
-    const perguntaHTML = `
-        <div class="pergunta-item" id="${perguntaId}">
-            <div class="pergunta-header">
-                <div class="pergunta-titulo">Pergunta ${contadorPerguntas}</div>
-                <div class="pergunta-acoes">
-                    <button type="button" class="btn-pergunta btn-mover" onclick="moverPergunta('${perguntaId}', -1)">↑</button>
-                    <button type="button" class="btn-pergunta btn-mover" onclick="moverPergunta('${perguntaId}', 1)">↓</button>
-                    <button type="button" class="btn-pergunta btn-remover" onclick="removerPergunta('${perguntaId}')">×</button>
-                </div>
-            </div>
-            <div class="form-group-pergunta">
-                <label>Pergunta:</label>
-                <input type="text" class="form-control pergunta-texto" placeholder="Digite a pergunta..." 
-                       onchange="atualizarQuizJSON()">
-            </div>
-            <div class="opcoes-lista" id="opcoes_${perguntaId}">
-                <div class="opcao-item">
-                    <input type="radio" name="correta_${perguntaId}" value="0" checked onchange="atualizarQuizJSON()">
-                    <input type="text" class="opcao-texto" placeholder="Opção 1" onchange="atualizarQuizJSON()">
-                </div>
-                <div class="opcao-item">
-                    <input type="radio" name="correta_${perguntaId}" value="1" onchange="atualizarQuizJSON()">
-                    <input type="text" class="opcao-texto" placeholder="Opção 2" onchange="atualizarQuizJSON()">
-                </div>
-            </div>
-            <button type="button" class="btn-adicionar-opcao" onclick="adicionarOpcao('${perguntaId}')">
-                <i class="fas fa-plus"></i> Adicionar Opção
-            </button>
-        </div>
-    `;
-    
-    document.getElementById('lista-perguntas').insertAdjacentHTML('beforeend', perguntaHTML);
-    atualizarQuizJSON();
-}
-
-function adicionarOpcao(perguntaId) {
-    const opcoesLista = document.getElementById(`opcoes_${perguntaId}`);
-    const totalOpcoes = opcoesLista.children.length;
-    
-    const opcaoHTML = `
-        <div class="opcao-item">
-            <input type="radio" name="correta_${perguntaId}" value="${totalOpcoes}" onchange="atualizarQuizJSON()">
-            <input type="text" class="opcao-texto" placeholder="Opção ${totalOpcoes + 1}" onchange="atualizarQuizJSON()">
-        </div>
-    `;
-    
-    opcoesLista.insertAdjacentHTML('beforeend', opcaoHTML);
-    atualizarQuizJSON();
-}
-
-function removerPergunta(perguntaId) {
-    const pergunta = document.getElementById(perguntaId);
-    if (pergunta && confirm('Tem certeza que deseja remover esta pergunta?')) {
-        pergunta.remove();
-        reordenarPerguntas();
-        atualizarQuizJSON();
-    }
-}
-
-function moverPergunta(perguntaId, direcao) {
-    const pergunta = document.getElementById(perguntaId);
-    const lista = document.getElementById('lista-perguntas');
-    const perguntas = Array.from(lista.children);
-    const index = perguntas.indexOf(pergunta);
-    
-    const novoIndex = index + direcao;
-    if (novoIndex >= 0 && novoIndex < perguntas.length) {
-        if (direcao === -1) {
-            lista.insertBefore(pergunta, perguntas[novoIndex]);
-        } else {
-            lista.insertBefore(pergunta, perguntas[novoIndex + 1] || null);
-        }
-        reordenarPerguntas();
-        atualizarQuizJSON();
-    }
-}
-
-function reordenarPerguntas() {
-    const perguntas = document.querySelectorAll('.pergunta-item');
-    perguntas.forEach((pergunta, index) => {
-        const titulo = pergunta.querySelector('.pergunta-titulo');
-        titulo.textContent = `Pergunta ${index + 1}`;
-    });
-}
-
-function atualizarQuizJSON() {
-    const perguntas = [];
-    const perguntaItems = document.querySelectorAll('.pergunta-item');
-    
-    perguntaItems.forEach((perguntaItem, index) => {
-        const perguntaTexto = perguntaItem.querySelector('.pergunta-texto').value;
-        const opcoesItems = perguntaItem.querySelectorAll('.opcao-item');
-        
-        const opcoes = [];
-        let respostaCorreta = 0;
-        
-        opcoesItems.forEach((opcaoItem, opcaoIndex) => {
-            const opcaoTexto = opcaoItem.querySelector('.opcao-texto').value;
-            const radio = opcaoItem.querySelector('input[type="radio"]');
+        // Sistema de notificação
+        function showNotification(message, type = 'info') {
+            const existing = document.querySelector('.custom-notification');
+            if (existing) existing.remove();
             
-            opcoes.push(opcaoTexto);
-            
-            if (radio.checked) {
-                respostaCorreta = opcaoIndex;
-            }
-        });
-        
-        if (perguntaTexto.trim() !== '' && opcoes.length >= 2) {
-            perguntas.push({
-                pergunta: perguntaTexto,
-                opcoes: opcoes,
-                resposta: respostaCorreta
-            });
-        }
-    });
-    
-    document.getElementById('perguntas_quiz').value = JSON.stringify(perguntas, null, 2);
-}
-
-function visualizarQuiz() {
-    const quizJSON = document.getElementById('perguntas_quiz').value;
-    let perguntas = [];
-    
-    try {
-        perguntas = JSON.parse(quizJSON);
-    } catch (e) {
-        alert('Erro ao carregar quiz: ' + e.message);
-        return;
-    }
-    
-    const preview = document.getElementById('preview-quiz');
-    preview.innerHTML = '';
-    
-    if (perguntas.length === 0) {
-        preview.innerHTML = '<p>Nenhuma pergunta adicionada ao quiz.</p>';
-    } else {
-        perguntas.forEach((pergunta, index) => {
-            const perguntaHTML = `
-                <div class="preview-pergunta">
-                    <h4>${index + 1}. ${pergunta.pergunta}</h4>
-                    <div class="preview-opcoes">
-                        ${pergunta.opcoes.map((opcao, opcaoIndex) => `
-                            <div class="preview-opcao ${opcaoIndex === pergunta.resposta ? 'correta' : ''}">
-                                <input type="radio" name="preview_${index}" ${opcaoIndex === pergunta.resposta ? 'checked' : ''} disabled>
-                                <label>${opcao}</label>
-                                ${opcaoIndex === pergunta.resposta ? '<i class="fas fa-check" style="color: #28a745;"></i>' : ''}
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
+            const notification = document.createElement('div');
+            notification.className = `custom-notification ${type}`;
+            notification.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                <span>${message}</span>
+                <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
             `;
-            preview.insertAdjacentHTML('beforeend', perguntaHTML);
+            
+            document.body.appendChild(notification);
+            
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+                color: white;
+                padding: 1rem 1.5rem;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+                z-index: 9999;
+                animation: slideIn 0.3s ease;
+                max-width: 400px;
+            `;
+            
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.style.animation = 'slideOut 0.3s ease forwards';
+                    setTimeout(() => notification.remove(), 300);
+                }
+            }, 5000);
+        }
+
+        // Menu Mobile
+        document.getElementById('menuToggle').addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.toggle('active');
         });
-    }
-    
-    document.getElementById('modal-visualizar-quiz').style.display = 'flex';
-}
 
-function fecharModalQuiz() {
-    document.getElementById('modal-visualizar-quiz').style.display = 'none';
-}
+        // Navegação entre abas
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetTab = this.dataset.tab;
+                mostrarSecao(targetTab);
+            });
+        });
 
-// Carregar perguntas existentes ao editar
-function carregarPerguntasExistentes() {
-    const quizJSON = document.getElementById('perguntas_quiz').value;
-    if (!quizJSON) return;
-    
-    try {
-        const perguntas = JSON.parse(quizJSON);
-        contadorPerguntas = 0;
-        document.getElementById('lista-perguntas').innerHTML = '';
-        
-        perguntas.forEach(pergunta => {
+        function mostrarSecao(secaoId) {
+            document.querySelectorAll('.content-section').forEach(sec => {
+                sec.classList.remove('active');
+            });
+            
+            document.getElementById(secaoId).classList.add('active');
+            
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`[data-tab="${secaoId}"]`).classList.add('active');
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Seleção de tipo de conteúdo
+        function selecionarTipo(tipo) {
+            document.querySelectorAll('.tipo-option').forEach(el => {
+                el.classList.remove('selected');
+            });
+            document.querySelector(`[data-tipo="${tipo}"]`).classList.add('selected');
+            
+            document.getElementById('tipo').value = tipo;
+            
+            document.querySelectorAll('.tipo-form').forEach(el => {
+                el.classList.remove('active');
+            });
+            document.getElementById(`form-${tipo}`).classList.add('active');
+            
+            if (tipo === 'quiz') {
+                setTimeout(() => {
+                    if (document.getElementById('lista-perguntas').children.length === 0) {
+                        adicionarPergunta();
+                    }
+                }, 100);
+            }
+        }
+
+        // Sistema de quiz
+        let contadorPerguntas = 0;
+
+        function adicionarPergunta() {
             contadorPerguntas++;
             const perguntaId = `pergunta_${contadorPerguntas}`;
             
             const perguntaHTML = `
                 <div class="pergunta-item" id="${perguntaId}">
                     <div class="pergunta-header">
-                        <div class="pergunta-titulo">Pergunta ${contadorPerguntas}</div>
+                        <div class="pergunta-numero">Pergunta ${contadorPerguntas}</div>
                         <div class="pergunta-acoes">
-                            <button type="button" class="btn-pergunta btn-mover" onclick="moverPergunta('${perguntaId}', -1)">↑</button>
-                            <button type="button" class="btn-pergunta btn-mover" onclick="moverPergunta('${perguntaId}', 1)">↓</button>
-                            <button type="button" class="btn-pergunta btn-remover" onclick="removerPergunta('${perguntaId}')">×</button>
+                            <button type="button" class="btn btn-icon btn-secondary" onclick="moverPergunta('${perguntaId}', -1)">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <button type="button" class="btn btn-icon btn-secondary" onclick="moverPergunta('${perguntaId}', 1)">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                            <button type="button" class="btn btn-icon btn-danger" onclick="removerPergunta('${perguntaId}')">
+                                <i class="fas fa-times"></i>
+                            </button>
                         </div>
                     </div>
-                    <div class="form-group-pergunta">
-                        <label>Pergunta:</label>
-                        <input type="text" class="form-control pergunta-texto" value="${pergunta.pergunta.replace(/"/g, '&quot;')}" 
+                    <div class="form-group">
+                        <label class="form-label">Pergunta:</label>
+                        <input type="text" class="form-control pergunta-texto" placeholder="Digite a pergunta..." 
                                onchange="atualizarQuizJSON()">
                     </div>
                     <div class="opcoes-lista" id="opcoes_${perguntaId}">
-                        ${pergunta.opcoes.map((opcao, index) => `
-                            <div class="opcao-item">
-                                <input type="radio" name="correta_${perguntaId}" value="${index}" 
-                                       ${index === pergunta.resposta ? 'checked' : ''} onchange="atualizarQuizJSON()">
-                                <input type="text" class="opcao-texto" value="${opcao.replace(/"/g, '&quot;')}" 
-                                       onchange="atualizarQuizJSON()">
-                            </div>
-                        `).join('')}
+                        <div class="opcao-item">
+                            <input type="radio" name="correta_${perguntaId}" value="0" checked onchange="atualizarQuizJSON()">
+                            <input type="text" class="opcao-texto" placeholder="Opção 1" onchange="atualizarQuizJSON()">
+                        </div>
+                        <div class="opcao-item">
+                            <input type="radio" name="correta_${perguntaId}" value="1" onchange="atualizarQuizJSON()">
+                            <input type="text" class="opcao-texto" placeholder="Opção 2" onchange="atualizarQuizJSON()">
+                        </div>
                     </div>
-                    <button type="button" class="btn-adicionar-opcao" onclick="adicionarOpcao('${perguntaId}')">
+                    <button type="button" class="btn btn-sm btn-success" onclick="adicionarOpcao('${perguntaId}')" style="margin-top: 0.5rem;">
                         <i class="fas fa-plus"></i> Adicionar Opção
                     </button>
                 </div>
             `;
             
             document.getElementById('lista-perguntas').insertAdjacentHTML('beforeend', perguntaHTML);
-        });
-    } catch (e) {
-        console.error('Erro ao carregar perguntas existentes:', e);
-    }
-}
-
-
-// Inicializar se já estiver no modo quiz
-<?php if (getConteudoEditValue($conteudo_edit, 'tipo') === 'quiz'): ?>
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(() => {
-        carregarPerguntasExistentes();
-    }, 500);
-});
-<?php endif; ?>
-
-
-
-
-        function obterIconeTipo(tipo) {
-            const icones = {
-                'texto': 'fas fa-file-alt',
-                'video': 'fas fa-video',
-                'imagem': 'fas fa-image',
-                'quiz': 'fas fa-question-circle'
-            };
-            return icones[tipo] || 'fas fa-file';
+            atualizarQuizJSON();
         }
 
-        function mostrarFormConteudo() {
-            document.getElementById('form-conteudo-container').style.display = 'block';
-            // Scroll para o formulário
-            document.getElementById('form-conteudo-container').scrollIntoView({ behavior: 'smooth' });
+        function adicionarOpcao(perguntaId) {
+            const opcoesLista = document.getElementById(`opcoes_${perguntaId}`);
+            const totalOpcoes = opcoesLista.children.length;
+            
+            const opcaoHTML = `
+                <div class="opcao-item">
+                    <input type="radio" name="correta_${perguntaId}" value="${totalOpcoes}" onchange="atualizarQuizJSON()">
+                    <input type="text" class="opcao-texto" placeholder="Opção ${totalOpcoes + 1}" onchange="atualizarQuizJSON()">
+                </div>
+            `;
+            
+            opcoesLista.insertAdjacentHTML('beforeend', opcaoHTML);
+            atualizarQuizJSON();
         }
 
-        function ocultarFormConteudo() {
-            // Se estiver editando, redireciona para a página sem parâmetro de edição
-            if (window.location.search.includes('conteudo_id')) {
-                window.location.href = '?modulo_id=<?= $modulo_id ?>';
-            } else {
-                document.getElementById('form-conteudo-container').style.display = 'none';
-                document.getElementById('form-conteudo').reset();
-                document.querySelectorAll('.tipo-conteudo-form').forEach(el => el.style.display = 'none');
-                document.querySelectorAll('.tipo-option').forEach(el => el.classList.remove('selected'));
-                // Seleciona o tipo padrão
-                selecionarTipo('texto');
+        function removerPergunta(perguntaId) {
+            const pergunta = document.getElementById(perguntaId);
+            if (pergunta && confirm('Tem certeza que deseja remover esta pergunta?')) {
+                pergunta.remove();
+                reordenarPerguntas();
+                atualizarQuizJSON();
             }
         }
 
-        function selecionarTipo(tipo) {
-            // Atualizar seleção visual
-            document.querySelectorAll('.tipo-option').forEach(el => {
-                el.classList.remove('selected');
-            });
-            document.querySelector(`[data-tipo="${tipo}"]`).classList.add('selected');
+        function moverPergunta(perguntaId, direcao) {
+            const pergunta = document.getElementById(perguntaId);
+            const lista = document.getElementById('lista-perguntas');
+            const perguntas = Array.from(lista.children);
+            const index = perguntas.indexOf(pergunta);
             
-            // Atualizar campo hidden
-            document.getElementById('tipo').value = tipo;
-            
-            // Mostrar formulário específico
-            document.querySelectorAll('.tipo-conteudo-form').forEach(el => {
-                el.style.display = 'none';
-            });
-            document.getElementById(`conteudo-${tipo}`).style.display = 'block';
-
-    if (tipo === 'quiz') {
-        setTimeout(() => {
-            carregarPerguntasExistentes();
-        }, 100);
-    }
-
-
+            const novoIndex = index + direcao;
+            if (novoIndex >= 0 && novoIndex < perguntas.length) {
+                if (direcao === -1) {
+                    lista.insertBefore(pergunta, perguntas[novoIndex]);
+                } else {
+                    lista.insertBefore(pergunta, perguntas[novoIndex + 1] || null);
+                }
+                reordenarPerguntas();
+                atualizarQuizJSON();
+            }
         }
 
-function excluirConteudo(conteudoId) {
-    if (confirm('Tem certeza que deseja excluir este conteúdo? Esta ação não pode ser desfeita.')) {
-        // Mostrar loading
-        const btn = event.target;
-        const originalHTML = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Excluindo...';
-        btn.disabled = true;
+        function reordenarPerguntas() {
+            const perguntas = document.querySelectorAll('.pergunta-item');
+            perguntas.forEach((pergunta, index) => {
+                const numero = pergunta.querySelector('.pergunta-numero');
+                numero.textContent = `Pergunta ${index + 1}`;
+                contadorPerguntas = index + 1;
+            });
+        }
 
-        fetch(`ajax/excluir_conteudo.php?id=${conteudoId}&modulo_id=<?= $modulo_id ?>`)
-            .then(response => response.json())
+        function atualizarQuizJSON() {
+            const perguntas = [];
+            const perguntaItems = document.querySelectorAll('.pergunta-item');
+            
+            perguntaItems.forEach((perguntaItem, index) => {
+                const perguntaTexto = perguntaItem.querySelector('.pergunta-texto').value;
+                const opcoesItems = perguntaItem.querySelectorAll('.opcao-item');
+                
+                const opcoes = [];
+                let respostaCorreta = 0;
+                
+                opcoesItems.forEach((opcaoItem, opcaoIndex) => {
+                    const opcaoTexto = opcaoItem.querySelector('.opcao-texto').value;
+                    const radio = opcaoItem.querySelector('input[type="radio"]');
+                    
+                    opcoes.push(opcaoTexto);
+                    
+                    if (radio.checked) {
+                        respostaCorreta = opcaoIndex;
+                    }
+                });
+                
+                if (perguntaTexto.trim() !== '' && opcoes.length >= 2) {
+                    perguntas.push({
+                        pergunta: perguntaTexto,
+                        opcoes: opcoes,
+                        resposta: respostaCorreta
+                    });
+                }
+            });
+            
+            document.getElementById('perguntas_quiz').value = JSON.stringify(perguntas, null, 2);
+        }
+
+        function visualizarQuiz() {
+            const quizJSON = document.getElementById('perguntas_quiz').value;
+            let perguntas = [];
+            
+            try {
+                perguntas = JSON.parse(quizJSON);
+            } catch (e) {
+                alert('Erro ao carregar quiz: ' + e.message);
+                return;
+            }
+            
+            const preview = document.getElementById('modalQuizContent');
+            preview.innerHTML = '';
+            
+            if (perguntas.length === 0) {
+                preview.innerHTML = '<p class="text-center text-gray-500">Nenhuma pergunta adicionada ao quiz.</p>';
+            } else {
+                perguntas.forEach((pergunta, index) => {
+                    const perguntaHTML = `
+                        <div class="preview-pergunta">
+                            <h4 style="color: var(--gray-800); margin-bottom: 1rem;">${index + 1}. ${pergunta.pergunta}</h4>
+                            <div class="preview-opcoes">
+                                ${pergunta.opcoes.map((opcao, opcaoIndex) => `
+                                    <div class="opcao-item" style="${opcaoIndex === pergunta.resposta ? 'background: var(--primary-50); border-color: var(--primary-200);' : ''}">
+                                        <input type="radio" ${opcaoIndex === pergunta.resposta ? 'checked' : ''} disabled>
+                                        <span style="flex: 1;">${opcao}</span>
+                                        ${opcaoIndex === pergunta.resposta ? '<i class="fas fa-check" style="color: var(--success);"></i>' : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                    preview.insertAdjacentHTML('beforeend', perguntaHTML);
+                });
+            }
+            
+            document.getElementById('modalQuiz').classList.add('active');
+        }
+
+        function fecharModalQuiz() {
+            document.getElementById('modalQuiz').classList.remove('active');
+        }
+
+        // Edição de conteúdo
+        function abrirModalEditar(conteudoId) {
+            const formData = new FormData();
+            formData.append('action', 'buscar_conteudo');
+            formData.append('id', conteudoId);
+            
+            fetch('', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Erro na rede: ' + response.status);
+                }
+                return response.json();
+            })
             .then(data => {
-                if (data.success) {
-                    // Mostrar mensagem de sucesso temporária
-                    const alertDiv = document.createElement('div');
-                    alertDiv.className = 'alert alert-success';
-                    alertDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${data.message}`;
-                    alertDiv.style.position = 'fixed';
-                    alertDiv.style.top = '20px';
-                    alertDiv.style.right = '20px';
-                    alertDiv.style.zIndex = '1000';
-                    document.body.appendChild(alertDiv);
-
-                    // Recarregar a página após um breve delay
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1000);
+                if (data.success && data.conteudo) {
+                    preencherFormularioEditar(data.conteudo);
+                    document.getElementById('modalEditar').classList.add('active');
                 } else {
-                    alert('Erro ao excluir conteúdo: ' + data.message);
-                    btn.innerHTML = originalHTML;
-                    btn.disabled = false;
+                    showNotification('Erro ao carregar conteúdo: ' + (data.message || 'Conteúdo não encontrado'), 'error');
                 }
             })
             .catch(error => {
-                alert('Erro ao excluir conteúdo: ' + error);
-                btn.innerHTML = originalHTML;
-                btn.disabled = false;
+                console.error('Erro:', error);
+                showNotification('Erro ao carregar conteúdo', 'error');
             });
-    }
-}
-        function visualizarConteudo(conteudoId) {
-            window.open(`visualizar_conteudo.php?id=${conteudoId}`, '_blank');
         }
 
- // Submissão do formulário com feedback visual
-document.getElementById('form-conteudo').addEventListener('submit', function(e) {
+        function fecharModalEditar() {
+            document.getElementById('modalEditar').classList.remove('active');
+        }
+
+        function preencherFormularioEditar(conteudo) {
+            document.getElementById('edit_id').value = conteudo.id;
+            document.getElementById('edit_titulo').value = conteudo.titulo;
+            document.getElementById('edit_descricao').value = conteudo.descricao || '';
+            document.getElementById('edit_ordem').value = conteudo.ordem;
+            document.getElementById('edit_duracao').value = conteudo.duracao || '10 min';
+            document.getElementById('edit_tipo').value = conteudo.tipo || 'texto';
+            
+            // Atualizar seletor de tipo
+            const tipoSelector = document.getElementById('edit-tipo-selector');
+            const tipos = ['texto', 'video', 'imagem', 'quiz'];
+            
+            tipoSelector.innerHTML = tipos.map(tipo => `
+                <div class="tipo-option ${tipo === (conteudo.tipo || 'texto') ? 'selected' : ''}" 
+                     data-tipo="${tipo}" onclick="selecionarTipoEditar('${tipo}', '${conteudo.tipo || 'texto'}')">
+                    <div class="tipo-icon"><i class="fas fa-${tipo === 'texto' ? 'file-alt' : tipo === 'video' ? 'video' : tipo === 'imagem' ? 'image' : 'question-circle'}"></i></div>
+                    <div class="tipo-text">${tipo.charAt(0).toUpperCase() + tipo.slice(1)}</div>
+                </div>
+            `).join('');
+            
+            // Carregar conteúdo específico do tipo
+            carregarConteudoTipo(conteudo);
+        }
+
+        function selecionarTipoEditar(tipo, tipoAtual) {
+            document.querySelectorAll('#edit-tipo-selector .tipo-option').forEach(el => {
+                el.classList.remove('selected');
+            });
+            document.querySelector(`#edit-tipo-selector [data-tipo="${tipo}"]`).classList.add('selected');
+            
+            document.getElementById('edit_tipo').value = tipo;
+            
+            // Aqui você precisaria carregar o formulário específico do tipo
+            // Isso é um pouco mais complexo e requer mais código
+        }
+
+        function carregarConteudoTipo(conteudo) {
+            // Esta função precisaria ser implementada para carregar
+            // o conteúdo específico do tipo no formulário de edição
+            // Dependendo da complexidade, pode ser necessário fazer via AJAX
+        }
+
+// Formulário de Novo Conteúdo
+document.getElementById('form-novo-conteudo').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const formData = new FormData(this);
     const submitBtn = this.querySelector('button[type="submit"]');
     const originalText = submitBtn.innerHTML;
     
-    // Mostrar loading
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
     submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
     
-    // Limpar alertas anteriores
-    const alertasAnteriores = this.querySelectorAll('.alert');
-    alertasAnteriores.forEach(alerta => alerta.remove());
+    // DEBUG: Verificar dados do FormData
+    for (let pair of formData.entries()) {
+        console.log(pair[0] + ': ' + pair[1]);
+    }
     
-    fetch(this.action, {
+    fetch('/curso_agrodash/ajax/salvar_conteudo.php', {  // URL completa
         method: 'POST',
         body: formData
     })
     .then(response => {
-        // Verificar se a resposta é JSON
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            throw new Error('Resposta do servidor não é JSON');
+        if (!response.ok) {
+            throw new Error('Erro na rede: ' + response.status);
         }
         return response.json();
     })
     .then(data => {
+        console.log('Resposta do servidor:', data);
         if (data.success) {
-            // Mostrar mensagem de sucesso
-            const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-success';
-            alertDiv.innerHTML = `<i class="fas fa-check-circle"></i> Conteúdo ${<?= $conteudo_edit ? "'atualizado'" : "'salvo'" ?>} com sucesso!`;
-            
-            document.getElementById('form-conteudo').prepend(alertDiv);
-            
-            // Recarregar a página após um breve delay
+            showNotification('Conteúdo criado com sucesso!', 'success');
             setTimeout(() => {
-                window.location.reload();
+                location.reload();
             }, 1500);
         } else {
-            throw new Error(data.message || 'Erro desconhecido');
+            showNotification('Erro ao criar conteúdo: ' + (data.message || 'Erro desconhecido'), 'error');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
         }
     })
     .catch(error => {
         console.error('Erro:', error);
-        
-        // Mostrar mensagem de erro
-        const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-danger';
-        alertDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Erro ao salvar conteúdo: ${error.message}`;
-        
-        document.getElementById('form-conteudo').prepend(alertDiv);
-        
-        submitBtn.innerHTML = originalText;
+        showNotification('Erro ao conectar com o servidor: ' + error.message, 'error');
         submitBtn.disabled = false;
-        
-        // Scroll para o topo para ver o erro
-        alertDiv.scrollIntoView({ behavior: 'smooth' });
+        submitBtn.innerHTML = originalText;
     });
 });
 
-
-
-// Função para remover arquivo de vídeo
-function removerArquivoVideo() {
-    if (confirm('Tem certeza que deseja remover o arquivo de vídeo atual?')) {
-        const fileInfo = document.querySelector('.file-info');
-        if (fileInfo) {
-            fileInfo.remove();
-        }
-        // Adicionar um campo hidden para indicar remoção
-        const form = document.getElementById('form-conteudo');
-        const hiddenInput = document.createElement('input');
-        hiddenInput.type = 'hidden';
-        hiddenInput.name = 'remover_arquivo_video';
-        hiddenInput.value = '1';
-        form.appendChild(hiddenInput);
-    }
-}
-
-// Preview da URL do vídeo em tempo real
-document.getElementById('url_video')?.addEventListener('input', function() {
-    const preview = document.getElementById('video-preview');
-    const url = this.value.trim();
-    
-    if (url) {
-        preview.innerHTML = `
-            <div class="video-preview-container">
-                <p class="text-info">✓ URL do vídeo detectada</p>
-                <small class="text-muted">URL: ${url}</small>
-            </div>
-        `;
-    } else {
-        preview.innerHTML = '<p class="text-muted">Nenhum vídeo configurado ainda.</p>';
-    }
-});
-
-// Preview do arquivo de vídeo selecionado
-document.querySelector('input[name="arquivo_video"]')?.addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    const preview = document.getElementById('video-preview');
-    
-    if (file) {
-        const fileSize = (file.size / (1024 * 1024)).toFixed(2);
-        preview.innerHTML = `
-            <div class="video-preview-container">
-                <p class="text-success">✓ Arquivo selecionado</p>
-                <small class="text-muted">
-                    Nome: ${file.name}<br>
-                    Tamanho: ${fileSize} MB<br>
-                    Tipo: ${file.type}
-                </small>
-            </div>
-        `;
-    }
-});
-
-
-        // Se estiver editando, garantir que o tipo correto está selecionado
-        <?php if ($conteudo_edit): ?>
-        document.addEventListener('DOMContentLoaded', function() {
-            selecionarTipo('<?= getConteudoEditValue($conteudo_edit, 'tipo', 'texto') ?>');
+        // Formulário de Edição
+        document.getElementById('form-editar-conteudo').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            fetch('', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Erro na rede: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    showNotification('Conteúdo atualizado com sucesso!', 'success');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    showNotification('Erro ao atualizar conteúdo: ' + (data.message || 'Erro desconhecido'), 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                showNotification('Erro ao conectar com o servidor', 'error');
+            });
         });
-        <?php endif; ?>
+
+        // Função de exclusão
+        function confirmarExclusao(conteudoId) {
+            if (confirm('Tem certeza que deseja excluir este conteúdo?\n\n⚠️ Esta ação não pode ser desfeita.')) {
+                const formData = new FormData();
+                formData.append('action', 'excluir_conteudo');
+                formData.append('id', conteudoId);
+                
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Excluindo...';
+                
+                fetch('', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification('Conteúdo excluído com sucesso!', 'success');
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1500);
+                    } else {
+                        showNotification('Erro ao excluir conteúdo: ' + (data.message || 'Erro desconhecido'), 'error');
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    showNotification('Erro ao excluir conteúdo', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                });
+            }
+        }
+
+        function visualizarConteudo(conteudoId) {
+            showNotification('Funcionalidade de visualização em desenvolvimento!', 'info');
+        }
+
+        // Fechar sidebar ao clicar fora (mobile)
+        document.addEventListener('click', function(e) {
+            const sidebar = document.querySelector('.sidebar');
+            const menuToggle = document.getElementById('menuToggle');
+            
+            if (window.innerWidth <= 768 && 
+                sidebar.classList.contains('active') && 
+                !sidebar.contains(e.target) && 
+                !menuToggle.contains(e.target)) {
+                sidebar.classList.remove('active');
+            }
+        });
+
+        // Fechar sidebar ao redimensionar para desktop
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 768) {
+                document.querySelector('.sidebar').classList.remove('active');
+            }
+        });
+
+        // Fechar modais com ESC
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                fecharModalEditar();
+                fecharModalQuiz();
+            }
+        });
+
+        // Fechar modais ao clicar fora
+        document.addEventListener('click', function(e) {
+            const modalEditar = document.getElementById('modalEditar');
+            if (e.target === modalEditar) {
+                fecharModalEditar();
+            }
+            
+            const modalQuiz = document.getElementById('modalQuiz');
+            if (e.target === modalQuiz) {
+                fecharModalQuiz();
+            }
+        });
+
+        // Inicializar
+        document.addEventListener('DOMContentLoaded', function() {
+            // Se houver parâmetro de edição na URL, abrir modal de edição
+            const urlParams = new URLSearchParams(window.location.search);
+            const conteudoId = urlParams.get('conteudo_id');
+            
+            if (conteudoId && conteudoId > 0) {
+                abrirModalEditar(conteudoId);
+            }
+            
+            // Se estiver na seção de novo conteúdo e o tipo for quiz, adicionar primeira pergunta
+            if (document.getElementById('novo-conteudo').classList.contains('active') && 
+                document.getElementById('tipo').value === 'quiz') {
+                setTimeout(() => {
+                    if (document.getElementById('lista-perguntas').children.length === 0) {
+                        adicionarPergunta();
+                    }
+                }, 500);
+            }
+        });
     </script>
 </body>
 </html>
-
-<?php
-function obterIconeTipo($tipo) {
-    $icones = [
-        'texto' => 'fas fa-file-alt',
-        'video' => 'fas fa-video',
-        'imagem' => 'fas fa-image',
-        'quiz' => 'fas fa-question-circle'
-    ];
-    return $icones[$tipo] ?? 'fas fa-file';
-}
-?>

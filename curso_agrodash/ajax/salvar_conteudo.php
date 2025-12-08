@@ -34,6 +34,7 @@ try {
     $tipo = $_POST['tipo'] ?? 'texto';
     $ordem = $_POST['ordem'] ?? 1;
     $duracao = $_POST['duracao'] ?? '10 min';
+    $conteudo_id = $_POST['conteudo_id'] ?? null;
 
     if (!$modulo_id) {
         echo json_encode(['success' => false, 'message' => 'Módulo não especificado']);
@@ -45,6 +46,10 @@ try {
     $url_video = '';
     $arquivo = '';
 
+    // DEBUG: Verificar se os arquivos estão chegando
+    error_log("Tipo de conteúdo: " . $tipo);
+    error_log("Arquivos recebidos: " . print_r($_FILES, true));
+
     switch ($tipo) {
         case 'texto':
             $conteudo = $_POST['conteudo'] ?? '';
@@ -54,7 +59,7 @@ try {
             $url_video = $_POST['url_video'] ?? '';
             // Processar upload de arquivo de vídeo se fornecido
             if (isset($_FILES['arquivo_video']) && $_FILES['arquivo_video']['error'] === UPLOAD_ERR_OK) {
-                $uploadDir = '../../uploads/videos/';
+                $uploadDir = __DIR__ . '/../../uploads/videos/';
                 if (!is_dir($uploadDir)) {
                     mkdir($uploadDir, 0777, true);
                 }
@@ -72,8 +77,16 @@ try {
                 $nomeArquivo = uniqid() . '.' . $extensao;
                 $caminhoCompleto = $uploadDir . $nomeArquivo;
                 
+                error_log("Tentando mover arquivo para: " . $caminhoCompleto);
+                
                 if (move_uploaded_file($_FILES['arquivo_video']['tmp_name'], $caminhoCompleto)) {
                     $arquivo = 'uploads/videos/' . $nomeArquivo;
+                    error_log("Arquivo movido com sucesso: " . $arquivo);
+                } else {
+                    $error = error_get_last();
+                    error_log("Erro ao mover arquivo: " . print_r($error, true));
+                    echo json_encode(['success' => false, 'message' => 'Erro ao mover arquivo de vídeo: ' . ($error['message'] ?? 'Desconhecido')]);
+                    exit;
                 }
             }
             break;
@@ -81,17 +94,75 @@ try {
         case 'imagem':
             // Processar upload de imagem
             if (isset($_FILES['arquivo_imagem']) && $_FILES['arquivo_imagem']['error'] === UPLOAD_ERR_OK) {
-                $uploadDir = '../../uploads/imagens/';
+                $uploadDir = __DIR__ . '/../uploads/imagens/';
+                
+                error_log("Diretório de upload: " . $uploadDir);
+                error_log("Diretório existe? " . (is_dir($uploadDir) ? 'Sim' : 'Não'));
+                
                 if (!is_dir($uploadDir)) {
-                    mkdir($uploadDir, 0777, true);
+                    error_log("Criando diretório: " . $uploadDir);
+                    if (!mkdir($uploadDir, 0777, true)) {
+                        echo json_encode(['success' => false, 'message' => 'Não foi possível criar o diretório de upload']);
+                        exit;
+                    }
+                }
+                
+                // Validar tipo de arquivo
+                $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+                $fileType = $_FILES['arquivo_imagem']['type'];
+                $fileSize = $_FILES['arquivo_imagem']['size'];
+                
+                error_log("Tipo do arquivo: " . $fileType);
+                error_log("Tamanho do arquivo: " . $fileSize . " bytes");
+                
+                if (!in_array($fileType, $allowedTypes)) {
+                    echo json_encode(['success' => false, 'message' => 'Tipo de imagem não permitido. Use JPG, PNG ou GIF. Tipo recebido: ' . $fileType]);
+                    exit;
+                }
+                
+                // Validar tamanho (máximo 5MB)
+                if ($fileSize > 5 * 1024 * 1024) {
+                    echo json_encode(['success' => false, 'message' => 'Arquivo muito grande. Tamanho máximo: 5MB']);
+                    exit;
                 }
                 
                 $extensao = pathinfo($_FILES['arquivo_imagem']['name'], PATHINFO_EXTENSION);
                 $nomeArquivo = uniqid() . '.' . $extensao;
                 $caminhoCompleto = $uploadDir . $nomeArquivo;
                 
+                error_log("Caminho completo do arquivo: " . $caminhoCompleto);
+                error_log("Nome do arquivo temporário: " . $_FILES['arquivo_imagem']['tmp_name']);
+                error_log("Arquivo temporário existe? " . (file_exists($_FILES['arquivo_imagem']['tmp_name']) ? 'Sim' : 'Não'));
+                
                 if (move_uploaded_file($_FILES['arquivo_imagem']['tmp_name'], $caminhoCompleto)) {
                     $arquivo = 'uploads/imagens/' . $nomeArquivo;
+                    $conteudo = 'uploads/imagens/' . $nomeArquivo;
+                    
+                    error_log("Arquivo salvo com sucesso: " . $arquivo);
+                    error_log("Arquivo salvo no servidor? " . (file_exists($caminhoCompleto) ? 'Sim' : 'Não'));
+                } else {
+                    $error = error_get_last();
+                    error_log("Erro ao mover arquivo: " . print_r($error, true));
+                    echo json_encode(['success' => false, 'message' => 'Erro ao fazer upload da imagem: ' . ($error['message'] ?? 'Desconhecido')]);
+                    exit;
+                }
+            } else if (isset($_FILES['arquivo_imagem'])) {
+                error_log("Erro no upload: " . $_FILES['arquivo_imagem']['error']);
+                
+                // Se houve erro no upload que não seja "nenhum arquivo"
+                if ($_FILES['arquivo_imagem']['error'] !== UPLOAD_ERR_NO_FILE) {
+                    $uploadErrors = [
+                        UPLOAD_ERR_INI_SIZE => 'Arquivo muito grande (configuração do servidor)',
+                        UPLOAD_ERR_FORM_SIZE => 'Arquivo muito grande (configuração do formulário)',
+                        UPLOAD_ERR_PARTIAL => 'Upload parcial do arquivo',
+                        UPLOAD_ERR_NO_TMP_DIR => 'Diretório temporário não encontrado',
+                        UPLOAD_ERR_CANT_WRITE => 'Erro ao escrever no disco',
+                        UPLOAD_ERR_EXTENSION => 'Extensão PHP interrompeu o upload'
+                    ];
+                    
+                    $errorMsg = $uploadErrors[$_FILES['arquivo_imagem']['error']] ?? 'Erro desconhecido no upload';
+                    echo json_encode(['success' => false, 'message' => 'Erro no upload: ' . $errorMsg]);
+                    exit;
                 }
             }
             break;
@@ -102,9 +173,20 @@ try {
     }
 
     // Se estiver editando, verificar se é uma atualização
-    $conteudo_id = $_POST['conteudo_id'] ?? null;
-    
     if ($conteudo_id) {
+        // Para atualização, manter o arquivo existente se nenhum novo for enviado
+        if (empty($arquivo) && $conteudo_id) {
+            // Buscar arquivo atual do banco de dados
+            $stmt = $pdo->prepare("SELECT arquivo FROM conteudos WHERE id = ?");
+            $stmt->execute([$conteudo_id]);
+            $conteudo_atual = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($conteudo_atual && !empty($conteudo_atual['arquivo'])) {
+                $arquivo = $conteudo_atual['arquivo'];
+                error_log("Mantendo arquivo existente: " . $arquivo);
+            }
+        }
+        
         // Atualizar conteúdo existente
         $stmt = $pdo->prepare("UPDATE conteudos SET titulo = ?, descricao = ?, tipo = ?, conteudo = ?, url_video = ?, arquivo = ?, ordem = ?, duracao = ? WHERE id = ?");
         $stmt->execute([$titulo, $descricao, $tipo, $conteudo, $url_video, $arquivo, $ordem, $duracao, $conteudo_id]);
@@ -116,7 +198,7 @@ try {
         $id = $pdo->lastInsertId();
     }
 
-    echo json_encode(['success' => true, 'id' => $id]);
+    echo json_encode(['success' => true, 'id' => $id, 'arquivo' => $arquivo, 'conteudo' => $conteudo]);
     
 } catch (PDOException $e) {
     error_log("Erro ao salvar conteúdo: " . $e->getMessage());

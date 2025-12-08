@@ -15,6 +15,69 @@ if (!$curso_id) {
     exit;
 }
 
+// Adicione isso após a definição das variáveis iniciais (após linha 73)
+$cupons_disponiveis = [];
+$cupons_usuario = [];
+
+try {
+    // Buscar cupons disponíveis para resgate com XP
+    $stmt_cupons = $pdo->prepare("
+        SELECT cd.*, 
+               (cd.usos_maximos - COALESCE((SELECT COUNT(*) FROM cupons_resgatados WHERE cupom_id = cd.id), 0)) as usos_restantes
+        FROM cupons_desconto cd
+        WHERE cd.ativo = 1 
+          AND (cd.validade IS NULL OR cd.validade >= CURDATE())
+          AND (cd.usos_maximos IS NULL OR cd.usos_maximos > COALESCE((SELECT COUNT(*) FROM cupons_resgatados WHERE cupom_id = cd.id), 0))
+        ORDER BY cd.valor DESC
+    ");
+    $stmt_cupons->execute();
+    $cupons_disponiveis = $stmt_cupons->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Buscar cupons já resgatados pelo usuário
+    $stmt_cupons_usuario = $pdo->prepare("
+        SELECT cr.*, cd.codigo, cd.tipo, cd.valor, cd.validade, cd.descricao
+        FROM cupons_resgatados cr
+        JOIN cupons_desconto cd ON cr.cupom_id = cd.id
+        WHERE cr.usuario_id = ?
+        ORDER BY cr.data_resgate DESC
+        LIMIT 10
+    ");
+    $stmt_cupons_usuario->execute([$usuario_id]);
+    $cupons_usuario = $stmt_cupons_usuario->fetchAll(PDO::FETCH_ASSOC);
+    
+} catch (PDOException $e) {
+    error_log("Erro ao buscar cupons: " . $e->getMessage());
+}
+
+// Adicione esta variável ao $initial_state (procure a linha onde está $initial_state = [...] e adicione)
+// Encontre esta seção (por volta da linha 250-260):
+$initial_state = [
+    'curso_id' => $curso_id,
+    'curso_info' => $curso_info,
+    // ... outras variáveis existentes ...
+];
+
+// Adicione estas linhas no array $initial_state:
+$initial_state = [
+    'curso_id' => $curso_id,
+    'curso_info' => $curso_info,
+    'usuario_id' => $usuario_id,
+    'usuario_nome' => $username,
+    'usuario_tipo' => $user_tipo,
+    'data_inicio_curso' => $data_inicio_curso,
+    'progresso_modulos' => array_keys(array_filter($progresso_modulos, function($mod) { 
+        return $mod['concluido']; 
+    })),
+    'total_modulos' => $total_modulos,
+    'modulos_info' => $modulos_info,
+    'prova_final_info' => $prova_final_info,
+    'prova_final_perguntas' => $perguntas_final_formatadas,
+    'prova_final_config' => $prova_final_db,
+    'pontos_xp' => $pontos_xp, // Adicione isso
+    'cupons_disponiveis' => $cupons_disponiveis, // Adicione isso
+    'cupons_usuario' => $cupons_usuario // Adicione isso
+];
+
 $_SESSION['usuario_id'] = $_SESSION['usuario_id'] ?? 1;
 $usuario_id = $_SESSION['usuario_id'];
 $_SESSION['curso_atual'] = $curso_id;

@@ -20,7 +20,7 @@ if ($id) {
         if ($modulo) {
             $stmt = $pdo->prepare("DELETE FROM modulos WHERE id = ?");
             $stmt->execute([$id]);
-            header("Location: ../admin_modulos.php?curso_id=" . $modulo['curso_id']);
+            header("Location: /curso_agrodash/adminmodulos?curso_id=" . $modulo['curso_id']);
             exit;
         }
     } catch (PDOException $e) {
