@@ -81,9 +81,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             case 'add':
                 $nome          = $_POST['nome'];
                 $unidade_id    = $_POST['unidade_id'] ?: null;
-                $operacao_id   = $_POST['operacao_id'] !== '' ? $_POST['operacao_id'] : null; // opcional (CTT)
-                $frente_id     = $_POST['frente_id']   !== '' ? $_POST['frente_id']   : null; // NOVO
-                $implemento_id = $_POST['implemento_id'] ?? null;
+                $operacao_id   = $_POST['operacao_id'] !== '' ? $_POST['operacao_id'] : null;
+                $frente_id     = $_POST['frente_id']   !== '' ? $_POST['frente_id']   : null;
+                $implemento_id = !empty($_POST['implemento_id']) ? $_POST['implemento_id'] : null;
                 $ativo         = isset($_POST['ativo']) ? 1 : 0;
 
                 $stmt = $pdo->prepare("
@@ -107,9 +107,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $id            = $_GET['id'] ?? 0;
                 $nome          = $_POST['nome'];
                 $unidade_id    = $_POST['unidade_id'] ?: null;
-                $operacao_id   = $_POST['operacao_id'] !== '' ? $_POST['operacao_id'] : null; // opcional
-                $frente_id     = $_POST['frente_id']   !== '' ? $_POST['frente_id']   : null; // NOVO
-                $implemento_id = $_POST['implemento_id'] ?? null;
+                $operacao_id   = $_POST['operacao_id'] !== '' ? $_POST['operacao_id'] : null;
+                $frente_id     = $_POST['frente_id']   !== '' ? $_POST['frente_id']   : null;
+                $implemento_id = !empty($_POST['implemento_id']) ? $_POST['implemento_id'] : null;
                 $ativo         = isset($_POST['ativo']) ? 1 : 0;
 
                 $stmt = $pdo->prepare("
@@ -161,25 +161,64 @@ $implementos = $pdo->query("SELECT id, nome, modelo, numero_identificacao FROM i
 $frentes = $pdo->query("SELECT id, codigo, nome, unidade_id FROM frentes
 ORDER BY (codigo REGEXP '^[0-9]+$') DESC, CAST(codigo AS UNSIGNED), codigo, nome")->fetchAll(PDO::FETCH_ASSOC);
 
-// Filtros (GET)
+// 1. Configurações iniciais de Paginação e Visualização
+$visualizacao = $_GET['visualizacao'] ?? 'cards';
+$itens_por_pagina = ($visualizacao === 'lista') ? 10 : 12;
+
+$pagina_atual = filter_input(INPUT_GET, 'pagina', FILTER_VALIDATE_INT);
+$pagina_atual = ($pagina_atual && $pagina_atual > 0) ? $pagina_atual : 1;
+
+// Cálculo do OFFSET (onde começa a busca no banco)
+$offset = ($pagina_atual - 1) * $itens_por_pagina;
+
+// 2. Captura dos Filtros (GET)
 $filtro_unidade     = $_GET['unidade']      ?? '';
 $filtro_operacao_id = $_GET['operacao_id']  ?? '';
 $filtro_frente      = $_GET['frente']       ?? '';
 $filtro_implemento  = $_GET['implemento']   ?? '';
-$filtro_status = isset($_GET['status']) ? $_GET['status'] : '';
-$visualizacao       = $_GET['visualizacao'] ?? 'cards'; // cards ou lista
+$filtro_status      = isset($_GET['status']) ? $_GET['status'] : '';
 
-// Mapa de ícones por operacao_id (1=ACOP, 2=PLANTIO, 3=SUBSOLAGEM, 4=VINHAÇA)
-$iconePorOperacao = [
-    1 => 'fa-spray-can text-primary',        // ACOP (aplicação de insumos)
-    2 => 'fa-seedling text-primary',         // PLANTIO
-    3 => 'fa-stream text-warning',           // SUBSOLAGEM/ARADO
-    4 => 'fas fa-flask text-danger',         // VINHAÇA (líquido)
-    5 => 'fa-truck text-secondary',          // Transporte/Logística
-];
+// 3. Construção Dinâmica do WHERE (Usado tanto para Contar quanto para Buscar)
+$where_clauses = ["1=1"];
+$params = [];
 
-// Query principal já trazendo o nome da operação
-$sql = "SELECT 
+if ($filtro_unidade) {
+    $where_clauses[] = "e.unidade_id = :unidade";
+    $params[':unidade'] = $filtro_unidade;
+}
+if ($filtro_operacao_id) {
+    $where_clauses[] = "e.operacao_id = :operacao_id";
+    $params[':operacao_id'] = $filtro_operacao_id;
+}
+if ($filtro_implemento) {
+    $where_clauses[] = "e.implemento_id = :implemento";
+    $params[':implemento'] = $filtro_implemento;
+}
+if ($filtro_status !== '' && ($filtro_status === '0' || $filtro_status === '1')) {
+    $where_clauses[] = "e.ativo = :ativo";
+    $params[':ativo'] = (int)$filtro_status;
+}
+if ($filtro_frente) {
+    $where_clauses[] = "e.frente_id = :frente_id";
+    $params[':frente_id'] = $filtro_frente;
+}
+
+$where_sql = implode(" AND ", $where_clauses);
+
+// ---------------------------------------------------------
+// QUERY 1: CONTAGEM TOTAL (Super Rápida - Apenas conta os registros filtrados)
+// ---------------------------------------------------------
+$sql_count = "SELECT COUNT(e.id) FROM equipamentos e WHERE $where_sql";
+$stmt_count = $pdo->prepare($sql_count);
+$stmt_count->execute($params);
+$total_registros = $stmt_count->fetchColumn();
+
+$total_paginas = ceil($total_registros / $itens_por_pagina);
+
+// ---------------------------------------------------------
+// QUERY 2: BUSCA DOS DADOS (Com LIMIT e OFFSET)
+// ---------------------------------------------------------
+$sql_data = "SELECT 
           e.*,
           u.nome AS unidade_nome,
           i.nome AS implemento_nome,
@@ -191,43 +230,34 @@ $sql = "SELECT
         FROM equipamentos e
         LEFT JOIN unidades u        ON e.unidade_id   = u.id
         LEFT JOIN implementos i     ON e.implemento_id = i.id
-        LEFT JOIN tipos_operacao t   ON e.operacao_id  = t.id
-        LEFT JOIN frentes f          ON e.frente_id    = f.id
-        WHERE 1=1";
+        LEFT JOIN tipos_operacao t  ON e.operacao_id  = t.id
+        LEFT JOIN frentes f         ON e.frente_id    = f.id
+        WHERE $where_sql
+        ORDER BY e.id DESC 
+        LIMIT :limite OFFSET :offset";
 
-$params = [];
-if ($filtro_unidade) {
-    $sql .= " AND e.unidade_id = :unidade";
-    $params[':unidade'] = $filtro_unidade;
-}
-if ($filtro_operacao_id) {
-    $sql .= " AND e.operacao_id = :operacao_id";
-    $params[':operacao_id'] = $filtro_operacao_id;
-}
-if ($filtro_implemento) {
-    $sql .= " AND e.implemento_id = :implemento";
-    $params[':implemento'] = $filtro_implemento;
-}
-if ($filtro_status !== '' && ($filtro_status === '0' || $filtro_status === '1')) {
-    $sql .= " AND e.ativo = :ativo";
-    $params[':ativo'] = (int)$filtro_status;
-}
-if ($filtro_frente) {
-    $sql .= " AND e.frente_id = :frente_id";
-    $params[':frente_id'] = $filtro_frente;
+$stmt = $pdo->prepare($sql_data);
+
+// Bind dos parâmetros de filtro
+foreach ($params as $key => $value) {
+    $stmt->bindValue($key, $value);
 }
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$equipamentos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$stmt->bindValue(':limite', (int)$itens_por_pagina, PDO::PARAM_INT);
+$stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
 
-// Paginação
-$itens_por_pagina = $visualizacao === 'lista' ? 10 : 12;
-$pagina_atual = isset($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
-$total_itens = count($equipamentos);
-$total_paginas = ceil($total_itens / $itens_por_pagina);
-$inicio = ($pagina_atual - 1) * $itens_por_pagina;
-$equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina);
+$stmt->execute();
+
+$equipamentos_paginados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Mapa de ícones
+$iconePorOperacao = [
+    1 => 'fa-spray-can text-primary',        // ACOP
+    2 => 'fa-seedling text-primary',         // PLANTIO
+    3 => 'fa-stream text-warning',           // SUBSOLAGEM
+    4 => 'fas fa-flask text-danger',         // VINHAÇA
+    5 => 'fa-truck text-secondary',          // Transporte
+];
 ?>
 
 <!-- Bootstrap 5 CSS -->
@@ -587,19 +617,37 @@ $equipamentos_paginados = array_slice($equipamentos, $inicio, $itens_por_pagina)
         <?php endif; ?>
 
         <!-- Paginação -->
-        <?php if ($total_paginas > 1): ?>
+<?php if ($total_paginas > 1): ?>
             <nav aria-label="Page navigation" class="mt-4">
                 <ul class="pagination justify-content-center">
                     <li class="page-item <?= $pagina_atual <= 1 ? 'disabled' : '' ?>">
                         <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['pagina' => $pagina_atual - 1])) ?>">Anterior</a>
                     </li>
-                    
-                    <?php for ($i = 1; $i <= $total_paginas; $i++): ?>
+                    <?php
+                    $adjacentes = 2;
+                    $inicio = max(1, $pagina_atual - $adjacentes);
+                    $fim    = min($total_paginas, $pagina_atual + $adjacentes);
+                    if ($inicio > 1): ?>
+                        <li class="page-item">
+                            <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['pagina' => 1])) ?>">1</a>
+                        </li>
+                        <?php if ($inicio > 2): ?>
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                    <?php for ($i = $inicio; $i <= $fim; $i++): ?>
                         <li class="page-item <?= $i == $pagina_atual ? 'active' : '' ?>">
                             <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['pagina' => $i])) ?>"><?= $i ?></a>
                         </li>
                     <?php endfor; ?>
-                    
+                    <?php if ($fim < $total_paginas): ?>
+                        <?php if ($fim < $total_paginas - 1): ?>
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        <?php endif; ?>
+                        <li class="page-item">
+                            <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['pagina' => $total_paginas])) ?>"><?= $total_paginas ?></a>
+                        </li>
+                    <?php endif; ?>
                     <li class="page-item <?= $pagina_atual >= $total_paginas ? 'disabled' : '' ?>">
                         <a class="page-link" href="?<?= http_build_query(array_merge($_GET, ['pagina' => $pagina_atual + 1])) ?>">Próxima</a>
                     </li>
