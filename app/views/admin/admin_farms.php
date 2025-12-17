@@ -311,7 +311,7 @@ require_once __DIR__ . '/../../../app/includes/header.php';
             <th style="width:120px;">Terra (km)</th>
             <th style="width:120px;">Asfalto (km)</th>
             <th style="width:140px;">Total (km)</th>
-            <th style="width:120px;">Ações</th>
+            <th class="text-center" style="width:120px;">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -326,15 +326,14 @@ require_once __DIR__ . '/../../../app/includes/header.php';
               <td><?= $f['distancia_asfalto']!==null ? number_format((float)$f['distancia_asfalto'],2,',','.') : '—' ?></td>
               <td><?= $f['distancia_total']!==null ? number_format((float)$f['distancia_total'],2,',','.') : '—' ?></td>
               <td>
-                <button
-                  class="btn btn-secondary btn-sm btn-editar"
-                  data-id="<?= (int)$f['id'] ?>"
-                >Editar</button>
-                <form method="POST" action="/fazendas" style="display:inline" onsubmit="return confirm('Remover esta fazenda?')">
-                  <input type="hidden" name="action" value="delete">
-                  <input type="hidden" name="id" value="<?= (int)$f['id'] ?>">
-                  <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
-                </form>
+                <div class="btn-group-actions">
+                    <button class="btn btn-secondary btn-sm btn-editar" data-id="<?= (int)$f['id'] ?>">Editar</button>
+                    <form method="POST" action="/fazendas" onsubmit="return confirm('Remover esta fazenda?')">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="id" value="<?= (int)$f['id'] ?>">
+                        <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
+                    </form>
+                </div>
               </td>
             </tr>
           <?php endforeach; endif; ?>

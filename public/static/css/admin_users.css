@@ -163,6 +163,13 @@ font-family: 'Poppins', sans-serif;
             font-size: 0.85rem;
         }
 
+        .btn-group-act {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 100%;
+        }
+
         .alert {
             padding: 1rem;
             border-radius: var(--radius);

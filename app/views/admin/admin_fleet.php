@@ -587,7 +587,7 @@ $iconePorOperacao = [
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <div class="btn-group btn-group-sm">
+                                        <div class="btn-group btn-group-sm btn-group-action">
                                             <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalEdit<?= $eq['id'] ?>">
                                             <i class="fas fa-edit"></i>
                                             </button>

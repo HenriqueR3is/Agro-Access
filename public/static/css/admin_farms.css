@@ -85,6 +85,12 @@
 
 .btn-sm { padding: 6px 10px; border-radius: 8px; font-size: .9rem; }
 
+.btn-group-actions { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+
+.btn-group-actions .btn { width: 100%; display: block; margin: 0; }
+
+td { vertical-align: middle; min-width: 90px; }
+
 /* ===== Inputs ===== */
 .form-input, select, textarea, input[type="date"], input[type="number"], input[type="text"], input[type="file"] {
   width: 100%;

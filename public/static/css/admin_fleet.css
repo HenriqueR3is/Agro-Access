@@ -1,11 +1,8 @@
-
 .mb-4 {
     margin-bottom: 1.5rem; /* ou outro valor que desejar */
     width: 100%; /* ocupa 100% do container */
     box-sizing: border-box; /* evita que padding quebre a largura */
 }
-
-
 
 /* ==============================
    ESTILOS GERAIS
@@ -68,7 +65,7 @@ form button:hover {
    BOTÃO ADICIONAR - MODERNO
    ============================== */
 .btn-primary {
-     margin-right: 15px; /* Adiciona um espaço de 15px à direita de cada botão */
+    margin-right: 15px; /* Adiciona um espaço de 15px à direita de cada botão */
     background: linear-gradient(135deg, #2e86de, #1b4f72);
     border: none;
     border-radius: 12px;
@@ -122,6 +119,12 @@ form button:hover {
     place-self: center;
 
 
+}
+
+.btn-group-action {
+    display: flex;
+    gap: 2px;
+    width: 10%;
 }
 /* ==============================
    BOTÃO INFO - MODERNO

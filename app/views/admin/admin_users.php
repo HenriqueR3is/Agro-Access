@@ -454,10 +454,10 @@ require_once __DIR__ . '/../../../app/includes/header.php';
                             <thead>
                                 <tr>
                                     <th>Nome</th>
-                                    <th>Email</th>
+                                    <th style="width: 35%">Email</th>
                                     <th>Tipo</th>
                                     <th>Status</th>
-                                    <th>Ações</th>
+                                    <th class="text-center" style="width: 100px;">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -483,12 +483,14 @@ require_once __DIR__ . '/../../../app/includes/header.php';
                                         </span>
                                     </td>
                                     <td>
-                                        <button class="btn btn-warning btn-sm edit-user" data-id="<?= $user['id']; ?>">
-                                            <i class="fas fa-edit"></i> Editar
-                                        </button>
-                                        <button class="btn btn-danger btn-sm delete-user" data-id="<?= $user['id']; ?>">
-                                            <i class="fas fa-trash"></i> Excluir
-                                        </button>
+                                        <div class="btn-group-act">
+                                            <button class="btn btn-warning btn-sm edit-user" data-id="<?= $user['id']; ?>">
+                                                <i class="fas fa-edit"></i> Editar
+                                            </button>
+                                            <button class="btn btn-danger btn-sm delete-user" data-id="<?= $user['id']; ?>">
+                                                <i class="fas fa-trash"></i> Excluir
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
