@@ -40,6 +40,7 @@ RewriteRule ^dashboard$ app/views/CIA/dashboard.php [L]
 RewriteRule ^user_dashboard$ app/views/user/user_dashboard.php [L]
 RewriteRule ^admin_dashboard$ app/views/admin/admin_dashboard.php [L]
 RewriteRule ^producao$ producao.php [L] 
+RewriteRule ^smart_ptt$ app/views/CIA/smart_ptt.php [L] 
 RewriteRule ^ver_banco$ ver_banco.php [L] 
 
 # ... (Mantenha o resto das suas rotas de admin aqui) ...

@@ -439,8 +439,17 @@ try {
         document.querySelectorAll('#allTab .shortcut-card').forEach(card => {
             card.addEventListener('click', function(e) {
                 if (e.target.closest('.fav-btn')) return;
+                
                 const url = this.getAttribute('data-link');
-                if (url && url !== "#") window.open(url, '_blank');
+                
+                if (url && url !== "#") {
+                    // Verifica se é o link do Smart PTT (ou qualquer página interna futura)
+                    if (url.includes('smart_ptt.php') || url.startsWith('/')) {
+                        window.location.href = url; // Abre na MESMA aba
+                    } else {
+                        window.open(url, '_blank'); // Abre em NOVA aba (links externos)
+                    }
+                }
             });
         });
 
