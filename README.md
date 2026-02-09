@@ -5,7 +5,7 @@
 [![MySQL](https://img.shields.io/badge/MySQL-5.7+-blue?logo=mysql)](https://www.mysql.com/)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-> 🎯 Projeto interno da CIA Canavieira para modernizar o processo de **apontamento de produção em campo**.  
+> 🎯 Projeto interno desenvolvido para a equipe do setor CIA da Usina Santa Terezinha para modernizar o processo de **apontamento de produção em campo**.  
 > Sistema leve, funcional e estruturado com PHP puro + MySQL, pronto para expansão com Laravel.
 
 ---
@@ -47,52 +47,16 @@ README.md # Este arquivo
 
 ## 🧪 Como Rodar Localmente
 
-### 1. Pré-requisitos
+### Pré-requisitos
 
 - ✅ PHP 8.x ou superior  
 - ✅ MySQL 5.7+  
 - ✅ XAMPP, WAMP ou similar  
 - (🔄 Opcional) Composer se quiser futuramente usar Laravel
 
-### 2. Clonando o projeto
-
-```bash
-git clone https://github.com/seu-usuario/db-cia.git
-cd db-cia
-
-3. Configurando o banco de dados
-Importe o arquivo .sql com a estrutura do banco
-
-Edite o arquivo:
-
-/app/config/db.php
-
-Exemplo:
-$host = 'localhost';
-$dbname = 'sua_base';
-$user = 'root';
-$pass = '';
-
-4. Iniciando com XAMPP
-
-Coloque a pasta do projeto dentro de htdocs:
-C:\xampp\htdocs\db-cia
-
-Abra o navegador e acesse:
-http://localhost/db-cia/public/index.php
-
-| Tipo          | Acesso                                     |
-| ------------- | ------------------------------------------ |
-| `admin`       | Acesso total (CRUD + controle de usuários) |
-| `coordenador` | Registro de produção, equipamentos etc     |
-| `operador`    | Apenas preenchimento de produção           |
-
 📌 Próximos Passos
  Autenticação com tokens (JWT ou sessões mais seguras)
- Dashboard com relatórios e gráficos
- API RESTful para integração com frontend
  Migração para Laravel com Blade ou Inertia.js
- Responsividade para celular
 
 🤝 Contribuindo
 Este é um projeto interno. Mas se tiver sugestões ou quiser contribuir com melhorias, sinta-se à vontade para abrir uma Issue ou Pull Request.
