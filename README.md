@@ -63,4 +63,5 @@ Este é um projeto interno. Mas se tiver sugestões ou quiser contribuir com mel
 
 👨‍💻 Desenvolvedores
 Henrique Hiroshi Koshiba Reis && Bruno Carmo Pereira
+
 Projeto interno do CIA - UST 🚜🌱
